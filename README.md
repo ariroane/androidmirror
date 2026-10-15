@@ -94,6 +94,21 @@ The Mirror's agents use `claude-opus-5-5` by default with structured outputs and
 
 Other engines (for example a graph refactor engine) read `Ontology.graph_snapshot()` (copies of both graphs plus the `version`; every node and edge carries `provenance`) and propose `Patch` objects with their own `kind`, `base_version`, `rationale` and anything else in `extra`. Setting `extra["require_fresh_base"] = True` makes the Steward refuse the patch if a node it touches changed after `base_version`. Patches are applied only through the Steward, only with an approval record, and each stores its `inverse`.
 
+## Breaking nodes and links
+
+`analysis.breaker` finds where the world is fragile; `breaker.py` turns that into proposals of kind `"break"`:
+
+- **Split** one node into two or more parts. Each of its relations and causal edges moves to one part (or is copied to every part), so the knowledge graph and the DAG stay in step. With no parts named, it makes one part per cluster the node alone holds together. The original node is archived with `split_into`, never deleted. A split cannot create a cycle, because each part only gets edges the original had.
+- **Sever** two nodes: cut the causal edge and the descriptive relations between them together. The proposal says how much causal influence is lost and warns if the cut disconnects the graph.
+
+`split_candidates` and `sever_candidates` rank suggestions (people are left out of split suggestions unless asked). Proposals set `require_fresh_base`, so they are refused if a touched node changed after they were made, and every applied break rolls back through its inverse. Nothing in `breaker.py` writes to the ontology; `breaker_api.py` adds the `/api/break/*` routes and these commands, which only queue proposals:
+
+```powershell
+python -m androidmirror break-candidates                      # what the Breaker would split or sever
+python -m androidmirror break-split simplicity --parts "Plain living" "Plain speech"
+python -m androidmirror break-sever duty calm                 # cut every link between two nodes
+```
+
 ## Tests
 
 ```powershell

@@ -53,6 +53,9 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
     steward = Steward(onto, data_dir, corpus_text=corpus.load_text(data_dir))
     app = FastAPI(title="Android Mirror")
     app.state.steward = steward
+    from .breaker_api import register as register_breaker  # Breaker routes: proposals only
+
+    register_breaker(app, steward)
 
     def fail(e: Exception) -> HTTPException:
         return HTTPException(status_code=400, detail=str(e))
