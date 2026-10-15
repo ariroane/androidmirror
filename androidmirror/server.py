@@ -41,6 +41,10 @@ class EvolveReq(BaseModel):
     queue: bool = True
 
 
+class RefactorQueueReq(BaseModel):
+    keys: list[str] | None = None  # None queues every suggestion
+
+
 class Intervention(BaseModel):
     node: str
     delta: float = 1.0
@@ -167,7 +171,40 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
     def metrics() -> dict:
         return analysis.metrics(onto)
 
-    from . import chainer
+    from . import chainer, refactor
 
     chainer.register(app, steward)
+
+    def _pending_refactor_keys() -> set:
+        return {p.extra.get("key") for p in steward.list("proposed") if p.kind == "refactor"}
+
+    @app.get("/api/refactor")
+    def refactor_suggest() -> dict:
+        """The Refactorer's suggestions for the current graphs. Nothing is queued."""
+        result = refactor.suggest(onto.graph_snapshot())
+        pending = _pending_refactor_keys()
+        return {"base_version": result.base_version, "metrics": result.metrics,
+                "findings": [vars(f) for f in result.findings],
+                "patches": [{**p.model_dump(), "queued": p.extra["key"] in pending} for p in result.patches]}
+
+    @app.post("/api/refactor/queue")
+    def refactor_queue(r: RefactorQueueReq) -> dict:
+        """Queue suggestions by key (or all of them) for review. Never applies anything."""
+        pending = _pending_refactor_keys()
+        queued = []
+        for patch in refactor.suggest(onto.graph_snapshot()).patches:
+            key = patch.extra["key"]
+            if key in pending or (r.keys is not None and key not in r.keys):
+                continue
+            queued.append(steward.propose(patch).id)
+        steward.save()
+        return {"queued": queued}
+
+    @app.get("/api/chain/candidates")
+    def chain_candidates() -> list[dict]:
+        """Pairs of nodes that look like one concept, for the Merge button."""
+        label = lambda n: onto.nodes[n]["label"]
+        return [{"survivor": s, "absorbed": a, "survivor_label": label(s), "absorbed_label": label(a), "why": why}
+                for s, a, why in chainer.merge_candidates(onto.graph_snapshot())]
+
     return app

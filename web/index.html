@@ -35,6 +35,11 @@
   .muted { color:var(--quiet); }
   table { border-collapse:collapse; width:100%; font-size:13px; }
   td, th { text-align:left; padding:4px 6px; border-bottom:1px solid var(--line); }
+  .engine { border-top:1px solid var(--line); padding-top:6px; margin-top:14px; }
+  .engine:first-of-type { border-top:0; margin-top:0; }
+  .engine h3 { margin:6px 0 2px; }
+  .engine h4 { margin:12px 0 4px; font-size:13px; }
+  .out { margin-top:6px; }
   .pos { color:var(--pos); } .neg { color:var(--neg); }
   #detail { position:absolute; bottom:10px; left:10px; right:10px; z-index:2; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px; display:none; max-height:40%; overflow:auto; }
   @media (max-width: 760px) { main { flex-direction:column; } aside { width:auto; max-width:none; height:55vh; border-left:0; border-top:1px solid var(--line); } }
@@ -63,6 +68,7 @@
       <button data-tab="ask">Ask</button>
       <button data-tab="change">Change</button>
       <button data-tab="investigate">Investigate</button>
+      <button data-tab="engines">Engines</button>
       <button data-tab="face">Face</button>
     </nav>
     <section id="review" class="on">
@@ -91,6 +97,50 @@
     <section id="investigate">
       <button class="b" id="invbtn">Run investigation</button>
       <div id="inv"></div>
+    </section>
+    <section id="engines">
+      <p class="muted">Each engine suggests changes to the shape of the ontology. Its buttons only add proposals to Review; nothing changes until you approve there.</p>
+      <div class="engine">
+        <h3>Tidy up <span class="muted">Refactorer</span></h3>
+        <p class="muted">Merge duplicates, normalize relation names, drop causal edges a longer path already explains, archive orphans.</p>
+        <div class="row"><button class="b" id="rfind">Find suggestions</button><button class="b" id="rall" disabled>Queue all</button></div>
+        <div id="rout" class="out"></div>
+      </div>
+      <div class="engine">
+        <h3>Take apart <span class="muted">Breaker</span></h3>
+        <p class="muted">Split a node that is really two things, or cut every link between two nodes, in both graphs.</p>
+        <div class="row"><button class="b" id="bfind">Find suggestions</button></div>
+        <div id="bout" class="out"></div>
+        <h4>Split a node</h4>
+        <div class="row"><select id="bsnode" class="nodesel" style="flex:1"></select></div>
+        <div class="row"><input id="bsparts" style="flex:1" placeholder="Part names, comma separated (blank: one per cluster)"><button class="b" id="bsplit">Propose split</button></div>
+        <h4>Cut the links between two nodes</h4>
+        <div class="row"><select id="bvsrc" class="nodesel" style="flex:1"></select><select id="bvdst" class="nodesel" style="flex:1"></select></div>
+        <div class="row"><label class="muted"><input type="checkbox" id="bvkeep"> Keep the causal edge</label><span style="flex:1"></span><button class="b" id="bsever">Propose cut</button></div>
+      </div>
+      <div class="engine">
+        <h3>Join together <span class="muted">Chainer</span></h3>
+        <p class="muted">Fold nodes that mean the same thing into one, or chain another mirror's ontology into this one.</p>
+        <div class="row"><button class="b" id="cfind">Find merge suggestions</button></div>
+        <div id="cout" class="out"></div>
+        <h4>Merge nodes</h4>
+        <div class="row"><span class="muted">Keep</span><select id="cmkeep" class="nodesel" style="flex:1"></select></div>
+        <div class="row"><span class="muted">Fold in</span><select id="cmabsorb" class="nodesel" style="flex:1"></select></div>
+        <div class="row"><input id="cmlabel" style="flex:1" placeholder="New label (optional)"><button class="b" id="cmerge">Propose merge</button></div>
+        <h4>Chain another mirror</h4>
+        <div class="row"><input type="file" id="cfile" accept=".json,application/json" style="flex:1"><input id="cns" size="12" placeholder="Name, e.g. Epictetus"></div>
+        <div class="row"><button class="b" id="calign" disabled>Preview matches</button><button class="b" id="cchain" disabled>Propose chain</button></div>
+        <div id="chainout" class="out"></div>
+      </div>
+      <div class="engine">
+        <h3>Search for a better design <span class="muted">Evolver</span></h3>
+        <p class="muted">Tries sequences of the engines above on private copies and scores each design on how well it mirrors the subject.</p>
+        <div class="row"><span class="muted">Rounds</span><input id="egen" type="number" min="1" max="10" value="3" style="width:56px">
+          <span class="muted">Beam</span><input id="ebeam" type="number" min="1" max="12" value="4" style="width:56px">
+          <span class="muted">Keep</span><input id="ekeep" type="number" min="1" max="10" value="3" style="width:56px"></div>
+        <div class="row"><button class="b" id="epreview">Preview designs</button><button class="b" id="equeue">Queue best designs</button></div>
+        <div id="eout" class="out"></div>
+      </div>
     </section>
     <section id="face">
       <p class="muted">The Mirror's current state, drawn as a Chernoff face.</p>
@@ -149,6 +199,8 @@ async function refresh() {
   $('#stat').textContent = `v${s.version} · ${s.nodes} nodes · ${s.proposed} to review · Claude ${s.llm ? 'on' : 'off (no key)'}${s.corpus ? '' : ' · corpus not downloaded'}`;
   drawGraph();
   $('#inode').innerHTML = g.nodes.filter(n => g.causal_edges.some(e => e.src===n.id)).map(n => `<option value="${n.id}">${n.label}</option>`).join('');
+  const opts = [...g.nodes].sort((x, y) => x.label.localeCompare(y.label)).map(n => `<option value="${n.id}">${esc(n.label)}</option>`).join('');
+  document.querySelectorAll('.nodesel').forEach(sel => { const v = sel.value; sel.innerHTML = opts; if (v) sel.value = v; });
   loadPatches(); loadFace();
 }
 
@@ -220,24 +272,128 @@ $('#invbtn').onclick = async () => {
     <h3>Breaker: cut points</h3><p class="muted">Remove one of these and the world splits apart.</p>${t(r.breaker.cut_points, [['Node', x=>x.label], ['Fragments', x=>x.fragments]])}
     <h3>Breaker: load-bearing causes</h3>${t(r.breaker.load_bearing, [['Node', x=>x.label], ['Influence lost', x=>x.influence_lost]])}
     <h3>Tensions</h3>${t(r.breaker.tensions, [['Target', x=>lbl(x.target)], ['Raised by', x=>lbl(x.pushes_up)], ['Lowered by', x=>lbl(x.pushes_down)]])}
-    <div id="breakc"></div>`;
-  const b = await api('/api/break/candidates');
-  const btn = (attrs, text) => `<button class="b" ${attrs}>${text}</button>`;
-  $('#breakc').innerHTML = `<h3>Break: nodes that may be two things</h3><p class="muted">Each part keeps the links of its own cluster, in both graphs. Proposals go to Review; nothing changes until you approve.</p>
-    ${t(b.split, [['Node', x=>x.label], ['Clusters it bridges', x=>x.groups.map(g => g.map(n => n.label).join(', ')).join(' | ')], ['Mixed effects', x=>x.ambivalence],
-      ['', x=>x.groups.length >= 2 ? btn(`data-split="${x.id}"`, 'Propose split') : '']])}
-    <h3>Break: links worth cutting</h3>${t(b.sever, [['Link', x=>`${x.src_label} – ${x.dst_label}`], ['Weakness', x=>x.weakness],
-      ['Why', x=>[x.bridge && 'holds two clusters together', x.tension && 'in tension', !x.causal && 'descriptive only'].filter(Boolean).join(', ')],
-      ['', x=>btn(`data-sever="${x.src}|${x.dst}"`, 'Propose cut')]])}`;
+    <p class="muted">Split and cut suggestions are in the Engines tab.</p>`;
 };
-$('#inv').onclick = async e => {
+
+// ---------- Engines: every button here only queues proposals for Review ----------
+const esc = v => String(v ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const nodeLabel = id => esc((graph.nodes.find(n => n.id===id)||{label:id}).label);
+const table = (rows, cols) => rows.length ? `<table><tr>${cols.map(c => `<th>${c[0]}</th>`).join('')}</tr>${rows.map(x => `<tr>${cols.map(c => `<td>${c[1](x)}</td>`).join('')}</tr>`).join('')}</table>` : '<p class="muted">None right now.</p>';
+const qbtn = (attrs, text, done) => done ? '<span class="muted">In Review</span>' : `<button class="b" ${attrs}>${text}</button>`;
+const queued = b => { b.outerHTML = '<span class="muted">Queued for review</span>'; refresh(); };
+const busy = (el, text) => el.innerHTML = `<p class="muted">${text}</p>`;
+const fail = (el, err) => el.innerHTML = `<p class="warn">${esc(err.message)}</p>`;
+
+// Refactorer
+$('#rfind').onclick = async () => {
+  busy($('#rout'), 'Looking…');
+  try {
+    const r = await api('/api/refactor');
+    $('#rall').disabled = !r.patches.some(p => !p.queued);
+    $('#rout').innerHTML = table(r.patches, [['Change', p => esc(p.rationale)], ['Risk', p => esc(p.extra.risk)],
+        ['', p => qbtn(`data-rkey="${esc(p.extra.key)}"`, 'Queue', p.queued)]]) +
+      (r.findings.length ? `<h4>For you to judge</h4><ul>${r.findings.map(f => `<li>${esc(f.summary)}</li>`).join('')}</ul>` : '');
+  } catch (err) { fail($('#rout'), err); }
+};
+$('#rout').onclick = async e => {
+  const b = e.target.closest('button[data-rkey]'); if (!b) return;
+  try { const r = await api('/api/refactor/queue', {keys: [b.dataset.rkey]}); if (!r.queued.length) throw new Error('Already in Review, or no longer suggested. Find suggestions again.'); queued(b); }
+  catch (err) { alert(err.message); }
+};
+$('#rall').onclick = async () => {
+  try { const r = await api('/api/refactor/queue', {}); $('#rall').disabled = true; $('#rfind').click(); refresh(); alert(`${r.queued.length} refactors queued for review.`); }
+  catch (err) { alert(err.message); }
+};
+
+// Breaker
+$('#bfind').onclick = async () => {
+  busy($('#bout'), 'Looking…');
+  try {
+    const b = await api('/api/break/candidates');
+    $('#bout').innerHTML = `<h4>Nodes that may be two things</h4>` +
+      table(b.split, [['Node', x => esc(x.label)], ['Clusters it bridges', x => x.groups.map(g => g.map(n => esc(n.label)).join(', ')).join(' | ')],
+        ['', x => x.groups.length >= 2 ? qbtn(`data-split="${esc(x.id)}"`, 'Propose split') : '']]) +
+      `<h4>Links worth cutting</h4>` +
+      table(b.sever, [['Link', x => `${esc(x.src_label)} – ${esc(x.dst_label)}`],
+        ['Why', x => [x.bridge && 'holds two clusters together', x.tension && 'in tension', !x.causal && 'descriptive only'].filter(Boolean).join(', ')],
+        ['', x => qbtn(`data-sever="${esc(x.src)}|${esc(x.dst)}"`, 'Propose cut')]]);
+  } catch (err) { fail($('#bout'), err); }
+};
+$('#bout').onclick = async e => {
   const b = e.target.closest('button[data-split],button[data-sever]'); if (!b) return;
   try {
     if (b.dataset.split) await api('/api/break/split', {node: b.dataset.split});
     else { const [src, dst] = b.dataset.sever.split('|'); await api('/api/break/sever', {src, dst}); }
-    b.textContent = 'Queued for review'; b.disabled = true; refresh();
+    queued(b);
   } catch (err) { alert(err.message); }
 };
+$('#bsplit').onclick = async () => {
+  const parts = $('#bsparts').value.split(',').map(x => x.trim()).filter(Boolean).map(label => ({label}));
+  try { await api('/api/break/split', {node: $('#bsnode').value, parts: parts.length ? parts : null}); $('#bsparts').value = ''; refresh(); alert('Split queued for review.'); }
+  catch (err) { alert(err.message); }
+};
+$('#bsever').onclick = async () => {
+  try { await api('/api/break/sever', {src: $('#bvsrc').value, dst: $('#bvdst').value, causal: !$('#bvkeep').checked}); refresh(); alert('Cut queued for review.'); }
+  catch (err) { alert(err.message); }
+};
+
+// Chainer
+$('#cfind').onclick = async () => {
+  busy($('#cout'), 'Looking…');
+  try {
+    const c = await api('/api/chain/candidates');
+    $('#cout').innerHTML = table(c, [['Fold', x => `${esc(x.absorbed_label)} into ${esc(x.survivor_label)}`], ['Why', x => esc(x.why)],
+      ['', x => qbtn(`data-merge="${esc(x.survivor)}|${esc(x.absorbed)}"`, 'Propose merge')]]);
+  } catch (err) { fail($('#cout'), err); }
+};
+$('#cout').onclick = async e => {
+  const b = e.target.closest('button[data-merge]'); if (!b) return;
+  const [survivor, absorbed] = b.dataset.merge.split('|');
+  try { await api('/api/chain/merge', {survivor, absorbed: [absorbed]}); queued(b); } catch (err) { alert(err.message); }
+};
+$('#cmerge').onclick = async () => {
+  const survivor = $('#cmkeep').value, absorbed = $('#cmabsorb').value;
+  if (survivor === absorbed) return alert('Pick two different nodes.');
+  try { await api('/api/chain/merge', {survivor, absorbed: [absorbed], label: $('#cmlabel').value.trim() || null}); $('#cmlabel').value = ''; refresh(); alert('Merge queued for review.'); }
+  catch (err) { alert(err.message); }
+};
+let other = null;
+$('#cfile').onchange = async e => {
+  other = null; $('#calign').disabled = $('#cchain').disabled = true; $('#chainout').innerHTML = '';
+  const f = e.target.files[0]; if (!f) return;
+  try { other = JSON.parse(await f.text()); if (!$('#cns').value && other.name) $('#cns').value = other.name; $('#calign').disabled = $('#cchain').disabled = false; }
+  catch { fail($('#chainout'), new Error('That file is not an ontology.json.')); }
+};
+$('#calign').onclick = async () => {
+  try {
+    const a = await api('/api/chain/align', {ontology: other});
+    const otherLabel = id => esc((other.nodes || []).find(n => n.id === id)?.label || id);
+    const exact = Object.entries(a.exact);
+    $('#chainout').innerHTML = `<h4>Joined onto existing nodes (${exact.length})</h4>` + table(exact, [['Theirs', x => otherLabel(x[0])], ['Ours', x => nodeLabel(x[1])]]) +
+      `<h4>Near matches, kept separate</h4>` + table(a.possible, [['Theirs', x => otherLabel(x.other)], ['Ours', x => nodeLabel(x.base)], ['Similarity', x => x.score]]);
+  } catch (err) { fail($('#chainout'), err); }
+};
+$('#cchain').onclick = async () => {
+  try { const p = await api('/api/chain/import', {ontology: other, namespace: $('#cns').value.trim() || null}); refresh();
+    $('#chainout').innerHTML = `<p>Chain queued for review: ${p.ops.length} changes.</p>`; }
+  catch (err) { fail($('#chainout'), err); }
+};
+
+// Evolver
+const evolve = async queue => {
+  busy($('#eout'), 'Searching designs…');
+  try {
+    const r = await api('/api/evolve', {generations: +$('#egen').value, beam: +$('#ebeam').value, keep: +$('#ekeep').value, queue});
+    $('#eout').innerHTML = `<p class="muted">Engines: ${esc(r.operators.join(', ') || 'none')}. Tried ${r.explored} designs. Current fitness ${r.base.total.toFixed(3)}.</p>` +
+      (r.designs.length ? r.designs.map(d => `<div class="card"><strong>${d.fitness.total.toFixed(3)}</strong> <span class="muted">${d.fitness.passed.length} probes pass</span>
+        <ol>${d.steps.map(s => `<li><span class="muted">${esc(s.family)}:</span> ${esc(s.rationale)}</li>`).join('')}</ol></div>`).join('') : '<p class="muted">No design beats the current one.</p>') +
+      r.errors.map(x => `<p class="warn">${esc(x)}</p>`).join('') +
+      (queue ? `<p>${r.queued.length} designs queued for review.</p>` : '');
+    if (queue) refresh();
+  } catch (err) { fail($('#eout'), err); }
+};
+$('#epreview').onclick = () => evolve(false);
+$('#equeue').onclick = () => evolve(true);
 
 async function loadFace() {
   const m = await api('/api/metrics');
