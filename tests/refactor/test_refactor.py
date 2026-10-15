@@ -60,6 +60,13 @@ def test_suggest_finds_each_refactor_and_changes_nothing(tmp_path):
     assert st.ontology.snapshot() == before
 
 
+def test_propose_returns_unqueued_patches(tmp_path):
+    st = build(tmp_path)
+    patches = refactor.propose(st.ontology.graph_snapshot())
+    assert {p.extra["refactor_type"] for p in patches} == set(by_type(refactor.suggest(st.ontology.graph_snapshot())))
+    assert st.list() == [] and not (tmp_path / "patches.json").exists()
+
+
 def test_queue_only_proposes_and_does_not_duplicate(tmp_path):
     st = build(tmp_path)
     version = st.ontology.version

@@ -89,6 +89,11 @@ def suggest(snap: GraphSnapshot) -> Suggestions:
     return Suggestions(snap.version, patches, contradictions(snap), before)
 
 
+def propose(snap: GraphSnapshot) -> list[Patch]:
+    """Just the refactor patches for a snapshot: not queued, nothing written."""
+    return suggest(snap).patches
+
+
 def queue_suggestions(steward) -> Suggestions:
     """Put new suggestions in the Steward's queue as proposed patches.
 
