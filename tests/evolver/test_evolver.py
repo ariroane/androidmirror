@@ -112,3 +112,79 @@ def test_aliases_resolve_probes():
 def test_discover_skips_missing_engines(monkeypatch):
     monkeypatch.setattr(ops_mod, "ENGINE_MODULES", {"chain": "androidmirror.no_such_engine", "x": "androidmirror.analysis"})
     assert ops_mod.discover() == {}  # missing module, and a module without propose()
+
+
+def test_extra_steps_must_pay(steward):
+    """A design that only adds a useless step on top of a better one is not offered."""
+    def noise(snap):
+        n = len(snap.nodes)
+        return [Patch(kind="refactor", rationale="noise", ops=[Op(op="add_node", id=f"noise{n}", label=f"Noise {n}")])]
+    result = evolver.evolve(steward.ontology, [DISCIPLINE], {"chain": link_discipline, "noise": noise}, generations=2)
+    assert result["designs"] and all(fam == "chain" for d in result["designs"] for fam, _ in d.steps)
+
+
+def test_merging_different_concepts_costs_distinctness(steward):
+    onto = steward.ontology
+    loose = evolver.evolve(onto, [], {"chain": merge_morals}, protect_probes=False, keep=10)
+    assert loose["designs"] == []  # smaller, but it conflates two lessons, so not better
+    child = evolver.sandbox(onto.graph_snapshot())
+    child.apply_ops(merge_morals(onto.graph_snapshot())[0].ops)
+    assert evolver.score(child, [], onto).components["distinctness"] < 1.0
+
+
+class _FakeBreaker:
+    def split_candidates(self, onto, top=10):
+        return [{"id": "reason"}, {"id": "nope"}]
+
+    def sever_candidates(self, onto, top=10):
+        return [{"src": "reason", "dst": "steadiness_of_purpose"}]
+
+    def propose_split(self, onto, node):
+        if node not in onto.nodes:
+            raise KeyError(node)
+        return Patch(kind="break", rationale=f"split {node}", ops=[])
+
+    def propose_sever(self, onto, src, dst):
+        return Patch(kind="break", rationale=f"sever {src}", ops=[Op(op="remove_causal_edge", src=src, dst=dst)])
+
+
+class _FakeChainer:
+    ChainError = ValueError
+
+    def __init__(self):
+        self.calls = []
+
+    def plan_merge(self, snap, survivor, absorbed):
+        self.calls.append((survivor, absorbed))
+        return Patch(kind="chain", rationale="merge", ops=[])
+
+
+def test_adapters_call_the_engines_own_planners(steward):
+    snap = steward.ontology.graph_snapshot()
+    brk = ops_mod._breaker(_FakeBreaker())
+    assert [p.rationale for p in brk(snap)] == ["split reason", "sever reason"]
+
+    onto = steward.ontology
+    steward.approve(steward.propose(Patch(ops=[
+        Op(op="add_node", id="dup", label="Steadiness of purposes", type=onto.nodes["steadiness_of_purpose"]["type"])
+    ])).id, "k")
+    chainer = _FakeChainer()
+    ops_mod._chainer(chainer)(onto.graph_snapshot())
+    assert ("steadiness_of_purpose", ["dup"]) in chainer.calls
+
+
+def test_with_real_engines_when_installed(steward):
+    """Runs once the refactor, break and chain engines are on the branch."""
+    found = evolver.discover()
+    if len(found) < 3:
+        pytest.skip(f"engines installed: {sorted(found)}")
+    onto = steward.ontology
+    steward.approve(steward.propose(Patch(ops=[
+        Op(op="add_node", id="dup", label="Steadiness of purposes", type=onto.nodes["steadiness_of_purpose"]["type"]),
+        Op(op="add_causal_edge", src="dup", dst="dignity", sign=1, strength=0.6, confidence=0.6),
+    ])).id, "k")
+    probes = evolver.default_probes(steward.data_dir)
+    before = onto.snapshot()
+    result = evolver.evolve(onto, probes)
+    assert onto.snapshot() == before and not result["errors"]
+    assert result["designs"] and all(d.fitness.total > result["base"]["total"] for d in result["designs"])

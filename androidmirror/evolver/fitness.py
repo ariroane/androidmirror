@@ -4,11 +4,18 @@ A design is scored on:
 
 - probes: claims about the subject the model should reproduce ("reason calms
   anger", "fortune and providence are distinct"), each tied to a source quote
-- coverage: how much of the current ontology's grounded evidence it keeps
+- fidelity: the share of the current ontology's relations and causal edges it
+  still carries (following merges, renames and splits)
+- distinctness: penalises folding together concepts the subject names
+  differently (merging near-identical labels is free)
+- coverage: how much of the current ontology's quoted evidence it keeps
 - grounding: the share of its nodes and edges backed by a source quote
 - coherence: the share of nodes in its largest connected piece
 - parsimony: smaller than the current ontology scores higher, larger lower
 - robustness: one minus the share of nodes that are cut points
+
+Structure alone moves the score only a little; a design has to keep what the
+subject said, or reproduce more of it, to win.
 
 Each component is 0..1; the total is their weighted mean. Probes are left out
 of the mean when there are none.
@@ -16,6 +23,8 @@ of the mean when there are none.
 
 from __future__ import annotations
 
+import difflib
+import itertools
 import json
 from pathlib import Path
 from typing import Literal
@@ -29,13 +38,17 @@ from ..ontology import GraphSnapshot, Ontology, slugify
 SEED_PROBES = Path(__file__).resolve().parents[2] / "data" / "probes_meditations.json"
 
 DEFAULT_WEIGHTS = {
-    "probes": 0.35,
-    "coverage": 0.2,
-    "grounding": 0.15,
-    "coherence": 0.1,
-    "parsimony": 0.1,
-    "robustness": 0.1,
+    "probes": 0.3,
+    "fidelity": 0.2,
+    "distinctness": 0.15,
+    "coverage": 0.1,
+    "grounding": 0.1,
+    "coherence": 0.05,
+    "parsimony": 0.05,
+    "robustness": 0.05,
 }
+
+SAME_LABEL = 0.8  # label similarity at or above which a merge costs no distinctness
 
 
 class Probe(BaseModel):
@@ -92,6 +105,51 @@ def resolve(onto: Ontology, label: str) -> str | None:
         if any(slugify(str(a)) == want for a in aliases):
             return nid
     return None
+
+
+def resolve_all(onto: Ontology, label: str) -> set[str]:
+    """Every live node now standing for `label`: itself, or the parts it was split into."""
+    nid = resolve(onto, label)
+    if nid is None:
+        return set()
+    out, todo = set(), [nid]
+    while todo:
+        n = todo.pop()
+        attrs = onto.nodes.get(n, {}).get("attrs", {})
+        parts = [p for p in attrs.get("split_into") or [] if p in onto.nodes and p not in out]
+        if attrs.get("archived") and parts:
+            todo.extend(parts)
+        else:
+            out.add(n)
+    return out
+
+
+def _fidelity(onto: Ontology, base: Ontology) -> float:
+    labels = {n: v["label"] for n, v in base.nodes.items()}
+    where = {n: resolve_all(onto, lab) for n, lab in labels.items()}
+    facts = kept = 0
+    for s, d, k in base.kg.edges(keys=True):
+        facts += 1
+        kept += any(onto.kg.has_edge(a, b, key=k) for a in where[s] for b in where[d] if a != b)
+    for s, d, a in base.dag.edges(data=True):
+        facts += 1
+        sign = a.get("sign", 1)
+        kept += any(onto.dag.has_edge(x, y) and onto.dag.edges[x, y].get("sign", 1) == sign
+                    for x in where[s] for y in where[d] if x != y)
+    return kept / facts if facts else 1.0
+
+
+def _distinctness(onto: Ontology, base: Ontology) -> float:
+    groups: dict[str, list[str]] = {}
+    for n, v in base.nodes.items():
+        for r in resolve_all(onto, v["label"]):
+            groups.setdefault(r, []).append(v["label"])
+    cost = 0.0
+    for members in groups.values():
+        for a, b in itertools.combinations(sorted(set(members)), 2):
+            sim = difflib.SequenceMatcher(None, slugify(a), slugify(b)).ratio()
+            cost += max(0.0, SAME_LABEL - sim) / SAME_LABEL
+    return 1.0 / (1.0 + cost)
 
 
 def check(onto: Ontology, probe: Probe) -> bool:
@@ -152,6 +210,8 @@ def score(onto: Ontology, probes: list[Probe], base: Ontology | GraphSnapshot,
     base_quotes = quotes(base)
     base_size = size(base) or 1
     comp = {
+        "fidelity": _fidelity(onto, base),
+        "distinctness": _distinctness(onto, base),
         "coverage": len(quotes(onto) & base_quotes) / len(base_quotes) if base_quotes else 1.0,
         "grounding": _grounding(onto),
         "coherence": m["coherence"],

@@ -47,8 +47,11 @@ Nothing reaches the ontology until someone approves it. Every approval records w
 The Evolver looks for a better *shape* of the ontology, not new facts. It takes the operations the refactor, break and chain engines propose, tries sequences of them on private copies of both graphs, and scores each resulting design on how well it mirrors the subject:
 
 - **probes:** claims about the subject the model should reproduce, each tied to a quote (`data/probes_meditations.json`; put your own in `data/probes.json`). A design that loses a probe the current ontology passes is thrown out.
+- **fidelity, distinctness:** still carries what the current ontology says (following merges and splits), and doesn't fold together concepts the subject names differently
 - **coverage, grounding:** keeps the quoted evidence, and stays backed by quotes
 - **coherence, robustness, parsimony:** connected, few single points of failure, no bigger than it needs to be
+
+Structure alone moves the score only a little, so a design wins by keeping what the subject said or reproducing more of it. Every step in a design has to improve on the shorter design it extends.
 
 A beam search keeps the best few designs each round. The winners go to the Review tab as one patch each (kind `evolve`, with the steps, the fitness before and after, and which probes it now passes). Nothing changes until you approve one, and a design refuses to apply if the ontology changed after it was found.
 
@@ -57,7 +60,7 @@ python -m androidmirror evolve --dry-run      # show the best designs
 python -m androidmirror evolve --keep 3       # queue them for approval
 ```
 
-An engine plugs in by exposing `propose(snapshot: GraphSnapshot) -> list[Patch]` in `androidmirror.refactor`, `androidmirror.breaker` or `androidmirror.chainer`. Until those land, `evolve` reports that no engines are installed.
+The Evolver calls `androidmirror.refactor.propose(snapshot)`, the Breaker's `split_candidates` / `sever_candidates` with `propose_split` / `propose_sever`, and the Chainer's `plan_merge` on near-duplicate pairs. Any engine that is not installed is skipped.
 
 ## Command line
 
