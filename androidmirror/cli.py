@@ -6,11 +6,12 @@ import argparse
 import json
 from pathlib import Path
 
-from . import analysis, breaker, corpus, llm
+from . import analysis, corpus, llm
 from .ingest import ingest_chunks, load_seed
 from .ontology import Ontology
 from .server import ROOT
 from .steward import Steward
+from .breaker_api import add_cli as add_breaker_cli, run_cli as run_breaker_cli
 
 DATA = ROOT / "data"
 
@@ -44,21 +45,14 @@ def main(argv: list[str] | None = None) -> None:
     a.add_argument("ids", nargs="+")
     a.add_argument("--as", dest="approver", required=True, help="your name, recorded on the approval")
 
+    add_breaker_cli(sub)
     sub.add_parser("investigate", help="print important nodes and Breaker findings")
-
-    sub.add_parser("break-candidates", help="list nodes the Breaker would split and links it would sever")
-    bs = sub.add_parser("break-split", help="propose splitting a node in both graphs (queued for review)")
-    bs.add_argument("node")
-    bs.add_argument("--parts", nargs="+", help="part labels; omit to split by neighbour group")
-    bv = sub.add_parser("break-sever", help="propose cutting every link between two nodes (queued for review)")
-    bv.add_argument("src")
-    bv.add_argument("dst")
-    bv.add_argument("--rel", dest="rels", nargs="+", help="only these descriptive relations")
-    bv.add_argument("--keep-causal", action="store_true", help="leave the causal edge in place")
 
     args = ap.parse_args(argv)
     data_dir: Path = args.data
 
+    if run_breaker_cli(args, data_dir):
+        return
     if args.cmd == "serve":
         import uvicorn
 
@@ -93,17 +87,3 @@ def main(argv: list[str] | None = None) -> None:
         onto = Ontology.load(data_dir / "ontology.json")
         print(json.dumps({"important": analysis.important_nodes(onto), "breaker": analysis.breaker(onto),
                           "metrics": analysis.metrics(onto)}, indent=2))
-    elif args.cmd == "break-candidates":
-        onto = Ontology.load(data_dir / "ontology.json")
-        print(json.dumps({"split": breaker.split_candidates(onto), "sever": breaker.sever_candidates(onto)}, indent=2))
-    elif args.cmd in ("break-split", "break-sever"):
-        st = _steward(data_dir)
-        if args.cmd == "break-split":
-            parts = [{"label": p} for p in args.parts] if args.parts else None
-            patch = breaker.propose_split(st.ontology, args.node, parts)
-        else:
-            patch = breaker.propose_sever(st.ontology, args.src, args.dst, args.rels, not args.keep_causal)
-        st.propose(patch)
-        st.save()
-        warn = f"  [{'; '.join(patch.warnings)}]" if patch.warnings else ""
-        print(f"queued {patch.id}: {patch.rationale}{warn}")
