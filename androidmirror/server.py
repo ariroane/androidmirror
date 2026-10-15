@@ -167,4 +167,7 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
     def metrics() -> dict:
         return analysis.metrics(onto)
 
+    from . import chainer
+
+    chainer.register(app, steward)
     return app

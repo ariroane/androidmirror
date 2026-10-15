@@ -23,6 +23,9 @@ def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="androidmirror", description="Android Mirror prototype")
     ap.add_argument("--data", type=Path, default=DATA, help="data directory (default: ./data)")
     sub = ap.add_subparsers(dest="cmd", required=True)
+    from . import chainer
+
+    chainer.add_cli(sub)
 
     s = sub.add_parser("serve", help="run the web app")
     s.add_argument("--port", type=int, default=8000)
@@ -57,6 +60,11 @@ def main(argv: list[str] | None = None) -> None:
     ev.add_argument("--dry-run", action="store_true", help="print the designs without queueing them")
 
     args = ap.parse_args(argv)
+    if args.cmd == "chain":
+        try:
+            return chainer.run_cli(args, _steward(args.data))
+        except chainer.ChainError as e:
+            raise SystemExit(f"not queued: {e}")
     data_dir: Path = args.data
 
     if args.cmd == "serve":
