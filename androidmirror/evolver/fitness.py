@@ -176,6 +176,8 @@ def quotes(onto: Ontology) -> set[str]:
     records = list(onto.nodes.values())
     records += [a for *_, a in onto.kg.edges(keys=True, data=True)]
     records += [a for *_, a in onto.dag.edges(data=True)]
+    for node in onto.nodes.values():  # merges keep absorbed nodes' records here
+        records += [m for m in node.get("attrs", {}).get("merged_from") or [] if isinstance(m, dict)]
     for r in records:
         for prov in r.get("provenance") or []:
             q = (prov or {}).get("quote", "").strip() if isinstance(prov, dict) else ""

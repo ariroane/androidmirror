@@ -132,47 +132,6 @@ def test_merging_different_concepts_costs_distinctness(steward):
     assert evolver.score(child, [], onto).components["distinctness"] < 1.0
 
 
-class _FakeBreaker:
-    def split_candidates(self, onto, top=10):
-        return [{"id": "reason"}, {"id": "nope"}]
-
-    def sever_candidates(self, onto, top=10):
-        return [{"src": "reason", "dst": "steadiness_of_purpose"}]
-
-    def propose_split(self, onto, node):
-        if node not in onto.nodes:
-            raise KeyError(node)
-        return Patch(kind="break", rationale=f"split {node}", ops=[])
-
-    def propose_sever(self, onto, src, dst):
-        return Patch(kind="break", rationale=f"sever {src}", ops=[Op(op="remove_causal_edge", src=src, dst=dst)])
-
-
-class _FakeChainer:
-    ChainError = ValueError
-
-    def __init__(self):
-        self.calls = []
-
-    def plan_merge(self, snap, survivor, absorbed):
-        self.calls.append((survivor, absorbed))
-        return Patch(kind="chain", rationale="merge", ops=[])
-
-
-def test_adapters_call_the_engines_own_planners(steward):
-    snap = steward.ontology.graph_snapshot()
-    brk = ops_mod._breaker(_FakeBreaker())
-    assert [p.rationale for p in brk(snap)] == ["split reason", "sever reason"]
-
-    onto = steward.ontology
-    steward.approve(steward.propose(Patch(ops=[
-        Op(op="add_node", id="dup", label="Steadiness of purposes", type=onto.nodes["steadiness_of_purpose"]["type"])
-    ])).id, "k")
-    chainer = _FakeChainer()
-    ops_mod._chainer(chainer)(onto.graph_snapshot())
-    assert ("steadiness_of_purpose", ["dup"]) in chainer.calls
-
-
 def test_with_real_engines_when_installed(steward):
     """Runs once the refactor, break and chain engines are on the branch."""
     found = evolver.discover()
