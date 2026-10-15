@@ -7,7 +7,8 @@ copy and scored; the best designs survive. Designs that lose a probe the
 current ontology satisfies are dropped, so the search cannot trade away what
 the user has said is true of the subject.
 
-Nothing here writes the live ontology. `queue_designs` only proposes.
+Only designs whose every extra step pays for itself are returned. Nothing
+here writes the live ontology. `queue_designs` only proposes.
 """
 
 from __future__ import annotations
@@ -29,6 +30,7 @@ class Design:
     steps: list[tuple[str, Patch]]  # (operation family, the engine's patch)
     fitness: Fitness
     snapshot: GraphSnapshot = field(repr=False)
+    prefix_best: float = float("-inf")  # best score among the designs this one extends
 
     @property
     def ops(self) -> list[Op]:
@@ -108,12 +110,14 @@ def evolve(
                     fit = score(child, probes, base, weights)
                     if protected - set(fit.passed):
                         continue
-                    children.append(Design(parent.steps + [(family, p)], fit, child.graph_snapshot()))
+                    children.append(Design(parent.steps + [(family, p)], fit, child.graph_snapshot(),
+                                           max(parent.prefix_best, parent.fitness.total)))
         if not children:
             break
         frontier = sorted(frontier + children, key=lambda d: d.fitness.total, reverse=True)[:beam]
 
-    better = [d for d in frontier if d.steps and d.fitness.total > base_fit.total + 1e-9]
+    # every step has to pay: a design that scores no better than a shorter one it extends is dropped
+    better = [d for d in frontier if d.steps and d.fitness.total > d.prefix_best + 1e-9]
     return {
         "base_version": base_snap.version,
         "base": base_fit.model_dump(),
