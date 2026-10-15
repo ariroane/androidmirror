@@ -1,12 +1,12 @@
 # Android Mirror
 
-A contextual generation engine: a reflective model of one person's subjective world, built from their own writing.
-It combines Claude (through the Anthropic API) with two linked ontologies over the same nodes:
+A contextual generation engine: a reflective model the subjective operating frame of a person, persons, or system, built from their language.
+It combines works through a combination of three knowledge structures: Claude (through the Anthropic API) with two linked ontologies over the same nodes:
 
 - **Descriptive ontology:** a knowledge graph of people, virtues, vices, emotions, beliefs, practices and values, and how they relate.
 - **Causal ontology:** a DAG saying what drives what, with a sign, a strength and a confidence on each edge.
 
-This prototype (Build A) is seeded with **Marcus Aurelius, *Meditations*** (George Long translation, public domain, downloaded from Project Gutenberg).
+This initial prototype (Build A) is seeded with **Marcus Aurelius, *Meditations*** (George Long translation, public domain, downloaded from Project Gutenberg).
 
 ## Run it on your computer
 
