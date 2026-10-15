@@ -6,7 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
-from . import analysis, corpus, llm
+from . import analysis, chainer, corpus, llm
 from .ingest import ingest_chunks, load_seed
 from .ontology import Ontology
 from .server import ROOT
@@ -46,6 +46,8 @@ def main(argv: list[str] | None = None) -> None:
 
     sub.add_parser("investigate", help="print important nodes and Breaker findings")
 
+    chainer.add_cli(sub)
+
     args = ap.parse_args(argv)
     data_dir: Path = args.data
 
@@ -83,3 +85,8 @@ def main(argv: list[str] | None = None) -> None:
         onto = Ontology.load(data_dir / "ontology.json")
         print(json.dumps({"important": analysis.important_nodes(onto), "breaker": analysis.breaker(onto),
                           "metrics": analysis.metrics(onto)}, indent=2))
+    elif args.cmd == "chain":
+        try:
+            chainer.run_cli(args, _steward(data_dir))
+        except chainer.ChainError as e:
+            raise SystemExit(f"not queued: {e}")

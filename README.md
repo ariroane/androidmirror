@@ -49,6 +49,8 @@ python -m androidmirror ingest --book 2 --start 0 --count 3   # Claude reads Boo
 python -m androidmirror pending                               # list proposed patches
 python -m androidmirror approve all --as "Your Name"          # or list patch ids
 python -m androidmirror investigate                           # importance, Breaker, face metrics as JSON
+python -m androidmirror chain merge anger wrath               # propose folding Wrath into Anger in both graphs
+python -m androidmirror chain import other/ontology.json --as Epictetus   # propose chaining another mirror in
 ```
 
 State lives in `data/` (`ontology.json`, `patches.json`, `corpus/`) and is not committed.
@@ -63,6 +65,7 @@ androidmirror/
   llm.py        Claude agents: Cartographer + Causal Modeler, Oracle (answers), Storyteller
   ingest.py     reads corpus chunks and queues self-contained patches
   corpus.py     downloads and splits Meditations into "Book II, 1"-style sections
+  chainer.py    merge nodes across both graphs; chain another mirror's ontology in (queued as "chain" patches)
   analysis.py   importance, interventions (do-operator on the DAG), Breaker, face metrics
   query.py      finds relevant nodes and builds grounded facts for answers
   server.py     FastAPI app; web/index.html is the UI (Cytoscape.js, vendored)

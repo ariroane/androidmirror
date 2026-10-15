@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import analysis, corpus, llm, query
+from . import analysis, chainer, corpus, llm, query
 from .ingest import ingest_chunks
 from .ontology import Ontology
 from .steward import GovernanceError, Steward, normalize
@@ -143,4 +143,5 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
     def metrics() -> dict:
         return analysis.metrics(onto)
 
+    chainer.register(app, steward)
     return app
