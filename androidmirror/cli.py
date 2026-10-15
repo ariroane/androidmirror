@@ -11,7 +11,6 @@ from .ingest import ingest_chunks, load_seed
 from .ontology import Ontology
 from .server import ROOT
 from .steward import Steward
-from .breaker_api import add_cli as add_breaker_cli, run_cli as run_breaker_cli
 
 DATA = ROOT / "data"
 
@@ -45,14 +44,14 @@ def main(argv: list[str] | None = None) -> None:
     a.add_argument("ids", nargs="+")
     a.add_argument("--as", dest="approver", required=True, help="your name, recorded on the approval")
 
+    from .breaker_api import add_cli as add_breaker_cli, run_cli as run_breaker_cli
+
     add_breaker_cli(sub)
     sub.add_parser("investigate", help="print important nodes and Breaker findings")
 
     args = ap.parse_args(argv)
     data_dir: Path = args.data
 
-    if run_breaker_cli(args, data_dir):
-        return
     if args.cmd == "serve":
         import uvicorn
 
@@ -83,6 +82,8 @@ def main(argv: list[str] | None = None) -> None:
         for pid in ids:
             st.approve(pid, args.approver)
         print(f"approved {len(ids)}; ontology is now version {st.ontology.version}")
+    elif run_breaker_cli(args, data_dir):
+        pass
     elif args.cmd == "investigate":
         onto = Ontology.load(data_dir / "ontology.json")
         print(json.dumps({"important": analysis.important_nodes(onto), "breaker": analysis.breaker(onto),
