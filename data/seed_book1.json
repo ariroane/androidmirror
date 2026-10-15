@@ -1,0 +1,157 @@
+{
+  "proposed_by": "claude-in-thread",
+  "note": "Hand-drafted first patches from Books I and II, so the Mirror can be populated without an API key. Quotes are from the George Long translation; the Steward flags any quote it cannot find verbatim once the corpus is downloaded.",
+  "patches": [
+    {
+      "locator": "Book I, 1",
+      "kind": "descriptive",
+      "quote": "From my grandfather Verus I learned good morals and the government of my temper.",
+      "rationale": "Marcus credits his grandfather with his moral grounding and his control of temper.",
+      "nodes": [
+        {"id": "marcus_aurelius", "label": "Marcus Aurelius", "type": "person"},
+        {"id": "grandfather_verus", "label": "Grandfather Verus", "type": "person"},
+        {"id": "good_morals", "label": "Good morals", "type": "virtue"},
+        {"id": "control_of_temper", "label": "Control of temper", "type": "virtue"}
+      ],
+      "relations": [
+        {"src": "marcus_aurelius", "rel": "learned_from", "dst": "grandfather_verus"},
+        {"src": "grandfather_verus", "rel": "exemplifies", "dst": "good_morals"},
+        {"src": "grandfather_verus", "rel": "exemplifies", "dst": "control_of_temper"}
+      ],
+      "causal_edges": []
+    },
+    {
+      "locator": "Book I, 2",
+      "kind": "descriptive",
+      "quote": "From the reputation and remembrance of my father, modesty and a manly character.",
+      "rationale": "His father, known to him mostly by memory and reputation, models modesty.",
+      "nodes": [
+        {"id": "his_father", "label": "His father", "type": "person"},
+        {"id": "modesty", "label": "Modesty", "type": "virtue"}
+      ],
+      "relations": [
+        {"src": "marcus_aurelius", "rel": "learned_from", "dst": "his_father"},
+        {"src": "his_father", "rel": "exemplifies", "dst": "modesty"}
+      ],
+      "causal_edges": []
+    },
+    {
+      "locator": "Book I, 3",
+      "kind": "descriptive",
+      "quote": "From my mother, piety and beneficence, and abstinence, not only from evil deeds, but even from evil thoughts; and further, simplicity in my way of living, far removed from the habits of the rich.",
+      "rationale": "His mother teaches piety, generosity, purity of thought and a simple life that rejects the habits of the rich.",
+      "nodes": [
+        {"id": "his_mother", "label": "His mother", "type": "person"},
+        {"id": "piety", "label": "Piety", "type": "virtue"},
+        {"id": "beneficence", "label": "Beneficence", "type": "virtue"},
+        {"id": "simplicity", "label": "Simplicity of living", "type": "value"},
+        {"id": "habits_of_the_rich", "label": "Habits of the rich", "type": "vice"}
+      ],
+      "relations": [
+        {"src": "marcus_aurelius", "rel": "learned_from", "dst": "his_mother"},
+        {"src": "his_mother", "rel": "exemplifies", "dst": "piety"},
+        {"src": "his_mother", "rel": "exemplifies", "dst": "beneficence"},
+        {"src": "his_mother", "rel": "exemplifies", "dst": "simplicity"},
+        {"src": "simplicity", "rel": "opposes", "dst": "habits_of_the_rich"}
+      ],
+      "causal_edges": []
+    },
+    {
+      "locator": "Book I, 7",
+      "kind": "descriptive",
+      "quote": "From Rusticus I received the impression that my character required improvement and discipline",
+      "rationale": "Rusticus awakens his sense that his character needs work, the root of his practice of self-improvement.",
+      "nodes": [
+        {"id": "rusticus", "label": "Rusticus", "type": "person"},
+        {"id": "self_discipline", "label": "Self-discipline", "type": "practice"}
+      ],
+      "relations": [
+        {"src": "marcus_aurelius", "rel": "learned_from", "dst": "rusticus"},
+        {"src": "rusticus", "rel": "taught", "dst": "self_discipline"}
+      ],
+      "causal_edges": []
+    },
+    {
+      "locator": "Book I, 8",
+      "kind": "causal",
+      "quote": "From Apollonius I learned freedom of will and undeviating steadiness of purpose; and to look to nothing else, not even for a moment, except to reason",
+      "rationale": "Apollonius ties steadiness of purpose to looking only to reason: attending to reason keeps the will steady.",
+      "nodes": [
+        {"id": "apollonius", "label": "Apollonius", "type": "person"},
+        {"id": "reason", "label": "Reason", "type": "value"},
+        {"id": "steadiness_of_purpose", "label": "Steadiness of purpose", "type": "virtue"}
+      ],
+      "relations": [
+        {"src": "marcus_aurelius", "rel": "learned_from", "dst": "apollonius"},
+        {"src": "apollonius", "rel": "taught", "dst": "steadiness_of_purpose"}
+      ],
+      "causal_edges": [
+        {"src": "reason", "dst": "steadiness_of_purpose", "sign": 1, "strength": 0.8, "confidence": 0.7, "mechanism": "looking to nothing but reason keeps the will from wavering"}
+      ]
+    },
+    {
+      "locator": "Book II, 1",
+      "kind": "causal",
+      "quote": "Begin the morning by saying to thyself, I shall meet with the busy-body, the ungrateful, arrogant, deceitful, envious, unsocial.",
+      "rationale": "Expecting difficult people each morning is a practice meant to blunt vexation before it arises.",
+      "nodes": [
+        {"id": "morning_preparation", "label": "Morning preparation for difficult people", "type": "practice"},
+        {"id": "vexation", "label": "Vexation with others", "type": "emotion"}
+      ],
+      "relations": [
+        {"src": "marcus_aurelius", "rel": "practices", "dst": "morning_preparation"}
+      ],
+      "causal_edges": [
+        {"src": "morning_preparation", "dst": "vexation", "sign": -1, "strength": 0.6, "confidence": 0.6, "mechanism": "an expected offence does not take him by surprise"}
+      ]
+    },
+    {
+      "locator": "Book II, 1",
+      "kind": "causal",
+      "quote": "To act against one another then is contrary to nature; and it is acting against one another to be vexed and to turn away.",
+      "rationale": "Vexation is itself a way of acting against others, so it undermines cooperation and breaks with nature.",
+      "nodes": [
+        {"id": "cooperation", "label": "Cooperation with others", "type": "value"},
+        {"id": "living_according_to_nature", "label": "Living according to nature", "type": "value"}
+      ],
+      "relations": [
+        {"src": "vexation", "rel": "opposes", "dst": "cooperation"}
+      ],
+      "causal_edges": [
+        {"src": "vexation", "dst": "cooperation", "sign": -1, "strength": 0.8, "confidence": 0.8, "mechanism": "to be vexed and turn away is to act against one another"},
+        {"src": "cooperation", "dst": "living_according_to_nature", "sign": 1, "strength": 0.8, "confidence": 0.7, "mechanism": "we are made for co-operation, so working together is acting by nature"}
+      ]
+    },
+    {
+      "locator": "Book II, 1",
+      "kind": "descriptive",
+      "quote": "for we are made for co-operation, like feet, like hands, like eyelids, like the rows of the upper and lower teeth.",
+      "rationale": "People belong together like parts of one body; cooperation is part of human nature.",
+      "nodes": [
+        {"id": "human_nature", "label": "Human nature", "type": "belief"}
+      ],
+      "relations": [
+        {"src": "cooperation", "rel": "part_of", "dst": "human_nature"},
+        {"src": "marcus_aurelius", "rel": "believes_in", "dst": "human_nature"}
+      ],
+      "causal_edges": []
+    },
+    {
+      "locator": "Book II, 5",
+      "kind": "causal",
+      "quote": "Every moment think steadily as a Roman and a man to do what thou hast in hand with perfect and simple dignity",
+      "rationale": "Steady attention to the task at hand is how dignity is carried out moment to moment.",
+      "nodes": [
+        {"id": "attention_to_the_present_task", "label": "Attention to the present task", "type": "practice"},
+        {"id": "dignity", "label": "Dignity", "type": "virtue"}
+      ],
+      "relations": [
+        {"src": "marcus_aurelius", "rel": "practices", "dst": "attention_to_the_present_task"}
+      ],
+      "causal_edges": [
+        {"src": "steadiness_of_purpose", "dst": "attention_to_the_present_task", "sign": 1, "strength": 0.6, "confidence": 0.5, "mechanism": "a steady will can think steadily every moment"},
+        {"src": "attention_to_the_present_task", "dst": "dignity", "sign": 1, "strength": 0.7, "confidence": 0.6, "mechanism": "doing what is in hand, simply and fully, is dignity in practice"}
+      ]
+    }
+  ]
+}

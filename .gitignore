@@ -1,0 +1,14 @@
+# Secrets: the API key lives only in your local .env
+.env
+
+# Local state (your ontology, patch queue and downloaded corpus)
+data/ontology.json
+data/patches.json
+data/corpus/
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.venv/
+.pytest_cache/
