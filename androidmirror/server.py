@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import analysis, corpus, llm, query
+from . import analysis, breaker, corpus, llm, query
 from .ingest import ingest_chunks
 from .ontology import Ontology
 from .steward import GovernanceError, Steward, normalize
@@ -32,6 +32,19 @@ class IngestReq(BaseModel):
 
 class Ask(BaseModel):
     question: str
+
+
+class SplitReq(BaseModel):
+    node: str
+    parts: list[dict] | None = None  # [{"label", "type"?, "id"?}]; omit to split by neighbour group
+    assign: dict[str, str] | None = None  # link key -> part id or "*"
+
+
+class SeverReq(BaseModel):
+    src: str
+    dst: str
+    rels: list[str] | None = None
+    causal: bool = True
 
 
 class Intervention(BaseModel):
@@ -138,6 +151,34 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
     @app.get("/api/investigate")
     def investigate() -> dict:
         return {"important": analysis.important_nodes(onto), "breaker": analysis.breaker(onto)}
+
+    # ---------- Breaker: proposals only; they apply through the Review queue ----------
+
+    @app.get("/api/break/candidates")
+    def break_candidates() -> dict:
+        return {"split": breaker.split_candidates(onto), "sever": breaker.sever_candidates(onto)}
+
+    @app.get("/api/break/links/{node}")
+    def break_links(node: str) -> list[dict]:
+        return [{k: v for k, v in ln.items() if k != "attrs"} for ln in breaker.links(onto, node)]
+
+    @app.post("/api/break/split")
+    def break_split(r: SplitReq) -> dict:
+        try:
+            patch = steward.propose(breaker.propose_split(onto, r.node, r.parts, r.assign))
+        except (KeyError, ValueError) as e:
+            raise fail(e)
+        steward.save()
+        return patch.model_dump()
+
+    @app.post("/api/break/sever")
+    def break_sever(r: SeverReq) -> dict:
+        try:
+            patch = steward.propose(breaker.propose_sever(onto, r.src, r.dst, r.rels, r.causal))
+        except (KeyError, ValueError) as e:
+            raise fail(e)
+        steward.save()
+        return patch.model_dump()
 
     @app.get("/api/metrics")
     def metrics() -> dict:

@@ -49,6 +49,9 @@ python -m androidmirror ingest --book 2 --start 0 --count 3   # Claude reads Boo
 python -m androidmirror pending                               # list proposed patches
 python -m androidmirror approve all --as "Your Name"          # or list patch ids
 python -m androidmirror investigate                           # importance, Breaker, face metrics as JSON
+python -m androidmirror break-candidates                      # what the Breaker would split or sever
+python -m androidmirror break-split simplicity --parts "Plain living" "Plain speech"
+python -m androidmirror break-sever duty calm                 # cut every link between two nodes
 ```
 
 State lives in `data/` (`ontology.json`, `patches.json`, `corpus/`) and is not committed.
@@ -64,6 +67,7 @@ androidmirror/
   ingest.py     reads corpus chunks and queues self-contained patches
   corpus.py     downloads and splits Meditations into "Book II, 1"-style sections
   analysis.py   importance, interventions (do-operator on the DAG), Breaker, face metrics
+  breaker.py    break proposals: split a node or sever a link in both graphs at once
   query.py      finds relevant nodes and builds grounded facts for answers
   server.py     FastAPI app; web/index.html is the UI (Cytoscape.js, vendored)
 ```
@@ -71,6 +75,15 @@ androidmirror/
 The Mirror's agents use `claude-opus-5-5` by default with structured outputs and server-side refusal fallback; set `ANDROIDMIRROR_MODEL` in `.env` to change it.
 
 Other engines (for example a graph refactor engine) read `Ontology.graph_snapshot()` (copies of both graphs plus the `version`; every node and edge carries `provenance`) and propose `Patch` objects with their own `kind`, `base_version`, `rationale` and anything else in `extra`. Setting `extra["require_fresh_base"] = True` makes the Steward refuse the patch if a node it touches changed after `base_version`. Patches are applied only through the Steward, only with an approval record, and each stores its `inverse`.
+
+## Breaking nodes and links
+
+`analysis.breaker` finds where the world is fragile; `breaker.py` turns that into proposals of kind `"break"`:
+
+- **Split** one node into two or more parts. Each of its relations and causal edges moves to one part (or is copied to every part), so the knowledge graph and the DAG stay in step. With no parts named, it makes one part per cluster the node alone holds together. The original node is archived with `split_into`, never deleted. A split cannot create a cycle, because each part only gets edges the original had.
+- **Sever** two nodes: cut the causal edge and the descriptive relations between them together. The proposal says how much causal influence is lost and warns if the cut disconnects the graph.
+
+`split_candidates` and `sever_candidates` rank suggestions (people are left out of split suggestions unless asked). Proposals set `require_fresh_base`, so they are refused if a touched node changed after they were made, and every applied break rolls back through its inverse. Nothing in `breaker.py` writes to the ontology.
 
 ## Tests
 

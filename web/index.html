@@ -157,6 +157,9 @@ function opText(o) {
     case 'add_node': return `+ node ${o.label} (${o.type})`;
     case 'add_relation': return `+ ${o.src} —${o.rel}→ ${o.dst}`;
     case 'add_causal_edge': return `+ ${o.src} ${o.sign>0?'⇑':'⇓'} ${o.dst}  s=${o.strength} c=${o.confidence}  ${o.mechanism||''}`;
+    case 'remove_relation': return `− ${o.src} —${o.rel}→ ${o.dst}`;
+    case 'remove_causal_edge': return `− ${o.src} → ${o.dst} (causal)`;
+    case 'update_node': return `~ ${o.id} ${o.label||''} ${JSON.stringify(o.attrs)}`;
     default: return `${o.op} ${o.id||''} ${o.src||''} ${o.dst||''}`;
   }
 }
@@ -216,7 +219,24 @@ $('#invbtn').onclick = async () => {
   $('#inv').innerHTML = `<h3>Important nodes</h3>${t(r.important, [['Node', x=>x.label], ['Centrality', x=>x.centrality], ['Causal reach', x=>x.causal_reach]])}
     <h3>Breaker: cut points</h3><p class="muted">Remove one of these and the world splits apart.</p>${t(r.breaker.cut_points, [['Node', x=>x.label], ['Fragments', x=>x.fragments]])}
     <h3>Breaker: load-bearing causes</h3>${t(r.breaker.load_bearing, [['Node', x=>x.label], ['Influence lost', x=>x.influence_lost]])}
-    <h3>Tensions</h3>${t(r.breaker.tensions, [['Target', x=>lbl(x.target)], ['Raised by', x=>lbl(x.pushes_up)], ['Lowered by', x=>lbl(x.pushes_down)]])}`;
+    <h3>Tensions</h3>${t(r.breaker.tensions, [['Target', x=>lbl(x.target)], ['Raised by', x=>lbl(x.pushes_up)], ['Lowered by', x=>lbl(x.pushes_down)]])}
+    <div id="breakc"></div>`;
+  const b = await api('/api/break/candidates');
+  const btn = (attrs, text) => `<button class="b" ${attrs}>${text}</button>`;
+  $('#breakc').innerHTML = `<h3>Break: nodes that may be two things</h3><p class="muted">Each part keeps the links of its own cluster, in both graphs. Proposals go to Review; nothing changes until you approve.</p>
+    ${t(b.split, [['Node', x=>x.label], ['Clusters it bridges', x=>x.groups.map(g => g.map(n => n.label).join(', ')).join(' | ')], ['Mixed effects', x=>x.ambivalence],
+      ['', x=>x.groups.length >= 2 ? btn(`data-split="${x.id}"`, 'Propose split') : '']])}
+    <h3>Break: links worth cutting</h3>${t(b.sever, [['Link', x=>`${x.src_label} – ${x.dst_label}`], ['Weakness', x=>x.weakness],
+      ['Why', x=>[x.bridge && 'holds two clusters together', x.tension && 'in tension', !x.causal && 'descriptive only'].filter(Boolean).join(', ')],
+      ['', x=>btn(`data-sever="${x.src}|${x.dst}"`, 'Propose cut')]])}`;
+};
+$('#inv').onclick = async e => {
+  const b = e.target.closest('button[data-split],button[data-sever]'); if (!b) return;
+  try {
+    if (b.dataset.split) await api('/api/break/split', {node: b.dataset.split});
+    else { const [src, dst] = b.dataset.sever.split('|'); await api('/api/break/sever', {src, dst}); }
+    b.textContent = 'Queued for review'; b.disabled = true; refresh();
+  } catch (err) { alert(err.message); }
 };
 
 async function loadFace() {
