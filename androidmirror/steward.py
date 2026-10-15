@@ -105,8 +105,11 @@ class Steward:
         if patch.status != "proposed":
             raise GovernanceError(f"patch {patch_id} is {patch.status}, not proposed")
         self._dedupe(patch)  # nodes another approved patch has added since this one was proposed
+        if patch.extra.get("require_fresh_base"):
+            self._check_fresh(patch)
+        provenance = {"patch": patch.id, "locator": patch.source.locator, "quote": patch.source.quote}
         try:
-            patch.inverse = self.ontology.apply_ops(patch.ops, patch_id=patch.id)
+            patch.inverse = self.ontology.apply_ops(patch.ops, patch_id=patch.id, provenance=provenance)
         except OntologyError as e:
             raise GovernanceError(f"cannot apply {patch_id}: {e}") from e
         patch.approval = Approval(approver=approver, note=note)
@@ -114,6 +117,17 @@ class Steward:
         patch.applied_version = self.ontology.version
         self.save()
         return patch
+
+    def _check_fresh(self, patch: Patch) -> None:
+        """Refuse a patch if any node it touches changed after its base_version."""
+        base = patch.base_version or 0
+        for op in patch.ops:
+            for nid in (op.id, op.src, op.dst):
+                node = self.ontology.nodes.get(nid or "")
+                if node and node.get("modified", 0) > base:
+                    raise GovernanceError(
+                        f"stale patch {patch.id}: {nid} changed in version {node['modified']}, after base {base}"
+                    )
 
     def reject(self, patch_id: str, approver: str, note: str = "") -> Patch:
         patch = self.get(patch_id)

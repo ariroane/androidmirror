@@ -15,6 +15,7 @@ from __future__ import annotations
 import copy
 import json
 import re
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +30,16 @@ class OntologyError(ValueError):
 
 def slugify(label: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", label.lower()).strip("_") or "node"
+
+
+@dataclass(frozen=True)
+class GraphSnapshot:
+    """Copies of both graphs at one version, for engines that read the ontology."""
+
+    version: int
+    nodes: dict[str, dict[str, Any]]
+    kg: nx.MultiDiGraph
+    dag: nx.DiGraph
 
 
 class Ontology:
@@ -68,6 +79,10 @@ class Ontology:
             "log": list(self.log),
         }
 
+    def graph_snapshot(self) -> GraphSnapshot:
+        """Read-only copies of the node table and both graphs, with the version."""
+        return GraphSnapshot(self.version, copy.deepcopy(self.nodes), self.kg.copy(), self.dag.copy())
+
     def summary(self, limit: int = 200) -> str:
         """Compact text listing of node ids and labels, for prompts."""
         lines = [f"{nid}: {n.get('label')} ({n.get('type', 'concept')})" for nid, n in self.nodes.items()]
@@ -75,13 +90,22 @@ class Ontology:
 
     # ---------- writing ----------
 
-    def apply_ops(self, ops: list[Op], patch_id: str | None = None) -> list[Op]:
-        """Apply ops atomically. Returns the inverse ops (already in undo order)."""
+    def apply_ops(self, ops: list[Op], patch_id: str | None = None, provenance: dict | None = None) -> list[Op]:
+        """Apply ops atomically. Returns the inverse ops (already in undo order).
+
+        `provenance` (e.g. patch id, locator, quote) is appended to every node and
+        edge the ops create or change. Each touched node records the version that
+        last changed it in its `modified` field.
+        """
         saved = (copy.deepcopy(self.nodes), self.kg.copy(), self.dag.copy())
         inverse: list[Op] = []
+        self._prov = provenance
         try:
             for op in ops:
                 inverse.extend(self._apply_one(op))
+                for nid in (op.id, op.src, op.dst):
+                    if nid in self.nodes:
+                        self.nodes[nid]["modified"] = self.version + 1
         except Exception:
             self.nodes, self.kg, self.dag = saved
             raise
@@ -107,7 +131,10 @@ class Ontology:
             nid = op.id or slugify(op.label or "")
             if nid in self.nodes:
                 raise OntologyError(f"node already exists: {nid!r}")
-            self.nodes[nid] = {"label": op.label or nid, "type": op.type or "concept", "attrs": dict(op.attrs)}
+            attrs = {k: v for k, v in op.attrs.items() if k != "provenance"}
+            self.nodes[nid] = {"label": op.label or nid, "type": op.type or "concept", "attrs": attrs,
+                               "provenance": list(op.attrs.get("provenance", []))}
+            self._stamp(self.nodes[nid])
             self.kg.add_node(nid)
             self.dag.add_node(nid)
             return [Op(op="remove_node", id=nid)]
@@ -116,6 +143,7 @@ class Ontology:
             nid = self._need(op.id)
             node = self.nodes[nid]
             undo = Op(op="update_node", id=nid, label=node["label"], type=node["type"])
+            self._stamp(node)
             if op.label:
                 node["label"] = op.label
             if op.type:
@@ -131,7 +159,8 @@ class Ontology:
         if op.op == "remove_node":
             nid = self._need(op.id)
             node = self.nodes.pop(nid)
-            undo = [Op(op="add_node", id=nid, label=node["label"], type=node["type"], attrs=node["attrs"])]
+            undo = [Op(op="add_node", id=nid, label=node["label"], type=node["type"],
+                       attrs={**node["attrs"], "provenance": node.get("provenance", [])})]
             for s, d, k, a in list(self.kg.in_edges(nid, keys=True, data=True)) + list(
                 self.kg.out_edges(nid, keys=True, data=True)
             ):
@@ -148,6 +177,7 @@ class Ontology:
             if self.kg.has_edge(s, d, key=rel):
                 raise OntologyError(f"relation exists: {s} -{rel}-> {d}")
             self.kg.add_edge(s, d, key=rel, **op.attrs)
+            self._stamp(self.kg.edges[s, d, rel])
             return [Op(op="remove_relation", src=s, rel=rel, dst=d)]
 
         if op.op == "remove_relation":
@@ -170,7 +200,9 @@ class Ontology:
                 strength=_clamp(op.strength, 0.5),
                 confidence=_clamp(op.confidence, 0.5),
                 mechanism=op.mechanism or "",
+                provenance=list(op.attrs.get("provenance", old.get("provenance", []) if old else [])),
             )
+            self._stamp(self.dag.edges[s, d])
             if not nx.is_directed_acyclic_graph(self.dag):
                 raise OntologyError(f"causal edge {s} -> {d} would create a cycle")
             if old is None:
@@ -186,6 +218,13 @@ class Ontology:
             return [_causal_op("add_causal_edge", s, d, attrs)]
 
         raise OntologyError(f"unsupported op: {op.op}")
+
+    def _stamp(self, record: dict[str, Any]) -> None:
+        prov = getattr(self, "_prov", None)
+        if prov:
+            record.setdefault("provenance", [])
+            if prov not in record["provenance"]:
+                record["provenance"].append(prov)
 
     # ---------- persistence ----------
 
@@ -228,4 +267,5 @@ def _causal_op(kind: str, s: str, d: str, a: dict[str, Any]) -> Op:
         strength=a.get("strength"),
         confidence=a.get("confidence"),
         mechanism=a.get("mechanism", ""),
+        attrs={"provenance": list(a.get("provenance", []))},
     )

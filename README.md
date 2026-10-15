@@ -70,7 +70,7 @@ androidmirror/
 
 The Mirror's agents use `claude-opus-5-5` by default with structured outputs and server-side refusal fallback; set `ANDROIDMIRROR_MODEL` in `.env` to change it.
 
-Other engines (for example a graph refactor engine) read `Ontology.snapshot()`, which carries a `version`, and propose `Patch` objects with their own `kind`, `base_version`, `rationale`, `inverse` and anything else in `extra`. Patches are applied only through the Steward, and only with an approval record.
+Other engines (for example a graph refactor engine) read `Ontology.graph_snapshot()` (copies of both graphs plus the `version`; every node and edge carries `provenance`) and propose `Patch` objects with their own `kind`, `base_version`, `rationale` and anything else in `extra`. Setting `extra["require_fresh_base"] = True` makes the Steward refuse the patch if a node it touches changed after `base_version`. Patches are applied only through the Steward, only with an approval record, and each stores its `inverse`.
 
 ## Tests
 

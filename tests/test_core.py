@@ -34,8 +34,9 @@ def test_inverse_restores_everything():
     assert "b" not in o.nodes
     o.apply_ops(inv)
     after = o.snapshot()
+    strip = lambda rows: sorted(str({k: v for k, v in r.items() if k != "modified"}) for r in rows)  # noqa: E731
     for key in ("nodes", "relations", "causal_edges"):
-        assert sorted(map(str, before[key])) == sorted(map(str, after[key]))
+        assert strip(before[key]) == strip(after[key])
 
 
 def test_steward_requires_named_approval(tmp_path):
@@ -121,3 +122,23 @@ def test_ingest_with_fake_extractor(tmp_path):
     st.approve(p2.id, "k")  # self-contained: carries node x
     st.approve(p1.id, "k")  # x now exists: its add is dropped, not an error
     assert st.ontology.dag.has_edge("x", "y")
+
+
+def test_provenance_snapshot_and_fresh_base(tmp_path):
+    st = Steward(Ontology(), tmp_path)
+    p = st.approve(st.propose(Patch(ops=nodes("a", "b") + [Op(op="add_causal_edge", src="a", dst="b")],
+                                    source=Source(locator="Book I, 1", quote="q"))).id, "k")
+    snap = st.ontology.graph_snapshot()
+    assert snap.version == 1 and snap.dag.edges["a", "b"]["provenance"][0]["patch"] == p.id
+    assert snap.nodes["a"]["provenance"][0]["locator"] == "Book I, 1"
+    snap.dag.remove_edge("a", "b")  # a copy: the ontology is untouched
+    assert st.ontology.dag.has_edge("a", "b")
+    stale = st.propose(Patch(ops=[Op(op="update_node", id="a", label="A2")], base_version=0,
+                             extra={"require_fresh_base": True}))
+    with pytest.raises(GovernanceError, match="stale"):
+        st.approve(stale.id, "k")
+    fresh = st.propose(Patch(ops=[Op(op="update_node", id="a", label="A2")], extra={"require_fresh_base": True}))
+    st.approve(fresh.id, "k")
+    assert st.ontology.nodes["a"]["label"] == "A2"
+    st.rollback(fresh.id, "k")
+    assert st.ontology.nodes["a"]["label"] == "A"
