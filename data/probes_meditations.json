@@ -1,0 +1,20 @@
+[
+  {"id": "prep_helps_cooperation", "kind": "causes", "a": "Morning preparation for difficult people", "b": "Cooperation with others", "direction": 1,
+   "claim": "Preparing in the morning for difficult people makes him more cooperative",
+   "locator": "Book II, 1", "quote": "Begin the morning by saying to thyself, I shall meet with the busy-body, the ungrateful, arrogant, deceitful, envious, unsocial."},
+  {"id": "vexation_against_nature", "kind": "causes", "a": "Vexation with others", "b": "Living according to nature", "direction": -1,
+   "claim": "Being vexed with others pulls him away from living according to nature",
+   "locator": "Book II, 1", "quote": "To act against one another then is contrary to nature; and it is acting against one another to be vexed and to turn away."},
+  {"id": "reason_to_dignity", "kind": "causes", "a": "Reason", "b": "Dignity", "direction": 1,
+   "claim": "Looking to reason leads, through steadiness of purpose, to acting with dignity",
+   "locator": "Book I, 8", "quote": "From Apollonius I learned freedom of will and undeviating steadiness of purpose; and to look to nothing else, not even for a moment, except to reason"},
+  {"id": "morals_vs_temper", "kind": "distinct", "a": "Good morals", "b": "Control of temper",
+   "claim": "Good morals and control of temper are separate lessons from his grandfather",
+   "locator": "Book I, 1", "quote": "From my grandfather Verus I learned good morals and the government of my temper."},
+  {"id": "rusticus_teacher", "kind": "related", "a": "Marcus Aurelius", "b": "Rusticus",
+   "claim": "Rusticus shaped Marcus",
+   "locator": "Book I, 7", "quote": "From Rusticus I received the impression that my character required improvement and discipline"},
+  {"id": "made_for_cooperation", "kind": "related", "a": "Human nature", "b": "Cooperation with others",
+   "claim": "Human beings are made for cooperation",
+   "locator": "Book II, 1", "quote": "for we are made for co-operation, like feet, like hands, like eyelids, like the rows of the upper and lower teeth."}
+]

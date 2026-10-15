@@ -6,7 +6,7 @@ import argparse
 import json
 from pathlib import Path
 
-from . import analysis, corpus, llm
+from . import analysis, corpus, evolver, llm
 from .ingest import ingest_chunks, load_seed
 from .ontology import Ontology
 from .server import ROOT
@@ -46,6 +46,13 @@ def main(argv: list[str] | None = None) -> None:
 
     sub.add_parser("investigate", help="print important nodes and Breaker findings")
 
+    ev = sub.add_parser("evolve", help="search refactor/break/chain designs and queue the best for approval")
+    ev.add_argument("--generations", type=int, default=3)
+    ev.add_argument("--beam", type=int, default=4)
+    ev.add_argument("--keep", type=int, default=3, help="how many designs to queue")
+    ev.add_argument("--probes", type=Path, default=None, help="probe file (default: data/probes.json, else the Meditations probes)")
+    ev.add_argument("--dry-run", action="store_true", help="print the designs without queueing them")
+
     args = ap.parse_args(argv)
     data_dir: Path = args.data
 
@@ -83,3 +90,16 @@ def main(argv: list[str] | None = None) -> None:
         onto = Ontology.load(data_dir / "ontology.json")
         print(json.dumps({"important": analysis.important_nodes(onto), "breaker": analysis.breaker(onto),
                           "metrics": analysis.metrics(onto)}, indent=2))
+    elif args.cmd == "evolve":
+        st = _steward(data_dir)
+        probes = evolver.load_probes(args.probes) if args.probes else evolver.default_probes(data_dir)
+        result = evolver.evolve(st.ontology, probes, generations=args.generations, beam=args.beam, keep=args.keep)
+        print(f"engines: {', '.join(result['operators']) or 'none installed'}; explored {result['explored']} designs; "
+              f"current fitness {result['base']['total']:.3f}")
+        for err in result["errors"]:
+            print(f"  engine error: {err}")
+        for d in result["designs"]:
+            print(f"  {d.fitness.total:.3f}  " + " -> ".join(f"{fam}: {p.rationale[:50]}" for fam, p in d.steps))
+        if not args.dry_run:
+            queued = evolver.queue_designs(st, result, probes)
+            print(f"queued {len(queued)} designs for approval: {', '.join(p.id for p in queued) or '-'}")
