@@ -45,12 +45,12 @@ Nothing reaches the ontology until someone approves it. Every approval records w
 ## Command line
 
 ```powershell
+python -m androidmirror chain merge anger wrath               # propose folding Wrath into Anger in both graphs
+python -m androidmirror chain import other/ontology.json --as Epictetus   # propose chaining another mirror in
 python -m androidmirror ingest --book 2 --start 0 --count 3   # Claude reads Book II, sections 1 to 3
 python -m androidmirror pending                               # list proposed patches
 python -m androidmirror approve all --as "Your Name"          # or list patch ids
 python -m androidmirror investigate                           # importance, Breaker, face metrics as JSON
-python -m androidmirror chain merge anger wrath               # propose folding Wrath into Anger in both graphs
-python -m androidmirror chain import other/ontology.json --as Epictetus   # propose chaining another mirror in
 ```
 
 State lives in `data/` (`ontology.json`, `patches.json`, `corpus/`) and is not committed.

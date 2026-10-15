@@ -6,11 +6,12 @@ import argparse
 import json
 from pathlib import Path
 
-from . import analysis, chainer, corpus, llm
+from . import analysis, corpus, llm
 from .ingest import ingest_chunks, load_seed
 from .ontology import Ontology
 from .server import ROOT
 from .steward import Steward
+from . import chainer
 
 DATA = ROOT / "data"
 
@@ -23,6 +24,7 @@ def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="androidmirror", description="Android Mirror prototype")
     ap.add_argument("--data", type=Path, default=DATA, help="data directory (default: ./data)")
     sub = ap.add_subparsers(dest="cmd", required=True)
+    chainer.add_cli(sub)
 
     s = sub.add_parser("serve", help="run the web app")
     s.add_argument("--port", type=int, default=8000)
@@ -46,10 +48,13 @@ def main(argv: list[str] | None = None) -> None:
 
     sub.add_parser("investigate", help="print important nodes and Breaker findings")
 
-    chainer.add_cli(sub)
-
     args = ap.parse_args(argv)
     data_dir: Path = args.data
+    if args.cmd == "chain":
+        try:
+            return chainer.run_cli(args, _steward(data_dir))
+        except chainer.ChainError as e:
+            raise SystemExit(f"not queued: {e}")
 
     if args.cmd == "serve":
         import uvicorn
@@ -85,8 +90,3 @@ def main(argv: list[str] | None = None) -> None:
         onto = Ontology.load(data_dir / "ontology.json")
         print(json.dumps({"important": analysis.important_nodes(onto), "breaker": analysis.breaker(onto),
                           "metrics": analysis.metrics(onto)}, indent=2))
-    elif args.cmd == "chain":
-        try:
-            chainer.run_cli(args, _steward(data_dir))
-        except chainer.ChainError as e:
-            raise SystemExit(f"not queued: {e}")
