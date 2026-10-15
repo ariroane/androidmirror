@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Android Mirror</title>
+<script src="/vendor/cytoscape.min.js"></script>
+<style>
+  :root { --bg:#f6f5f2; --panel:#fff; --ink:#1d1d1b; --quiet:#6b6a66; --line:#dddbd5; --accent:#3b6fd8; --pos:#2f8f5b; --neg:#c2453b; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#161615; --panel:#20201f; --ink:#ecebe7; --quiet:#a19f99; --line:#3a3936; --accent:#7aa2f0; --pos:#5cc08a; --neg:#ec7a70; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.45 system-ui, sans-serif; background:var(--bg); color:var(--ink); height:100vh; display:flex; flex-direction:column; }
+  header { display:flex; gap:16px; align-items:center; padding:10px 16px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header h1 { font-size:16px; margin:0; }
+  header .stat { color:var(--quiet); }
+  main { flex:1; display:flex; min-height:0; }
+  #graphwrap { flex:1; position:relative; min-width:0; }
+  #cy { position:absolute; inset:0; }
+  #layers { position:absolute; top:10px; left:10px; z-index:2; display:flex; gap:4px; }
+  aside { width:420px; max-width:45vw; border-left:1px solid var(--line); background:var(--panel); display:flex; flex-direction:column; min-height:0; }
+  nav { display:flex; border-bottom:1px solid var(--line); }
+  nav button { flex:1; border:0; background:none; padding:10px 4px; color:var(--quiet); cursor:pointer; font:inherit; }
+  nav button.on { color:var(--ink); box-shadow: inset 0 -2px var(--accent); }
+  section { display:none; padding:14px; overflow:auto; flex:1; }
+  section.on { display:block; }
+  button.b { border:1px solid var(--line); background:var(--panel); color:var(--ink); border-radius:6px; padding:5px 10px; cursor:pointer; font:inherit; }
+  button.b.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.b.sel { border-color:var(--accent); color:var(--accent); }
+  input, select, textarea { font:inherit; color:var(--ink); background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:6px 8px; }
+  .card { border:1px solid var(--line); border-radius:8px; padding:10px; margin-bottom:10px; }
+  .card .q { font-style:italic; color:var(--quiet); margin:6px 0; }
+  .card .ops { font-family: ui-monospace, monospace; font-size:12px; white-space:pre-wrap; }
+  .warn { color:var(--neg); font-size:12px; }
+  .row { display:flex; gap:8px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+  .muted { color:var(--quiet); }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  td, th { text-align:left; padding:4px 6px; border-bottom:1px solid var(--line); }
+  .pos { color:var(--pos); } .neg { color:var(--neg); }
+  #detail { position:absolute; bottom:10px; left:10px; right:10px; z-index:2; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px; display:none; max-height:40%; overflow:auto; }
+  @media (max-width: 760px) { main { flex-direction:column; } aside { width:auto; max-width:none; height:55vh; border-left:0; border-top:1px solid var(--line); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Android Mirror</h1>
+  <span class="stat" id="stat">loading…</span>
+  <span style="flex:1"></span>
+  <label class="muted">Approver <input id="approver" size="12" placeholder="your name"></label>
+</header>
+<main>
+  <div id="graphwrap">
+    <div id="layers">
+      <button class="b sel" data-layer="both">Both</button>
+      <button class="b" data-layer="kg">Descriptive</button>
+      <button class="b" data-layer="dag">Causal</button>
+    </div>
+    <div id="cy"></div>
+    <div id="detail"></div>
+  </div>
+  <aside>
+    <nav>
+      <button data-tab="review" class="on">Review</button>
+      <button data-tab="ask">Ask</button>
+      <button data-tab="change">Change</button>
+      <button data-tab="investigate">Investigate</button>
+      <button data-tab="face">Face</button>
+    </nav>
+    <section id="review" class="on">
+      <div class="row">
+        <span class="muted">Read sections of Book</span>
+        <input id="ibook" type="number" min="1" max="12" value="1" style="width:56px">
+        <span class="muted">from</span><input id="istart" type="number" min="0" value="0" style="width:56px">
+        <span class="muted">count</span><input id="icount" type="number" min="1" max="10" value="2" style="width:56px">
+        <button class="b" id="ingest">Read</button>
+      </div>
+      <div id="ingestmsg" class="muted"></div>
+      <div class="row"><strong id="pcount"></strong><span style="flex:1"></span><button class="b" id="approveall">Approve all</button></div>
+      <div id="patches"></div>
+    </section>
+    <section id="ask">
+      <div class="row"><input id="question" style="flex:1" placeholder="What does Marcus believe about anger?"><button class="b primary" id="askbtn">Ask</button></div>
+      <div id="answer"></div>
+    </section>
+    <section id="change">
+      <p class="muted">Intervene on the causal model: set a node higher or lower and see what moves.</p>
+      <div class="row"><select id="inode" style="flex:1"></select></div>
+      <div class="row"><span class="muted">Change</span><input id="idelta" type="range" min="-1" max="1" step="0.1" value="1" style="flex:1"><span id="ideltav">+1.0</span></div>
+      <div class="row"><button class="b primary" id="intervene">Run</button><label class="muted"><input type="checkbox" id="retell"> Retell as a story (uses Claude)</label></div>
+      <div id="effects"></div>
+    </section>
+    <section id="investigate">
+      <button class="b" id="invbtn">Run investigation</button>
+      <div id="inv"></div>
+    </section>
+    <section id="face">
+      <p class="muted">The Mirror's current state, drawn as a Chernoff face.</p>
+      <svg id="chernoff" viewBox="0 0 240 260" width="100%" style="max-width:320px"></svg>
+      <table id="mtable"></table>
+    </section>
+  </aside>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const api = async (path, body) => {
+  const r = await fetch(path, body ? {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)} : {});
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.detail || r.statusText);
+  return j;
+};
+const store = { get(k){ try { return localStorage.getItem(k); } catch { return null; } }, set(k,v){ try { localStorage.setItem(k,v); } catch {} } };
+$('#approver').value = store.get('approver') || '';
+$('#approver').onchange = e => store.set('approver', e.target.value);
+const approver = () => { const a = $('#approver').value.trim(); if (!a) { alert('Enter your name as approver first.'); throw new Error('no approver'); } return a; };
+
+let cy, graph = null, layer = 'both';
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const typeColor = {person:'#8a6bd1', virtue:'#2f8f5b', value:'#2f8f5b', practice:'#3b9c9c', vice:'#c2453b', emotion:'#d98a2b', belief:'#3b6fd8', concept:'#888', event:'#b07a4f', place:'#6f8f3b'};
+
+function drawGraph() {
+  const els = [];
+  graph.nodes.forEach(n => els.push({data:{id:n.id, label:n.label, type:n.type}}));
+  if (layer !== 'dag') graph.relations.forEach((r,i) => els.push({data:{id:'r'+i, source:r.src, target:r.dst, label:r.rel.replace(/_/g,' '), kind:'kg'}}));
+  if (layer !== 'kg') graph.causal_edges.forEach((e,i) => els.push({data:{id:'c'+i, source:e.src, target:e.dst, label:(e.sign>0?'+':'−')+e.strength.toFixed(1), kind:'dag', sign:e.sign, w:1+3*e.strength}}));
+  if (!cy) {
+    cy = cytoscape({ container: $('#cy'), wheelSensitivity: 0.3, style: [
+      {selector:'node', style:{'label':'data(label)','font-size':13,'color':css('--ink'),'text-valign':'bottom','text-margin-y':4,'width':18,'height':18,'background-color':e=>typeColor[e.data('type')]||'#888'}},
+      {selector:'edge', style:{'curve-style':'bezier','target-arrow-shape':'triangle','width':1.2,'line-color':css('--line'),'target-arrow-color':css('--line'),'label':'data(label)','font-size':9,'color':css('--quiet'),'text-rotation':'autorotate'}},
+      {selector:'edge[kind="dag"]', style:{'width':'data(w)','line-color':e=>e.data('sign')>0?css('--pos'):css('--neg'),'target-arrow-color':e=>e.data('sign')>0?css('--pos'):css('--neg')}},
+      {selector:'.hl', style:{'border-width':3,'border-color':css('--accent')}},
+    ]});
+    cy.on('tap','node', e => showNode(e.target.id()));
+    cy.on('tap', e => { if (e.target === cy) $('#detail').style.display='none'; });
+  }
+  cy.elements().remove(); cy.add(els);
+  cy.layout({name:'cose', animate:false, randomize:true, nodeRepulsion:() => 600000, idealEdgeLength:() => 110, nodeOverlap:40, gravity:0.25, numIter:2500, padding:40}).run();
+}
+
+function showNode(id) {
+  const n = graph.nodes.find(x => x.id === id), lbl = i => (graph.nodes.find(x => x.id===i)||{label:i}).label;
+  const rels = graph.relations.filter(r => r.src===id || r.dst===id).map(r => `${lbl(r.src)} <i>${r.rel.replace(/_/g,' ')}</i> ${lbl(r.dst)}`);
+  const cause = graph.causal_edges.filter(e => e.src===id || e.dst===id).map(e => `${lbl(e.src)} <span class="${e.sign>0?'pos':'neg'}">${e.sign>0?'raises':'lowers'}</span> ${lbl(e.dst)} <span class="muted">${e.mechanism||''}</span>`);
+  $('#detail').innerHTML = `<strong>${n.label}</strong> <span class="muted">${n.type}</span><br>${rels.concat(cause).join('<br>') || '<span class="muted">no links yet</span>'}`;
+  $('#detail').style.display = 'block';
+}
+
+async function refresh() {
+  const [s, g] = await Promise.all([api('/api/status'), api('/api/graph')]);
+  graph = g;
+  $('#stat').textContent = `v${s.version} · ${s.nodes} nodes · ${s.proposed} to review · Claude ${s.llm ? 'on' : 'off (no key)'}${s.corpus ? '' : ' · corpus not downloaded'}`;
+  drawGraph();
+  $('#inode').innerHTML = g.nodes.filter(n => g.causal_edges.some(e => e.src===n.id)).map(n => `<option value="${n.id}">${n.label}</option>`).join('');
+  loadPatches(); loadFace();
+}
+
+function opText(o) {
+  switch (o.op) {
+    case 'add_node': return `+ node ${o.label} (${o.type})`;
+    case 'add_relation': return `+ ${o.src} —${o.rel}→ ${o.dst}`;
+    case 'add_causal_edge': return `+ ${o.src} ${o.sign>0?'⇑':'⇓'} ${o.dst}  s=${o.strength} c=${o.confidence}  ${o.mechanism||''}`;
+    default: return `${o.op} ${o.id||''} ${o.src||''} ${o.dst||''}`;
+  }
+}
+
+async function loadPatches() {
+  const ps = await api('/api/patches?status=proposed');
+  $('#pcount').textContent = ps.length ? `${ps.length} proposed changes` : 'Nothing to review';
+  $('#patches').innerHTML = ps.map(p => `<div class="card">
+    <div><strong>${p.source.locator || ''}</strong> <span class="muted">${p.kind} · by ${p.proposed_by}</span></div>
+    ${p.source.quote ? `<div class="q">“${p.source.quote}”</div>` : ''}
+    <div>${p.rationale}</div>
+    <div class="ops">${p.ops.map(opText).join('\n')}</div>
+    ${p.warnings.map(w => `<div class="warn">${w}</div>`).join('')}
+    <div class="row"><button class="b primary" data-a="approve" data-id="${p.id}">Approve</button><button class="b" data-a="reject" data-id="${p.id}">Reject</button></div>
+  </div>`).join('');
+}
+$('#patches').onclick = async e => {
+  const b = e.target.closest('button[data-a]'); if (!b) return;
+  try { await api(`/api/patches/${b.dataset.id}/${b.dataset.a}`, {approver: approver()}); refresh(); } catch (err) { alert(err.message); }
+};
+$('#approveall').onclick = async () => {
+  const who = approver(), ps = await api('/api/patches?status=proposed'); const errs = [];
+  for (const p of ps) { try { await api(`/api/patches/${p.id}/approve`, {approver: who}); } catch (err) { errs.push(`${p.source.locator}: ${err.message}`); } }
+  if (errs.length) alert(errs.join('\n')); refresh();
+};
+$('#ingest').onclick = async () => {
+  $('#ingestmsg').textContent = 'Claude is reading…';
+  try { const r = await api('/api/ingest', {book:+$('#ibook').value, start:+$('#istart').value, count:+$('#icount').value});
+    $('#ingestmsg').textContent = `Read ${r.chunks.join(', ')}; ${r.queued} changes proposed.`; $('#istart').value = +$('#istart').value + r.chunks.length; refresh();
+  } catch (err) { $('#ingestmsg').textContent = err.message; }
+};
+
+$('#askbtn').onclick = async () => {
+  $('#answer').innerHTML = '<p class="muted">Thinking…</p>';
+  try { const r = await api('/api/query', {question: $('#question').value});
+    cy.nodes().removeClass('hl'); r.nodes.forEach(id => cy.getElementById(id).addClass('hl'));
+    $('#answer').innerHTML = (r.answer ? `<p>${r.answer}</p>` : '<p class="muted">Claude is off, so here are the matching facts.</p>') +
+      `<details ${r.answer ? '' : 'open'}><summary class="muted">${r.facts.length} facts used</summary><ul>${r.facts.map(f => `<li>${f}</li>`).join('')}</ul></details>`;
+  } catch (err) { $('#answer').textContent = err.message; }
+};
+$('#question').onkeydown = e => { if (e.key === 'Enter') $('#askbtn').click(); };
+
+$('#idelta').oninput = e => $('#ideltav').textContent = (+e.target.value >= 0 ? '+' : '') + (+e.target.value).toFixed(1);
+$('#intervene').onclick = async () => {
+  $('#effects').innerHTML = '<p class="muted">Running…</p>';
+  try { const r = await api('/api/intervene', {node: $('#inode').value, delta: +$('#idelta').value, retell: $('#retell').checked});
+    cy.nodes().removeClass('hl'); r.effects.forEach(e => cy.getElementById(e.id).addClass('hl'));
+    $('#effects').innerHTML = (r.story ? `<div class="card q">${r.story}</div>` : '') + (r.effects.length ?
+      `<table><tr><th>Node</th><th>Effect</th></tr>${r.effects.map(e => `<tr><td>${e.label}</td><td class="${e.effect>0?'pos':'neg'}">${e.effect>0?'+':''}${e.effect.toFixed(3)}</td></tr>`).join('')}</table>` : '<p class="muted">Nothing downstream moves.</p>');
+  } catch (err) { $('#effects').textContent = err.message; }
+};
+
+$('#invbtn').onclick = async () => {
+  const r = await api('/api/investigate');
+  const t = (rows, cols) => rows.length ? `<table><tr>${cols.map(c => `<th>${c[0]}</th>`).join('')}</tr>${rows.map(x => `<tr>${cols.map(c => `<td>${c[1](x)}</td>`).join('')}</tr>`).join('')}</table>` : '<p class="muted">None yet.</p>';
+  const lbl = id => (graph.nodes.find(n => n.id===id)||{label:id}).label;
+  $('#inv').innerHTML = `<h3>Important nodes</h3>${t(r.important, [['Node', x=>x.label], ['Centrality', x=>x.centrality], ['Causal reach', x=>x.causal_reach]])}
+    <h3>Breaker: cut points</h3><p class="muted">Remove one of these and the world splits apart.</p>${t(r.breaker.cut_points, [['Node', x=>x.label], ['Fragments', x=>x.fragments]])}
+    <h3>Breaker: load-bearing causes</h3>${t(r.breaker.load_bearing, [['Node', x=>x.label], ['Influence lost', x=>x.influence_lost]])}
+    <h3>Tensions</h3>${t(r.breaker.tensions, [['Target', x=>lbl(x.target)], ['Raised by', x=>lbl(x.pushes_up)], ['Lowered by', x=>lbl(x.pushes_down)]])}`;
+};
+
+async function loadFace() {
+  const m = await api('/api/metrics');
+  // size→face width, coherence→roundness, certainty→eye size, valence−tension→smile, tension→brow slant, fragility→eye asymmetry
+  const cx = 120, cy0 = 135, rx = 70 + 25*m.size, ry = 95 - 15*(1-m.coherence);
+  const eye = 6 + 10*m.certainty, smile = (m.valence - m.tension - 0.25) * 60, brow = 4 + 18*m.tension, skew = 8*m.fragility;
+  const ink = css('--ink');
+  $('#chernoff').innerHTML = `
+    <ellipse cx="${cx}" cy="${cy0}" rx="${rx}" ry="${ry}" fill="none" stroke="${ink}" stroke-width="2"/>
+    <circle cx="${cx-28}" cy="${cy0-22}" r="${eye}" fill="none" stroke="${ink}" stroke-width="2"/>
+    <circle cx="${cx+28}" cy="${cy0-22+skew}" r="${eye*(1-0.4*m.fragility)}" fill="none" stroke="${ink}" stroke-width="2"/>
+    <circle cx="${cx-28}" cy="${cy0-22}" r="2.5" fill="${ink}"/><circle cx="${cx+28}" cy="${cy0-22+skew}" r="2.5" fill="${ink}"/>
+    <line x1="${cx-44}" y1="${cy0-44-brow/2}" x2="${cx-14}" y2="${cy0-44+brow/2}" stroke="${ink}" stroke-width="2.5" stroke-linecap="round"/>
+    <line x1="${cx+14}" y1="${cy0-44+brow/2}" x2="${cx+44}" y2="${cy0-44-brow/2}" stroke="${ink}" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M${cx-8} ${cy0} L${cx} ${cy0+14} L${cx+8} ${cy0}" fill="none" stroke="${ink}" stroke-width="2"/>
+    <path d="M${cx-34} ${cy0+40} Q${cx} ${cy0+40+smile} ${cx+34} ${cy0+40}" fill="none" stroke="${ink}" stroke-width="2.5" stroke-linecap="round"/>`;
+  const why = {size:'face width', coherence:'roundness', certainty:'eye size', valence:'smile', tension:'frown and brows', fragility:'lopsided eyes'};
+  $('#mtable').innerHTML = '<tr><th>Reading</th><th>Value</th><th>Shown as</th></tr>' + Object.entries(m).map(([k,v]) => `<tr><td>${k}</td><td>${v}</td><td class="muted">${why[k]}</td></tr>`).join('');
+}
+
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button, section').forEach(x => x.classList.remove('on'));
+  b.classList.add('on'); $('#' + b.dataset.tab).classList.add('on');
+});
+document.querySelectorAll('#layers button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#layers button').forEach(x => x.classList.remove('sel')); b.classList.add('sel'); layer = b.dataset.layer; drawGraph();
+});
+refresh().catch(err => $('#stat').textContent = err.message);
+</script>
+</body>
+</html>
