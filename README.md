@@ -42,6 +42,23 @@ python -m androidmirror seed
 
 Nothing reaches the ontology until someone approves it. Every approval records who approved it, and every applied patch stores its inverse so it can be rolled back.
 
+## Evolving the design
+
+The Evolver looks for a better *shape* of the ontology, not new facts. It takes the operations the refactor, break and chain engines propose, tries sequences of them on private copies of both graphs, and scores each resulting design on how well it mirrors the subject:
+
+- **probes:** claims about the subject the model should reproduce, each tied to a quote (`data/probes_meditations.json`; put your own in `data/probes.json`). A design that loses a probe the current ontology passes is thrown out.
+- **coverage, grounding:** keeps the quoted evidence, and stays backed by quotes
+- **coherence, robustness, parsimony:** connected, few single points of failure, no bigger than it needs to be
+
+A beam search keeps the best few designs each round. The winners go to the Review tab as one patch each (kind `evolve`, with the steps, the fitness before and after, and which probes it now passes). Nothing changes until you approve one, and a design refuses to apply if the ontology changed after it was found.
+
+```powershell
+python -m androidmirror evolve --dry-run      # show the best designs
+python -m androidmirror evolve --keep 3       # queue them for approval
+```
+
+An engine plugs in by exposing `propose(snapshot: GraphSnapshot) -> list[Patch]` in `androidmirror.refactor`, `androidmirror.breaker` or `androidmirror.chainer`. Until those land, `evolve` reports that no engines are installed.
+
 ## Command line
 
 ```powershell
@@ -49,6 +66,7 @@ python -m androidmirror ingest --book 2 --start 0 --count 3   # Claude reads Boo
 python -m androidmirror pending                               # list proposed patches
 python -m androidmirror approve all --as "Your Name"          # or list patch ids
 python -m androidmirror investigate                           # importance, Breaker, face metrics as JSON
+python -m androidmirror evolve --dry-run                       # search for better designs (see above)
 ```
 
 State lives in `data/` (`ontology.json`, `patches.json`, `corpus/`) and is not committed.
@@ -64,6 +82,7 @@ androidmirror/
   ingest.py     reads corpus chunks and queues self-contained patches
   corpus.py     downloads and splits Meditations into "Book II, 1"-style sections
   analysis.py   importance, interventions (do-operator on the DAG), Breaker, face metrics
+  evolver/      searches refactor/break/chain sequences on sandboxes; queues the best designs
   query.py      finds relevant nodes and builds grounded facts for answers
   server.py     FastAPI app; web/index.html is the UI (Cytoscape.js, vendored)
 ```

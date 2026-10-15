@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import analysis, corpus, llm, query
+from . import analysis, corpus, evolver, llm, query
 from .ingest import ingest_chunks
 from .ontology import Ontology
 from .steward import GovernanceError, Steward, normalize
@@ -32,6 +32,13 @@ class IngestReq(BaseModel):
 
 class Ask(BaseModel):
     question: str
+
+
+class EvolveReq(BaseModel):
+    generations: int = 3
+    beam: int = 4
+    keep: int = 3
+    queue: bool = True
 
 
 class Intervention(BaseModel):
@@ -138,6 +145,20 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
     @app.get("/api/investigate")
     def investigate() -> dict:
         return {"important": analysis.important_nodes(onto), "breaker": analysis.breaker(onto)}
+
+    @app.get("/api/probes")
+    def probes() -> list[dict]:
+        return [p.model_dump() for p in evolver.default_probes(data_dir)]
+
+    @app.post("/api/evolve")
+    def evolve(r: EvolveReq) -> dict:
+        """Search for better designs; queue them as proposals. Never applies anything."""
+        probes = evolver.default_probes(data_dir)
+        result = evolver.evolve(onto, probes, generations=r.generations, beam=r.beam, keep=r.keep)
+        queued = evolver.queue_designs(steward, result, probes) if r.queue else []
+        return {**{k: v for k, v in result.items() if k != "designs"},
+                "designs": [d.summary() for d in result["designs"]],
+                "queued": [p.id for p in queued]}
 
     @app.get("/api/metrics")
     def metrics() -> dict:
