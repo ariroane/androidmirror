@@ -119,6 +119,49 @@ def plan_merge(
     return _finish(snap, patch)
 
 
+def merge_candidates(snap: GraphSnapshot, cutoff: float = 0.85) -> list[tuple[str, str, str]]:
+    """Pairs that look like one concept: near-identical labels, or the same type
+    with the same neighbours in both graphs. Returns (survivor, absorbed, why)."""
+    ids = sorted(snap.nodes)
+    degree = {n: snap.kg.degree(n) + snap.dag.degree(n) for n in ids}
+
+    def neighbours(n: str) -> tuple:
+        return (frozenset((k, d) for _, d, k in snap.kg.out_edges(n, keys=True)),
+                frozenset((k, s) for s, _, k in snap.kg.in_edges(n, keys=True)),
+                frozenset(snap.dag.successors(n)), frozenset(snap.dag.predecessors(n)))
+
+    out = []
+    for i, a in enumerate(ids):
+        for b in ids[i + 1:]:
+            la, lb = slugify(snap.nodes[a]["label"]), slugify(snap.nodes[b]["label"])
+            if difflib.SequenceMatcher(None, la, lb).ratio() >= cutoff:
+                why = "near-identical labels"
+            elif snap.nodes[a]["type"] == snap.nodes[b]["type"] and degree[a] and neighbours(a) == neighbours(b):
+                why = "same type and the same neighbours in both graphs"
+            else:
+                continue
+            survivor, absorbed = (a, b) if degree[a] >= degree[b] else (b, a)
+            out.append((survivor, absorbed, why))
+    return out
+
+
+def propose(snapshot: GraphSnapshot) -> list[Patch]:
+    """Merge patches for every candidate pair that can merge cleanly.
+
+    For engines (such as the Evolver) that try designs on sandbox copies: the
+    patches are returned, not queued, and nothing is written.
+    """
+    patches = []
+    for survivor, absorbed, why in merge_candidates(snapshot):
+        try:
+            patches.append(plan_merge(snapshot, survivor, [absorbed], rationale=(
+                f"{snapshot.nodes[absorbed]['label']} and {snapshot.nodes[survivor]['label']} look like one concept "
+                f"({why}); merge them in both graphs.")))
+        except ChainError:
+            continue  # would create a cycle or a sign conflict: that is the user's call, not a suggestion
+    return patches
+
+
 # ---------- chain ontologies ----------
 
 

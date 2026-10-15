@@ -162,3 +162,14 @@ def test_http_routes_only_queue(tmp_path, monkeypatch):
     assert r.status_code == 200 and r.json()["extra"]["namespace"] == "epictetus"
     assert st.ontology.version == version and len(st.list("proposed")) == 2
     assert len(Steward(Ontology(), tmp_path).list("proposed")) == 2  # the queue was saved
+
+
+def test_propose_suggests_clean_merges_without_writing():
+    o = build([node("anger"), node("angers", "Angers"), node("calm"), node("reason"), node("x", "Duty", type="value"),
+               node("y", "Obligation", type="value"), rel("reason", "guides", "x"), rel("reason", "guides", "y"),
+               cause("anger", "calm", sign=-1), cause("angers", "calm", sign=1)])
+    before = comparable(o)
+    patches = chainer.propose(o.graph_snapshot())
+    assert comparable(o) == before
+    assert [(p.extra["survivor"], p.extra["absorbed"]) for p in patches] == [("x", ["y"])]  # anger/angers conflict
+    assert all(p.status == "proposed" and p.kind == "chain" for p in patches)
