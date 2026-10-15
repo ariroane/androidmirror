@@ -11,7 +11,6 @@ from .ingest import ingest_chunks, load_seed
 from .ontology import Ontology
 from .server import ROOT
 from .steward import Steward
-from . import chainer
 
 DATA = ROOT / "data"
 
@@ -24,6 +23,8 @@ def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(prog="androidmirror", description="Android Mirror prototype")
     ap.add_argument("--data", type=Path, default=DATA, help="data directory (default: ./data)")
     sub = ap.add_subparsers(dest="cmd", required=True)
+    from . import chainer
+
     chainer.add_cli(sub)
 
     s = sub.add_parser("serve", help="run the web app")
@@ -49,12 +50,12 @@ def main(argv: list[str] | None = None) -> None:
     sub.add_parser("investigate", help="print important nodes and Breaker findings")
 
     args = ap.parse_args(argv)
-    data_dir: Path = args.data
     if args.cmd == "chain":
         try:
-            return chainer.run_cli(args, _steward(data_dir))
+            return chainer.run_cli(args, _steward(args.data))
         except chainer.ChainError as e:
             raise SystemExit(f"not queued: {e}")
+    data_dir: Path = args.data
 
     if args.cmd == "serve":
         import uvicorn

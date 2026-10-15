@@ -14,7 +14,6 @@ from . import analysis, corpus, llm, query
 from .ingest import ingest_chunks
 from .ontology import Ontology
 from .steward import GovernanceError, Steward, normalize
-from . import chainer
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web"
@@ -143,6 +142,8 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
     @app.get("/api/metrics")
     def metrics() -> dict:
         return analysis.metrics(onto)
+
+    from . import chainer
 
     chainer.register(app, steward)
     return app
