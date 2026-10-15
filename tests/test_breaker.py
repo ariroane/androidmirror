@@ -73,6 +73,7 @@ def test_auto_split_moves_links_in_both_graphs(tmp_path):
     assert o.dag.has_edge(private, "grief") and not o.dag.has_edge(civic, "grief")
     assert nx.is_directed_acyclic_graph(o.dag)
     assert all(o.nodes[p]["attrs"]["split_from"] == "duty" for p in parts)
+    assert all(o.nodes[p]["attrs"]["aliases"] == ["Duty"] for p in parts)
 
 
 def test_split_with_named_parts_and_copied_link(tmp_path):

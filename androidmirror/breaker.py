@@ -212,7 +212,7 @@ def propose_split(
 
     ops: list[Op] = []
     for pid, p in zip(ids, parts):
-        attrs = {"split_from": node, "provenance": list(orig.get("provenance", []))}
+        attrs = {"split_from": node, "aliases": [orig["label"]], "provenance": list(orig.get("provenance", []))}
         ops.append(Op(op="add_node", id=pid, label=p["label"], type=p.get("type") or orig.get("type"), attrs=attrs))
 
     moved: dict[str, list[str]] = {pid: [] for pid in ids}
