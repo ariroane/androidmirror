@@ -43,14 +43,15 @@ Patches from the engines carry a `kind` (`refactor`, `break`, `chain` or `evolve
 | Review | Have Claude read sections of a book and propose changes; approve or reject each proposal (from Claude or any engine) with its source quote | Reading: yes. Approving: no |
 | Ask | Ask a question; the Mirror finds the relevant nodes and answers from them | For a written answer (otherwise shows the matching facts) |
 | Change | Raise or lower a node in the causal model and see what moves; optionally have Claude retell it in Marcus's voice | Only for the retelling |
-| Investigate | Most important nodes; the Breaker's cut points, load-bearing causes and tensions; and split/cut suggestions with a button to propose each | No |
+| Investigate | Most important nodes; the Breaker's cut points, load-bearing causes and tensions | No |
+| Engines | Run the Refactorer, Breaker, Chainer and Evolver: find suggestions and queue any of them, or propose your own split, cut, merge or chain | No |
 | Face | A Chernoff face drawn from the Mirror's state (coherence, tension, valence, fragility, certainty, size) | No |
 
 The buttons above the canvas show both graphs, only the descriptive one, or only the causal one.
 
 ## The engines
 
-Four engines reshape the ontology. None of them calls Claude or writes to the ontology; each turns the current graphs into proposals for you to review.
+Four engines reshape the ontology. None of them calls Claude or writes to the ontology; each turns the current graphs into proposals for you to review. Each has a panel in the **Engines** tab, and every button there only adds proposals to Review.
 
 ### Refactorer: tidy up
 
@@ -75,7 +76,7 @@ Finds where the world is fragile and proposes `break` patches:
 - **Split** one node into two or more parts. Each relation and causal edge moves to one part (or is copied to every part), so both graphs stay in step. With no parts named, it makes one part per cluster the node alone holds together. The original is archived with `split_into`, never deleted, and a split can never create a cycle.
 - **Sever** two nodes: cut the causal edge and the descriptive relations between them together. The proposal says how much causal influence is lost and warns if the cut disconnects the graph.
 
-Suggestions are ranked by how many separate clusters a node bridges and how weak a link is (people are left out of split suggestions). You can propose them from the Investigate tab or here:
+Suggestions are ranked by how many separate clusters a node bridges and how weak a link is (people are left out of split suggestions). You can propose them from the Engines tab or here:
 
 ```powershell
 python -m androidmirror break-candidates                      # what the Breaker would split or sever
@@ -152,8 +153,10 @@ The web app uses these routes; every one that changes anything only queues a pro
 | `POST /api/query` | Ask a question |
 | `POST /api/intervene` | Raise or lower a node (`node`, `delta`, `retell`) |
 | `GET /api/investigate` | Importance and Breaker findings |
+| `GET /api/refactor`, `POST /api/refactor/queue` | The Refactorer's suggestions; queue some (`keys`) or all of them |
 | `GET /api/break/candidates`, `GET /api/break/links/{node}` | Split and sever suggestions; a node's links |
 | `POST /api/break/split`, `POST /api/break/sever` | Propose a split or a cut |
+| `GET /api/chain/candidates` | Pairs of nodes that look like one concept |
 | `POST /api/chain/merge`, `/align`, `/import` | Propose a merge; preview or propose chaining another ontology |
 | `GET /api/probes`, `POST /api/evolve` | The probes in use; run the Evolver (`generations`, `beam`, `keep`, `queue`) |
 
