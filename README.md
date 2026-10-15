@@ -60,7 +60,7 @@ python -m androidmirror evolve --dry-run      # show the best designs
 python -m androidmirror evolve --keep 3       # queue them for approval
 ```
 
-The Evolver calls `androidmirror.refactor.propose(snapshot)`, the Breaker's `split_candidates` / `sever_candidates` with `propose_split` / `propose_sever`, and the Chainer's `plan_merge` on near-duplicate pairs. Any engine that is not installed is skipped.
+Each engine plugs in through `propose(snapshot: GraphSnapshot) -> list[Patch]` in `androidmirror.refactor`, `androidmirror.breaker` and `androidmirror.chainer`. Any engine that is not installed is skipped.
 
 ## Command line
 
