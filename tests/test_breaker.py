@@ -45,6 +45,7 @@ def test_breaker_never_writes(monkeypatch):
     breaker.sever_candidates(o)
     breaker.propose_split(o, "duty")
     breaker.propose_sever(o, "duty", "calm")
+    assert breaker.propose(o.graph_snapshot())
     assert o.snapshot() == before
 
 

@@ -23,7 +23,7 @@ from typing import Any
 import networkx as nx
 
 from .analysis import propagate
-from .ontology import Ontology, slugify
+from .ontology import GraphSnapshot, Ontology, slugify
 from .patches import Op, Patch, Source
 
 PROPOSER = "Breaker"
@@ -307,6 +307,20 @@ def propose_sever(
                "breaker": {"operation": "sever", "src": src, "dst": dst, "influence_lost": round(lost, 4),
                            "disconnects": disconnects}},
     )
+
+
+def propose(snapshot: GraphSnapshot, top: int = 3) -> list[Patch]:
+    """Candidate break patches for a snapshot, neither queued nor applied.
+
+    The entry point other engines (the Evolver) call: automatic splits for the
+    top split candidates that bridge two or more clusters, and cuts for the top
+    sever candidates.
+    """
+    onto = Ontology()
+    onto.version, onto.nodes, onto.kg, onto.dag = snapshot.version, snapshot.nodes, snapshot.kg, snapshot.dag
+    out = [propose_split(onto, r["id"]) for r in split_candidates(onto, top) if len(r["groups"]) >= 2]
+    out += [propose_sever(onto, r["src"], r["dst"]) for r in sever_candidates(onto, top)]
+    return out
 
 
 def _causal(s: str, d: str, a: dict[str, Any]) -> Op:
