@@ -74,16 +74,16 @@ def test_ida_ranges_over_parent_sets():
     import random
     rng = random.Random(3)
     for _ in range(3000):
-        x = rng.choice([0, 1])
-        z = x if rng.random() < 0.8 else 1 - x
-        y = z if rng.random() < 0.8 else 1 - z
+        x = rng.choice([-1, 1])
+        z = x if rng.random() < 0.8 else -x
+        y = z if rng.random() < 0.8 else -z
         data["x"].append(x), data["z"].append(z), data["y"].append(y)
     g = chain([("x", "z")], nodes="xyz")
     g.directed.add(("z", "y"))
     out = possible_effects(data, g, "x", "y")
     assert out["n_parent_sets"] == 2 and out["sign"] in ("+", "mixed")
     vals = sorted(m["effect"] for m in out["members"])
-    assert vals[0] < 0.05 and vals[1] > 0.25  # adjusting for z blocks it; not adjusting shows it
+    assert vals[0] < 0.1 and vals[1] > 0.5  # adjusting for z blocks it; not adjusting shows it
 
 
 def test_knowledge_base_inference_and_checks():
@@ -110,17 +110,107 @@ def test_knowledge_base_inference_and_checks():
 
 
 def test_selection_reasons():
-    n = 100
-    matrix = {"anger": [1] * 20 + [0] * 80, "wrath": [1] * 20 + [0] * 80, "rare": [1] * 3 + [0] * 97,
-              "always": [1] * 90 + [0] * 10, "rome": [1] * 30 + [0] * 70}
+    none = [None]
+    matrix = {"anger": [1] * 15 + [-1] * 15 + none * 70, "wrath": [1] * 15 + [-1] * 15 + none * 70,
+              "rare": [1, -1, 1] + none * 97, "always": [1] * 45 + [-1] * 2 + none * 53,
+              "rome": [1] * 15 + [-1] * 15 + none * 70}
     concepts = {k: {"label": k, "kind": "emotion", "variable": True} for k in matrix}
     concepts["rome"] = {"label": "Rome", "kind": "place", "variable": False}
     rows = {r["id"]: r for r in select(matrix, concepts, {"anger": 2})}
-    assert rows["anger"]["status"] == "selected"
+    assert rows["anger"]["status"] == "selected" and rows["anger"]["support"] == 30
     assert rows["wrath"]["status"] == "excluded" and rows["wrath"]["duplicate_of"] == "anger"
     assert "too rare" in rows["rare"]["reason"]
     assert "barely varies" in rows["always"]["reason"]
     assert "not a quantity" in rows["rome"]["reason"]
+
+
+def test_unknown_values_are_left_out_of_each_test():
+    # x and y move together where both are known; a 0 for "not mentioned" would have hidden it
+    xs = [1, -1] * 40 + [None] * 40
+    ys = [1, -1] * 40 + [1, -1] * 20
+    t = g2_test({"x": xs, "y": ys}, "x", "y")
+    assert t.n == 80 and t.enough_data and t.p < 0.001
+    empty = g2_test({"x": [None] * 5, "y": [1] * 5}, "x", "y")
+    assert empty.n == 0 and not empty.enough_data
+
+
+def test_pc_with_unknowns_keeps_edges_it_cannot_test_and_no_untested_colliders():
+    import random
+
+    from androidmirror.mirror.causal.pc import pc
+    rng = random.Random(5)
+    lv = lambda s: 1 if s > 0.6 else -1 if s < -0.6 else 0  # noqa: E731
+    data = {"a": [], "b": [], "c": []}
+    for _ in range(400):
+        a = lv(rng.gauss(0, 1))
+        b = lv(1.3 * a + rng.gauss(0, 0.6))
+        c = lv(1.3 * b + rng.gauss(0, 0.6))
+        known = rng.sample("abc", 2)  # every situation states only two of the three
+        for k, v in (("a", a), ("b", b), ("c", c)):
+            data[k].append(v if k in known else None)
+    out = pc(data, ["a", "b", "c"], max_depth=1)
+    g = out["cpdag"]
+    # a - b and b - c are testable; a - c given b never is (no row knows all three), so a - c stays
+    assert g.adjacent("a", "b") and g.adjacent("b", "c") and g.adjacent("a", "c")
+    assert not g.directed  # nothing was shown independent, so no collider can be read off
+    strict = pc(data, ["a", "b", "c"], max_depth=1, untestable="remove")
+    assert not strict["cpdag"].adjacent("a", "c")  # pcalg's convention removes it for lack of data
+
+
+def test_meek_does_not_reason_across_undecided_triples():
+    g = chain([("b", "c")], nodes="abc")
+    g.directed.add(("a", "b"))
+    g.ambiguous.add((frozenset(("a", "c")), "b"))
+    assert g.meek() == []
+    assert g.extension() is not None
+    assert PDAG.from_dict(g.to_dict()).ambiguous == g.ambiguous
+
+
+def test_beliefs_imply_levels_with_proofs():
+    from androidmirror.mirror import situations as sit
+    nodes = {"self": {"kind": "agent"}, "virtue": {"kind": "disposition"}, "reason": {"kind": "faculty"},
+             "anger": {"kind": "emotion"}, "calm": {"kind": "state"}, "anger~": {"kind": "emotion"}}
+    st = lambda a, r, b: {"s": a, "r": r, "o": b, "neg": False, "passage": "p1", "locator": "I.1", "quote": "q",  # noqa: E731
+                          "modality": "asserts", "attribution": "self"}
+    kb = KnowledgeBase(nodes, aggregate([st("virtue", "requires", "reason"), st("anger", "opposes", "calm"),
+                                         st("anger~", "opposes", "anger")]))
+    rules = sit.implications(kb, {"virtue", "reason", "anger", "calm"}, {k: k for k in nodes})
+    s = {"id": "x", "origin": "corpus", "cells": {"virtue": {"level": 1, "tier": "stated"},
+                                                  "anger": {"level": 1, "tier": "stated"}}}
+    sit.propagate(s, rules)
+    assert s["cells"]["reason"]["level"] == 1 and s["cells"]["reason"]["tier"] == "implied"
+    assert s["cells"]["reason"]["why"]["passages"] == ["p1"]
+    assert s["cells"]["calm"]["level"] == -1
+    s2 = {"id": "y", "origin": "corpus", "cells": {"reason": {"level": -1, "tier": "stated"},
+                                                   "virtue": {"level": 1, "tier": "stated"}}}
+    sit.propagate(s2, rules)
+    assert {t["variable"] for t in s2["tensions"]} <= {"reason", "virtue"} and s2["tensions"]  # stated against what the subject believes: kept, flagged
+    data, ids = sit.table([s, s2], ["virtue", "reason", "calm"], "stated")
+    assert data["reason"] == [None, -1] and data["calm"] == [None, None]
+    data, _ = sit.table([s, s2], ["virtue", "reason", "calm"], "implied")
+    assert data["reason"] == [1, -1] and data["calm"] == [-1, None]
+
+
+def test_retrieval_finds_the_passage_about_the_situation():
+    from androidmirror.mirror.subject import Index
+    ps = {"a": {"text": "When men insult thee, remember their ignorance of good and evil.", "locator": "II.1"},
+          "b": {"text": "The body is a corpse carried about by a little soul.", "locator": "IV.41"},
+          "c": {"text": "Death is a release from the impressions of sense.", "locator": "VI.28"}}
+    idx = Index(ps)
+    assert idx.search("an insult from ignorant men", 1) == ["a"]
+    assert idx.search("death and the senses", 1, skip={"c"}) != ["c"]
+
+
+def test_offline_benchmark_null_corpora_and_planted_model():
+    from androidmirror.mirror import benchmark
+    r = benchmark.run_offline(n=500, seeds=2)["results"]
+    for null in ("null: topic picks what is mentioned", "null: topic also shifts levels"):
+        assert r[null]["situations, stated"]["compelled"] == 0
+    # the old passage table turns a topic that colours levels into many confident arrows; situations do not
+    assert r["null: topic also shifts levels"]["passage table"]["compelled"] > 5
+    assert r["null: topic also shifts levels"]["situations, stated"]["edges"] < r["null: topic also shifts levels"]["passage table"]["edges"]
+    planted = r["planted model"]
+    assert planted["+ stated claims"]["arrows_right"] > planted["+ stated claims"]["arrows_wrong"]
 
 
 def test_codebook_folds_opposites():
@@ -240,3 +330,16 @@ def test_meditations_split_stops_before_translators_back_matter():
     chunks = split_sections(text)
     assert [(c.book, c.section) for c in chunks] == [(1, "I"), (12, "I"), (12, "II")]
     assert "Fronto" not in chunks[-1].text
+
+
+def test_benchmark_with_a_written_corpus(tmp_path):
+    from androidmirror.mirror import benchmark
+
+    from .fake import FakeCoder
+
+    def writer(w):  # stands in for Claude writing the passage: the levels as tags the fake coder reads
+        return " ".join(f"[v {v} {w['state'][v]} state]" for v in w["mentioned"])
+
+    r = benchmark.run_with_claude(tmp_path, n=300, writer=writer, coder=FakeCoder(), log=lambda *_: None)
+    assert r["passages"] == 300 and r["reading_accuracy"] == 1.0
+    assert "anger" in r["mapped_variables"].values()

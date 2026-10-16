@@ -23,12 +23,16 @@ class PDAG:
         self.directed: set[Edge] = set()
         self.undirected: set[frozenset] = set()
         self.why: dict[Edge, dict[str, Any]] = {}
+        # unshielded triples x - z - y whose collider status the data could not settle (conservative PC,
+        # Ramsey, Zhang and Spirtes 2006): Meek's R1 does not reason across them
+        self.ambiguous: set[tuple[frozenset, str]] = set()
 
     # ---------- structure ----------
 
     def copy(self) -> "PDAG":
         g = PDAG(self.nodes)
         g.directed, g.undirected, g.why = set(self.directed), set(self.undirected), dict(self.why)
+        g.ambiguous = set(self.ambiguous)
         return g
 
     def add_undirected(self, a: str, b: str) -> None:
@@ -111,7 +115,7 @@ class PDAG:
         """Why a - b must become a -> b, or None."""
         if 1 in rules:
             for c in sorted(self.parents(a)):  # c -> a - b, c not adjacent b
-                if c != b and not self.adjacent(c, b):
+                if c != b and not self.adjacent(c, b) and (frozenset((c, b)), a) not in self.ambiguous:
                     return {"rule": "R1", "text": f"{c} -> {a} and {c} is not adjacent to {b}: {b} -> {a} would make a new collider",
                             "via": [[c, a]]}
         if 2 in rules:
@@ -146,7 +150,8 @@ class PDAG:
                     continue  # not a sink
                 nb = {n for n in g.und_nbrs(x) if n in remaining}
                 adj = {n for n in g.adj(x) if n in remaining}
-                if all(all(g.adjacent(y, z) for z in adj if z != y) for y in nb):
+                if all(all(g.adjacent(y, z) or (frozenset((y, z)), x) in self.ambiguous for z in adj if z != y)
+                       for y in nb):
                     for y in nb:
                         dag.add((y, x))
                         g.undirected.discard(frozenset((x, y)))
@@ -177,24 +182,32 @@ class PDAG:
 
     def class_size(self, max_component: int = 22) -> dict[str, Any]:
         """How many DAGs the class holds, counted exactly per chain component (He, Jia and Yu 2015)."""
+        import networkx as nx
+
         comps = self.chain_components()
         sizes, log10 = [], 0.0
         exact = True
         for comp in comps:
-            if len(comp) > max_component:
-                sizes.append({"nodes": sorted(comp), "count": None})
+            edges = frozenset(e for e in self.undirected if e <= comp)
+            ug = nx.Graph([tuple(e) for e in edges])
+            if len(comp) > max_component or not nx.is_chordal(ug):
+                # a non-chordal component only arises around undecided triples: not a Markov
+                # equivalence class in the strict sense, so it is not counted
+                sizes.append({"nodes": sorted(comp), "count": None,
+                              "note": "too large to count" if len(comp) > max_component else "contains undecided triples"})
                 exact = False
                 continue
-            edges = frozenset(e for e in self.undirected if e <= comp)
             n = _count_amo(frozenset(comp), edges)
             sizes.append({"nodes": sorted(comp), "count": n})
             log10 += math.log10(n)
         return {"log10": round(log10, 3) if exact else None, "count": round(10 ** log10) if exact and log10 < 15 else None,
-                "components": sizes, "undirected_edges": len(self.undirected), "directed_edges": len(self.directed)}
+                "components": sizes, "undirected_edges": len(self.undirected), "directed_edges": len(self.directed),
+                "undecided_triples": len(self.ambiguous)}
 
     def to_dict(self) -> dict[str, Any]:
         return {"nodes": self.nodes, "directed": [[a, b, self.why.get((a, b))] for a, b in sorted(self.directed)],
-                "undirected": [sorted(e) for e in sorted(self.undirected, key=sorted)]}
+                "undirected": [sorted(e) for e in sorted(self.undirected, key=sorted)],
+                "ambiguous": sorted([*sorted(p)[:1], z, *sorted(p)[1:]] for p, z in self.ambiguous)}
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> "PDAG":
@@ -205,6 +218,8 @@ class PDAG:
                 g.why[(a, b)] = why
         for a, b in d["undirected"]:
             g.add_undirected(a, b)
+        for x, z, y in d.get("ambiguous", []):
+            g.ambiguous.add((frozenset((x, y)), z))
         return g
 
 

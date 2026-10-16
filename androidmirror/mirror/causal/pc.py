@@ -21,7 +21,18 @@ from .pdag import PDAG
 
 
 def pc(data: Data, variables: list[str], alpha: float = 0.05, max_depth: int = 3,
-       rows: list[int] | None = None, colliders: str = "majority") -> dict[str, Any]:
+       rows: list[int] | None = None, colliders: str = "majority", untestable: str = "keep",
+       require_signature: bool = True) -> dict[str, Any]:
+    """PC-stable. `untestable` says what a conditional test with too little data does. With "keep"
+    (the default), an edge needs a testable dependence to exist at all (a marginal test with too few
+    rows removes it, as untestable), but a conditional test with too few rows cannot show
+    independence, so it leaves the edge in place. "remove" is pcalg's convention throughout, which
+    with unknown values deletes every edge whose conditional tests run short of rows.
+
+    `require_signature` orients a collider x -> z <- y only if x and y also test as dependent given
+    z (plus the separating set), on enough rows: the collider's own fingerprint. With complete data
+    this rarely changes anything; with unknown values it stops a collider from being read off two
+    tests that saw different situations."""
     vs = sorted(variables)
     data = as_arrays({v: data[v] for v in vs})
     if rows is not None:  # a resample: take its rows once, not in every test
@@ -49,6 +60,9 @@ def pc(data: Data, variables: list[str], alpha: float = 0.05, max_depth: int = 3
                     key = frozenset((x, y))
                     info = kept.setdefault(key, {"max_p": 0.0, "tests": 0, "weakest": None})
                     info["tests"] += 1
+                    if not t.enough_data and untestable == "keep" and depth > 0:
+                        info["untestable"] = info.get("untestable", 0) + 1
+                        continue
                     if t.p > info["max_p"] or info["weakest"] is None:
                         info["max_p"], info["weakest"] = t.p, t.to_dict()
                     if t.p > alpha:
@@ -70,7 +84,7 @@ def pc(data: Data, variables: list[str], alpha: float = 0.05, max_depth: int = 3
     # separating set drawn from the final neighbourhoods, which keeps one unlucky test from
     # orienting edges; "standard" uses the first separating set found.
     arrows: dict[tuple[str, str], dict[str, Any]] = {}
-    ambiguous = []
+    ambiguous, untested, unconfirmed = [], [], []
     sep_cache: dict[frozenset, list[dict[str, Any]]] = {}
     for z in vs:
         for x, y in combinations(sorted(adj[z]), 2):
@@ -79,10 +93,13 @@ def pc(data: Data, variables: list[str], alpha: float = 0.05, max_depth: int = 3
             sep = sepset.get(frozenset((x, y)))
             if sep is None:
                 continue
+            if not sep.get("enough_data", True):  # never shown independent, so no evidence for a collider
+                untested.append({"triple": [x, z, y], "pair": sorted((x, y))})
+                continue
             if colliders == "majority":
                 key = frozenset((x, y))
                 if key not in sep_cache:
-                    sep_cache[key] = _separating_sets(data, x, y, adj, alpha, max_depth, rows) or [sep]
+                    sep_cache[key] = _separating_sets(data, x, y, adj, alpha, max_depth, rows, untestable) or [sep]
                 seps = sep_cache[key]
                 with_z = sum(1 for t in seps if z in t["given"])
                 if 2 * with_z == len(seps):
@@ -96,13 +113,22 @@ def pc(data: Data, variables: list[str], alpha: float = 0.05, max_depth: int = 3
                 if z in sep["given"]:
                     continue
                 share = "the separating set leaves it out"
+            # the collider's own signature: x and y, independent without z, become dependent given z.
+            # With unknown values each test sees different rows, so this is checked, not assumed.
+            sig = g2_test(data, x, y, tuple(sorted(set(sep["given"]) | {z})), rows)
+            if require_signature and not (sig.enough_data and sig.p <= alpha):
+                unconfirmed.append({"triple": [x, z, y], "test": sig.to_dict()})
+                continue
             given = ", ".join(sep["given"]) or "nothing"
-            why = {"rule": "v-structure", "collider": [x, z, y], "test": sep,
+            why = {"rule": "v-structure", "collider": [x, z, y], "test": sep, "signature": sig.to_dict(),
                    "text": f"{x} and {y} are independent given {given} (p = {sep['p']}), and {z} is not needed "
                            f"to separate them ({share})"}
             arrows.setdefault((x, z), why)
             arrows.setdefault((y, z), why)
     conflicts = []
+    for t in ambiguous + untested + unconfirmed:
+        x, z, y = t["triple"]
+        g.ambiguous.add((frozenset((x, y)), z))
     for (a, b), why in arrows.items():
         if (b, a) in arrows:
             if a < b:
@@ -115,11 +141,11 @@ def pc(data: Data, variables: list[str], alpha: float = 0.05, max_depth: int = 3
 
     edge_support = {"|".join(sorted(k)): v for k, v in kept.items() if g.adjacent(*sorted(k))}
     removed = [{"pair": sorted(k), **v} for k, v in sorted(sepset.items(), key=lambda kv: sorted(kv[0]))]
-    return {"cpdag": g, "edge_support": edge_support, "removed": removed, "conflicts": conflicts, "ambiguous": ambiguous,
+    return {"cpdag": g, "edge_support": edge_support, "removed": removed, "conflicts": conflicts, "ambiguous": ambiguous, "untested_triples": untested, "unconfirmed_colliders": unconfirmed,
             "n_tests": n_tests, "depth_reached": depth, "alpha": alpha, "max_depth": max_depth}
 
 
-def _separating_sets(data, x, y, adj, alpha, max_depth, rows) -> list[dict[str, Any]]:
+def _separating_sets(data, x, y, adj, alpha, max_depth, rows, untestable="keep") -> list[dict[str, Any]]:
     out = []
     seen = set()
     for side in (adj[x] - {y}, adj[y] - {x}):
@@ -129,7 +155,7 @@ def _separating_sets(data, x, y, adj, alpha, max_depth, rows) -> list[dict[str, 
                     continue
                 seen.add(s)
                 t = g2_test(data, x, y, s, rows)
-                if t.p > alpha:
+                if t.p > alpha and (t.enough_data or untestable == "remove"):
                     out.append(t.to_dict())
     return out
 
@@ -155,8 +181,10 @@ def apply_pins(cpdag: PDAG, pins: list[dict[str, Any]], removed: list[dict[str, 
             rec["status"] = "contradicted by the data" if (b, a) in cpdag.directed else "contradicted by a stronger pin"
             rec["why_not"] = g.why.get((b, a))
         elif not g.adjacent(a, b):
-            rec["status"] = "no link in the data"
-            rec["why_not"] = sep.get(frozenset((a, b)))
+            why_not = sep.get(frozenset((a, b)))
+            untestable = why_not is not None and not why_not.get("enough_data", True)
+            rec["status"] = "untestable: too few situations state both" if untestable else "no link in the data"
+            rec["why_not"] = why_not
         else:
             trial = g.copy()
             trial.orient(a, b, {"rule": "pin", "text": pin.get("text", "background knowledge"), "pin": pin})

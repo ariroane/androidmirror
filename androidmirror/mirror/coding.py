@@ -1,4 +1,4 @@
-"""Claude's three jobs in building a Mirror, each one structured call.
+"""Claude's three reading jobs in building a Mirror, each one structured call.
 
 1. `code_passage` (once per passage): open coding. Concept mentions with their
    level in the passage, descriptive statements with modality and
@@ -6,9 +6,11 @@
 2. `consolidate` (a few calls over the whole vocabulary): fold the labels from
    step 1 into one codebook, merging synonyms and folding antonyms into one
    concept with a polarity ("freedom from anger" = anger at level -1).
-3. `measure_passage` (once per passage): with the codebook fixed, record the
-   level of each candidate variable the passage engages. This is what makes the
-   corpus a dataset: every passage is measured against the same variables.
+3. `situations_passage` (once per passage): with the codebook fixed, find the
+   situations the passage reasons about and the level (low, typical, high) of
+   each variable the passage states for each, plus the places where the subject
+   states its causal model outright. Situations, not passages, are the units of
+   the subject's model (see causal/__init__.py).
 
 Each function has the same shape as its offline stand-in in the tests, so the
 build pipeline can run without a key.
@@ -124,28 +126,64 @@ def consolidate(lines: list[str], subject: str) -> list[dict[str, Any]]:
     return llm._json_call(system, "\n".join(lines), CONSOLIDATE_SCHEMA, effort="high")["concepts"]
 
 
-MEASURE_SCHEMA: dict[str, Any] = {
+SITUATION_SCHEMA: dict[str, Any] = {
     "type": "object",
-    "properties": {"levels": {"type": "array", "items": {
-        "type": "object", "properties": {"variable": _STR, "level": _LEVEL, "quote": _STR},
-        "required": ["variable", "level", "quote"], "additionalProperties": False}}},
-    "required": ["levels"],
+    "properties": {
+        "situations": {"type": "array", "items": {
+            "type": "object",
+            "properties": {
+                "description": _STR,
+                "kind": {"type": "string", "enum": ["actual", "hypothetical", "ideal", "general"]},
+                "contrast_with": {"type": "integer"},
+                "levels": {"type": "array", "items": {
+                    "type": "object",
+                    "properties": {"variable": _STR, "level": {"type": "integer", "enum": [-1, 0, 1]}, "quote": _STR},
+                    "required": ["variable", "level", "quote"], "additionalProperties": False}}},
+            "required": ["description", "kind", "contrast_with", "levels"], "additionalProperties": False}},
+        "model_claims": {"type": "array", "items": {
+            "type": "object",
+            "properties": {"kind": {"type": "string", "enum": ["causes", "direct", "not_x_but_y", "whether_or_not", "so_that"]},
+                           "x": _STR, "y": _STR, "z": _STR, "quote": _STR},
+            "required": ["kind", "x", "y", "z", "quote"], "additionalProperties": False}},
+    },
+    "required": ["situations", "model_claims"],
     "additionalProperties": False,
 }
 
-MEASURE_SYSTEM = """You are measuring one passage of a corpus about {subject} against a fixed list of variables.
+SITUATION_SYSTEM = """You are reading one passage of a corpus about {subject} to recover the subject's own model of how things work: not what drives the writing, but the situations the subject thinks about and how things stand in them.
 
-For each variable the passage engages, give its level in this passage: 1 if present, affirmed, high or urged; -1 if absent, negated, low or to be got rid of. Include a short verbatim quote. Leave out every variable the passage does not engage; most passages engage only a few. Judge from this passage alone."""
+You get a fixed list of variables (id: label - meaning). Each can stand low (-1), typical (0) or high (1) in a situation.
+
+1. situations: each concrete or imagined circumstance the passage reasons about (the morning with the meddlers, an insult, an illness, the hour of death). A passage may hold several; a purely general remark is one situation of kind "general".
+   - description: one line, in neutral words, saying what the situation is. Do not state the variables' levels in it.
+   - kind: actual (something that happened or happens), hypothetical (an "if" or "suppose"), ideal (the state the passage urges: "be free of anger" describes a situation where anger is low), general (how things stand in general).
+   - contrast_with: a conditional or a contrast often describes two situations that differ in one respect ("take away the opinion, and the complaint is taken away": one situation with the opinion and the complaint, one without either). Give the index (0-based, within this passage) of the situation this one is contrasted with, or -1.
+   - levels: only the variables whose level in this situation the passage states or plainly shows, each with the shortest verbatim quote that shows it. Leave out everything the passage leaves unsaid; most situations involve only a few variables. Never fill in a level from what you know about the subject or about the world.
+
+2. model_claims: places where the subject states its model outright, using variable ids for x, y, z ("" when unused):
+   - causes: x brings about or raises y ("from this comes").
+   - direct: x acts on y directly, not through anything else.
+   - not_x_but_y: "it is not x but y that does z" (x makes no difference to z once y is known).
+   - whether_or_not: "whether x or not, y" (y does not depend on x).
+   - so_that: "do x so that y" (x is a means to y).
+   Quote each exactly. An empty list is fine.
+
+Judge from this passage alone."""
 
 
-def measure_passage(text: str, locator: str, subject: str, variables: list[dict[str, str]]) -> list[dict[str, Any]]:
-    system = MEASURE_SYSTEM.replace("{subject}", subject)
+def situations_passage(text: str, locator: str, subject: str, variables: list[dict[str, str]]) -> dict[str, Any]:
+    system = SITUATION_SYSTEM.replace("{subject}", subject)
     listing = "\n".join(f"{v['id']}: {v['label']} - {v['gloss']}" for v in variables)
     user = f"Variables (id: label - meaning):\n{listing}\n\nPassage ({locator}):\n{text}"
-    return llm._json_call(system, user, MEASURE_SCHEMA, effort="low")["levels"]
+    return llm._json_call(system, user, SITUATION_SCHEMA, effort="medium")
 
 
 def prompt_version() -> str:
-    """A short hash of all three prompts and schemas, stored with every build."""
-    blob = json.dumps([CODE_SYSTEM, CODE_SCHEMA, CONSOLIDATE_SYSTEM, MEASURE_SYSTEM, MEASURE_SCHEMA], sort_keys=True)
+    """A short hash of the coding prompts, stored with every build (a change re-codes every passage)."""
+    blob = json.dumps([CODE_SYSTEM, CODE_SCHEMA, CONSOLIDATE_SYSTEM], sort_keys=True)
     return hashlib.sha256(blob.encode()).hexdigest()[:12]
+
+
+def situation_version() -> str:
+    """A short hash of the situations prompt, so a change re-reads the situations but not the coding."""
+    return hashlib.sha256(json.dumps([SITUATION_SYSTEM, SITUATION_SCHEMA], sort_keys=True).encode()).hexdigest()[:12]

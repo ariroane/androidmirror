@@ -1,9 +1,13 @@
 """Conditional independence test for discrete data: the G-squared (likelihood ratio) test.
 
-Each variable takes values in {-1, 0, 1}. The test sums G = 2 * sum O ln(O/E)
-over the strata of the conditioning set, with degrees of freedom counted from
-the levels actually seen in each stratum. As in pcalg's disCItest, a test with
-fewer than 10 rows per degree of freedom cannot reject independence, and says so.
+Each variable takes values in {-1, 0, 1} (low, typical, high), or None where the
+situation leaves it unknown. Unknown values are handled by test-wise deletion:
+each test uses only the rows where all of its variables are known. The test
+sums G = 2 * sum O ln(O/E) over the strata of the conditioning set, with degrees
+of freedom counted from the levels actually seen in each stratum. As in pcalg's
+disCItest, a test with fewer than 10 rows per degree of freedom cannot reject
+independence, and says so (`enough_data`), so "independent" and "untestable"
+can be told apart.
 """
 
 from __future__ import annotations
@@ -13,7 +17,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-Data = dict[str, list[int]]
+Data = dict[str, list]  # values in {-1, 0, 1} or None (unknown)
 
 
 @dataclass(frozen=True)
@@ -33,8 +37,9 @@ class CITest:
 
 
 def as_arrays(data: Data) -> dict[str, np.ndarray]:
-    """Columns as small integer arrays (level + 1), for fast counting."""
-    return {k: (v if isinstance(v, np.ndarray) else np.asarray(v, dtype=np.int64) + 1) for k, v in data.items()}
+    """Columns as small integer arrays (level + 1, unknown = -1), for fast counting."""
+    return {k: (v if isinstance(v, np.ndarray) else np.asarray([-1 if x is None else x + 1 for x in v], dtype=np.int64))
+            for k, v in data.items()}
 
 
 def g2_test(data: Data, x: str, y: str, s: tuple[str, ...] = (), rows=None) -> CITest:
@@ -42,6 +47,15 @@ def g2_test(data: Data, x: str, y: str, s: tuple[str, ...] = (), rows=None) -> C
     if rows is not None:
         idx = np.asarray(rows)
         cols = {v: cols[v][idx] for v in (x, y, *s)}
+    known = None
+    for v in (x, y, *s):  # test-wise deletion of rows with an unknown value
+        col = cols[v]
+        if col.size and col.min() < 0:
+            known = (col >= 0) if known is None else known & (col >= 0)
+    if known is not None:
+        cols = {v: cols[v][known] for v in (x, y, *s)}
+    if not len(cols[x]):
+        return CITest(x, y, tuple(s), 0.0, 0, 1.0, 0, False)
     strat = np.zeros(len(cols[x]), dtype=np.int64)
     for v in s:
         strat = strat * 3 + cols[v]

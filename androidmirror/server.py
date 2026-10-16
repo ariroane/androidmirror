@@ -67,7 +67,8 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
     def meta(corpus: str | None = None) -> dict:
         m = get(corpus)
         return {**m.meta, "stats": m.kb.stats(), "variables": len(m.variables), "concepts": len(m.nodes),
-                "claims": len(m.claims), "class_size": m.causal.get("class_size")}
+                "claims": len(m.claims), "class_size": m.causal.get("class_size"),
+                "situations": sum(1 for x in m.situations if x["origin"] == "corpus")}
 
     @app.get("/api/graph")
     def graph(layer: str = "kg", limit: int = 120, corpus: str | None = None) -> dict:
@@ -113,6 +114,17 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
         if x not in m.variables or y not in m.variables:
             raise HTTPException(400, "both ends must be causal variables")
         return m.effect(x, y)
+
+    @app.get("/api/situation/{sid}")
+    def situation(sid: str, corpus: str | None = None) -> dict:
+        try:
+            return get(corpus).situation(sid)
+        except KeyError as e:
+            raise missing(e) from None
+
+    @app.get("/api/profile")
+    def profile(corpus: str | None = None) -> dict:
+        return get(corpus).profile()
 
     @app.post("/api/ask")
     def ask(a: Ask) -> dict:

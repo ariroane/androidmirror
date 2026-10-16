@@ -5,10 +5,11 @@ X on Y can be estimated by adjusting for X's parents. X's possible parent sets
 are its compelled parents plus any clique of its undirected neighbours, so the
 set of possible effects comes from X's neighbourhood alone.
 
-The effect is the adjusted contrast E[Y | do(X = 1)] - E[Y | do(X = 0)]: how much
-more of Y (on the -1..1 scale) passages show when X is present than when it is
-not engaged, within strata of the parent set. Strata where one side is empty
-are skipped, and `coverage` reports the share of rows that could be used.
+The effect is the adjusted contrast E[Y | do(X = high)] - E[Y | do(X = low)],
+on the -1..1 scale, within strata of the parent set: how differently Y stands
+in the subject's situations when X is high than when it is low. Rows with an
+unknown value are left out, strata where one side is empty are skipped, and
+`coverage` reports the share of rows that could be used.
 """
 
 from __future__ import annotations
@@ -24,10 +25,12 @@ MAX_NBRS = 10
 
 
 def adjusted_effect(data: Data, x: str, y: str, adjust: list[str], rows: list[int] | None = None,
-                    hi: int = 1, lo: int = 0) -> dict[str, Any]:
+                    hi: int = 1, lo: int = -1) -> dict[str, Any]:
     idx = list(rows) if rows is not None else list(range(len(data[x])))
     strata: dict[tuple, dict[int, list[int]]] = defaultdict(lambda: defaultdict(list))
     for i in idx:
+        if data[x][i] is None or data[y][i] is None or any(data[v][i] is None for v in adjust):
+            continue
         strata[tuple(data[v][i] for v in adjust)][data[x][i]].append(data[y][i])
     total, used, est = len(idx), 0, 0.0
     for cell in strata.values():

@@ -1,8 +1,12 @@
-"""Build a Mirror from a whole corpus: code, consolidate, measure, reason, discover.
+"""Build a Mirror from a whole corpus: code, consolidate, read situations, reason, discover.
 
 Every Claude call is cached per passage under data/mirror/<corpus>/, so a build
 that stops halfway resumes where it left off, and re-running only the causal
 step (`python -m androidmirror causal`) costs nothing.
+
+The subject transformation's three optional steps (`validate`, `fill`,
+`vignettes`, in subject.py) save their results beside the build; `finalize`
+folds whatever is there into the situations and re-runs discovery.
 """
 
 from __future__ import annotations
@@ -18,16 +22,18 @@ from typing import Any, Callable
 from .. import llm
 from . import codebook as cb
 from . import coding
+from . import situations as sit
+from . import subject as subj
 from .causal import discover
 from .corpus import CorpusSpec, Passage, fetch, split
-from .kg import aggregate
+from .kg import KnowledgeBase, aggregate
 from .schema import EVALUATIONS, HELD_MODALITIES, SELF
 
-MEASURE_MAX = 60  # candidate variables shown to the measuring call
+MAX_CANDIDATES = 60  # candidate variables shown to the situations call
 
 
 class ClaudeCoder:
-    """The real coder: three structured Claude calls (see coding.py)."""
+    """The real coder: the structured Claude calls in coding.py and subject.py."""
 
     uses_llm = True
 
@@ -37,8 +43,11 @@ class ClaudeCoder:
     def consolidate(self, lines: list[str], subject: str) -> list[dict[str, Any]]:
         return coding.consolidate(lines, subject)
 
-    def measure(self, text: str, locator: str, subject: str, variables: list[dict[str, str]]) -> list[dict[str, Any]]:
-        return coding.measure_passage(text, locator, subject, variables)
+    def situations(self, text: str, locator: str, subject: str, variables: list[dict[str, str]]) -> dict[str, Any]:
+        return coding.situations_passage(text, locator, subject, variables)
+
+    def answer(self, req: dict[str, Any]) -> list[dict[str, Any]]:
+        return subj.claude_answer(req)
 
 
 def mirror_dir(data_dir: Path, corpus_id: str) -> Path:
@@ -99,7 +108,7 @@ def _cached_map(items: list[Passage], path_of: Callable[[Passage], Path], fresh:
 
 
 def build(spec: CorpusSpec, data_dir: Path, coder: Any = None, limit: int | None = None, workers: int = 6,
-          measure: bool = True, settings: dict[str, Any] | None = None,
+          read_situations: bool = True, settings: dict[str, Any] | None = None,
           log: Callable[[str], None] = print) -> dict[str, Any]:
     coder = coder or ClaudeCoder()
     root = mirror_dir(data_dir, spec.id)
@@ -125,53 +134,173 @@ def build(spec: CorpusSpec, data_dir: Path, coder: Any = None, limit: int | None
         _write(root / "codebook.json", book)
     concepts = book["concepts"]
 
-    # 3. measurement against the fixed codebook
+    # 3. candidate variables: the knowledge graph's quantities, by how often they come up
     mentions = _mentions(passages, codings, book)
     support = Counter({cid: len(ps) for cid, ps in mentions.items()})
-    candidates = [cid for cid, _ in support.most_common() if concepts.get(cid, {}).get("variable")][:MEASURE_MAX]
+    candidates = [cid for cid, _ in support.most_common() if concepts.get(cid, {}).get("variable")][:MAX_CANDIDATES]
     cand_info = [{"id": c, "label": concepts[c]["label"], "gloss": concepts[c]["gloss"]} for c in candidates]
-    if measure:
-        ckey = _hash(candidates)
-        measured = _cached_map(
-            passages, lambda p: root / "measure" / f"{p.id}.json",
-            lambda h: h.get("_v") == pv and set(candidates) <= set(h.get("variables", [])),
-            lambda p: {"levels": coder.measure(p.text, p.locator, spec.subject, cand_info), "variables": candidates,
-                       "_v": pv, "_key": ckey}, workers, log, "measuring")
-    else:
-        measured = {}
-    matrix = _matrix(passages, mentions, measured, candidates)
 
-    # 4. statements and claims
+    # 4. situations: what each passage reasons about, and how the variables stand there
+    if read_situations:
+        sv = coding.situation_version()
+        readings = _cached_map(
+            passages, lambda p: root / "situations" / f"{p.id}.json",
+            lambda h: h.get("_v") == sv and set(candidates) <= set(h.get("variables", [])),
+            lambda p: {**coder.situations(p.text, p.locator, spec.subject, cand_info), "variables": candidates, "_v": sv},
+            workers, log, "reading situations")
+    else:
+        readings = {}
+
+    # 5. statements and claims, and the situations they come with
     facts, poles = _facts(passages, codings, book)
     claims = _claims(passages, codings, book)
-    nodes = _nodes(concepts, mentions, poles, measured, passages)
+    nodes = _nodes(concepts, mentions, poles, passages)
+    pdicts = {p.id: vars(p) for p in passages}
+    cset = set(candidates)
+    base, stated_model = [], []
+    for p in passages:
+        if p.id in readings:
+            base += sit.from_reading(pdicts[p.id], readings[p.id], cset)
+            stated_model += sit.model_claims(pdicts[p.id], readings[p.id], cset)
+        elif not read_situations:  # a cheap fallback: one situation per passage from the open coding
+            cells = {}
+            for cid in candidates:
+                items = mentions.get(cid, {}).get(p.id)
+                if items:
+                    level = sum(lv for lv, _, _ in items)
+                    cells[cid] = {"level": 1 if level >= 0 else -1, "tier": "stated", "quote": items[0][1]}
+            if cells:
+                base.append({"id": f"{p.id}:1", "passage": p.id, "locator": p.locator, "order": p.order * 100,
+                             "origin": "corpus", "kind": "actual", "description": "", "cells": cells, "contrast": None})
+    _write(root / "situations_base.json", {"situations": base, "stated_model": stated_model, "candidates": candidates})
 
     mirror = {
         "meta": {"corpus": spec.to_dict(), "built": time.strftime("%Y-%m-%dT%H:%M:%S"), "prompt_version": pv,
                  "model": llm.DEFAULT_MODEL if getattr(coder, "uses_llm", False) else type(coder).__name__,
-                 "passages": len(passages), "coded": len(codings), "measured": len(measured),
-                 "measurement": "codebook" if measure else "open coding"},
+                 "passages": len(passages), "coded": len(codings), "read": len(readings),
+                 "units": "situations" if read_situations else "passages (open coding only)"},
         "passage_ids": [p.id for p in passages],
-        "nodes": nodes, "facts": facts, "claims": claims, "matrix": matrix,
+        "nodes": nodes, "facts": facts, "claims": claims, "candidates": candidates,
+        "causal": {"settings": settings or {}},
     }
-    mirror["causal"] = discover(matrix, concepts, claims, settings)
-    _write(root / "mirror.json", mirror)
+    mirror = finalize(mirror, root, settings, log)
     log(f"built: {len(nodes)} concepts, {len(facts)} facts, {len(claims)} causal claims, "
-        f"{len(mirror['causal'].get('variables', []))} causal variables")
+        f"{len(mirror['situations'])} situations, {len(mirror['causal'].get('variables', []))} causal variables")
     return mirror
 
 
-def rediscover(data_dir: Path, corpus_id: str, settings: dict[str, Any] | None = None) -> dict[str, Any]:
+def finalize(mirror: dict[str, Any], root: Path, settings: dict[str, Any] | None = None,
+             log: Callable[[str], None] = print) -> dict[str, Any]:
+    """Situations with every tier filled in (beliefs, the transformation's fills, usual levels, vignettes), then discovery."""
+    base = _read(root / "situations_base.json") or {"situations": [], "stated_model": [], "candidates": []}
+    candidates = base["candidates"]
+    cset = set(candidates)
+    labels = {k: v["label"] for k, v in mirror["nodes"].items()}
+    kb = KnowledgeBase(mirror["nodes"], mirror["facts"])
+    rules = sit.implications(kb, cset, labels)
+    situations = json.loads(json.dumps(base["situations"]))
+    for s in situations:
+        sit.propagate(s, rules)
+    filled = _read(root / "fill.json")
+    if filled:
+        for s in situations:
+            for v, cell in filled["cells"].get(s["id"], {}).items():
+                if v in cset and v not in s["cells"]:
+                    s["cells"][v] = cell
+            sit.propagate(s, rules)
+    typical = sit.typical_levels(situations, candidates)
+    sit.add_defaults(situations, typical)
+    vig = _read(root / "vignettes.json")
+    if vig:
+        for v in vig["situations"]:
+            v = {**v, "cells": {k: c for k, c in v["cells"].items() if k in cset}}
+            sit.propagate(v, rules)
+            situations.append(v)
+    concepts = mirror["nodes"]
+    old = (mirror.get("causal") or {}).get("settings", {})
+    cfg = {**old, **(settings or {})}
+    mirror["situations"] = situations
+    mirror["stated_model"] = base["stated_model"]
+    mirror["typical"] = {v: {**t, "label": labels.get(v, v)} for v, t in typical.items()}
+    mirror["rules"] = len(rules)
+    mirror["transformation"] = {"validation": _summary(_read(root / "validation.json")),
+                                "fill": {k: filled[k] for k in ("trusted", "prior_leak_rate", "leak_checks")} if filled else None,
+                                "vignettes": {k: vig[k] for k in ("targets", "trusted", "settings")} | {"n": len(vig["situations"])} if vig else None}
+    mirror["causal"] = discover(situations, candidates, concepts, mirror["claims"], base["stated_model"], cfg)
+    _write(root / "mirror.json", mirror)
+    return mirror
+
+
+def _summary(validation: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not validation:
+        return None
+    return {k: validation[k] for k in ("held_out", "overall", "variables", "trusted", "examples", "settings")}
+
+
+def rediscover(data_dir: Path, corpus_id: str, settings: dict[str, Any] | None = None,
+               log: Callable[[str], None] = print) -> dict[str, Any]:
     """Re-run only the causal layer, with new settings, from a saved Mirror."""
-    path = mirror_dir(data_dir, corpus_id) / "mirror.json"
-    mirror = _read(path)
+    root = mirror_dir(data_dir, corpus_id)
+    mirror = _read(root / "mirror.json")
     if mirror is None:
-        raise FileNotFoundError(f"no Mirror built at {path}")
-    concepts = {k: v for k, v in mirror["nodes"].items()}
-    old = mirror.get("causal", {}).get("settings", {})
-    mirror["causal"] = discover(mirror["matrix"], concepts, mirror["claims"], {**old, **(settings or {})})
-    _write(path, mirror)
-    return mirror
+        raise FileNotFoundError(f"no Mirror built at {root / 'mirror.json'}")
+    return finalize(mirror, root, settings, log)
+
+
+# ---------- the subject transformation's steps ----------
+
+
+def context(mirror: dict[str, Any], root: Path) -> dict[str, Any]:
+    """What subject.py needs from a built Mirror."""
+    passages = {p["id"]: p for p in _read(root / "passages.json")}
+    nodes, facts, claims = mirror["nodes"], mirror["facts"], mirror["claims"]
+    kb = KnowledgeBase(nodes, facts)
+    variables = mirror["causal"].get("variables") or mirror.get("candidates", [])[:25]
+    situations = [s for s in mirror["situations"] if s["origin"] == "corpus"]
+    subject = nodes.get(SELF, {}).get("label", "the subject")
+
+    def profile_fn(exclude) -> dict[str, Any]:
+        return subj.build_profile(subject, nodes, facts, kb, claims, situations, passages, variables, set(exclude))
+
+    return {"subject": subject, "situations": situations, "passages": passages, "variables": variables,
+            "labels": {k: v["label"] for k, v in nodes.items()}, "profile_fn": profile_fn}
+
+
+def run_step(step: str, data_dir: Path, corpus_id: str, coder: Any = None, workers: int = 6,
+             log: Callable[[str], None] = print, **opts: Any) -> dict[str, Any]:
+    """validate, fill or vignettes on a built Mirror; saves the result and re-runs discovery."""
+    coder = coder or ClaudeCoder()
+    root = mirror_dir(data_dir, corpus_id)
+    mirror = _read(root / "mirror.json")
+    if mirror is None:
+        raise FileNotFoundError(f"no Mirror built at {root / 'mirror.json'}")
+    ctx = context(mirror, root)
+    validation = _read(root / "validation.json")
+    if step == "validate":
+        out = subj.validate(ctx, coder, workers=workers, log=log, **opts)
+        _write(root / "validation.json", out)
+    else:
+        if not validation:
+            raise RuntimeError("run `validate` first: only variables the transformation predicts well are filled in")
+        trusted = [v for v in validation["trusted"] if v in ctx["variables"]]
+        if not trusted:
+            raise RuntimeError("validation trusted no variable, so there is nothing the transformation may fill in")
+        if step == "fill":
+            out = subj.fill(ctx, coder, trusted, workers=workers, log=log,
+                            cache=lambda sid: _read(root / "fill" / f"{_safe(sid)}.json"),
+                            save=lambda sid, rec: _write(root / "fill" / f"{_safe(sid)}.json", rec), **opts)
+            _write(root / "fill.json", out)
+        elif step == "vignettes":
+            out = subj.vignettes(ctx, coder, trusted, mirror["causal"], workers=workers, log=log, **opts)
+            _write(root / "vignettes.json", out)
+        else:
+            raise ValueError(step)
+    finalize(mirror, root, None, log)
+    return out
+
+
+def _safe(sid: str) -> str:
+    return sid.replace(":", "_")
 
 
 # ---------- assembling the pieces ----------
@@ -186,22 +315,6 @@ def _mentions(passages: list[Passage], codings: dict[str, Any], book: dict[str, 
             if hit and hit[0] not in (SELF, *EVALUATIONS):
                 out[hit[0]][p.id].append((m["level"] * hit[1], m.get("quote", ""), m["label"]))
     return out
-
-
-def _matrix(passages, mentions, measured, candidates) -> dict[str, list[int]]:
-    matrix = {c: [0] * len(passages) for c in candidates}
-    for i, p in enumerate(passages):
-        if p.id in measured:
-            for lv in measured[p.id]["levels"]:
-                if lv["variable"] in matrix:
-                    matrix[lv["variable"]][i] = 1 if lv["level"] > 0 else -1
-        else:
-            for c in candidates:
-                levels = [lv for lv, _, _ in mentions.get(c, {}).get(p.id, [])]
-                if levels:
-                    s = sum(levels)
-                    matrix[c][i] = 1 if s >= 0 else -1
-    return matrix
 
 
 def _endpoint(book, label, poles) -> str | None:
@@ -265,7 +378,7 @@ def _claims(passages, codings, book) -> list[dict[str, Any]]:
     return sorted(out, key=lambda r: -r["support"])
 
 
-def _nodes(concepts, mentions, poles, measured, passages) -> dict[str, dict[str, Any]]:
+def _nodes(concepts, mentions, poles, passages) -> dict[str, dict[str, Any]]:
     loc = {p.id: p.locator for p in passages}
     nodes = {}
     for cid, c in concepts.items():
@@ -273,11 +386,6 @@ def _nodes(concepts, mentions, poles, measured, passages) -> dict[str, dict[str,
         for pid, items in mentions.get(cid, {}).items():
             for level, quote, label in items[:1]:
                 ev.append({"passage": pid, "locator": loc[pid], "level": level, "quote": quote, "label": label})
-        for pid, m in measured.items():
-            for lv in m["levels"]:
-                if lv["variable"] == cid and pid not in mentions.get(cid, {}):
-                    ev.append({"passage": pid, "locator": loc.get(pid, pid), "level": lv["level"], "quote": lv["quote"],
-                               "label": "(measured)"})
         order = {p.id: p.order for p in passages}
         ev.sort(key=lambda e: order.get(e["passage"], 0))
         nodes[cid] = {**c, "mentions": ev, "support": len({e["passage"] for e in ev})}

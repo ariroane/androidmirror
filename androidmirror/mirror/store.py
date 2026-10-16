@@ -3,12 +3,14 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
 import networkx as nx
 
 from ..ontology import GraphSnapshot
+from . import situations as sit
 from .causal import effects
 from .causal.pdag import PDAG
 from .kg import KnowledgeBase, fact_key
@@ -21,7 +23,11 @@ class Mirror:
         self.nodes: dict[str, dict[str, Any]] = data["nodes"]
         self.facts: list[dict[str, Any]] = data["facts"]
         self.claims: list[dict[str, Any]] = data["claims"]
-        self.matrix: dict[str, list[int]] = data["matrix"]
+        self.situations: list[dict[str, Any]] = data.get("situations", [])
+        self.by_situation = {x["id"]: x for x in self.situations}
+        self.stated_model: list[dict[str, Any]] = data.get("stated_model", [])
+        self.typical: dict[str, Any] = data.get("typical", {})
+        self.transformation: dict[str, Any] = data.get("transformation", {})
         self.causal: dict[str, Any] = data.get("causal", {})
         self.passage_ids: list[str] = data["passage_ids"]
         self.passages = {p["id"]: p for p in passages}
@@ -29,6 +35,9 @@ class Mirror:
         self.cpdag = PDAG.from_dict(self.causal["cpdag"]) if "cpdag" in self.causal else PDAG([])
         self.model = PDAG.from_dict(self.causal["model"]) if "model" in self.causal else PDAG([])
         self.variables: list[str] = self.causal.get("variables", [])
+        self.view: str = self.causal.get("view", sit.DEFAULT_VIEW)
+        vig = self.causal.get("vignettes") or {}
+        self.vmodel = PDAG.from_dict(vig["model"]) if "model" in vig else None
 
     @classmethod
     def load(cls, root: Path) -> "Mirror | None":
@@ -53,9 +62,27 @@ class Mirror:
             sel = {r["id"]: r for r in self.causal.get("selection", []) if r["status"] == "selected"}
             nodes = [self._node_view(v, support=sel[v]["support"]) for v in self.variables]
             edges = [{"id": f"{e['a']}|{e['b']}", "source": e["a"], "target": e["b"], "directed": e["directed"],
-                      "status": e["status"], "effect": e["effect"],
+                      "status": e["status"], "effect": e["effect"], "origin": "corpus",
                       "stability": e["stability"].get("adjacent")} for e in self.causal.get("edges", [])]
-            return {"layer": layer, "nodes": nodes, "edges": edges}
+            vig = self.causal.get("vignettes")
+            if vig:  # what the vignettes change, drawn in their own colour (the app can hide it)
+                by_pair = {frozenset((e["source"], e["target"])): e for e in edges}
+                for d in vig["diff"]:
+                    if d["change"] == "same":
+                        continue
+                    key = frozenset((d["a"], d["b"]))
+                    wv = d["with_vignettes"]
+                    src, dst = wv if isinstance(wv, list) else [d["a"], d["b"]]
+                    if d["change"] == "added by vignettes":
+                        edges.append({"id": f"{d['a']}|{d['b']}", "source": src, "target": dst, "directed": isinstance(wv, list),
+                                      "status": "vignette", "effect": d["effect_with_vignettes"], "origin": "vignette",
+                                      "change": d["change"], "stability": None})
+                    elif key in by_pair:
+                        e = by_pair[key]
+                        e["change"] = d["change"]
+                        e["vignette_direction"] = wv if isinstance(wv, list) else None
+            return {"layer": layer, "nodes": nodes, "edges": edges, "view": self.view,
+                    "vignettes": bool(vig)}
         held = [f for f in self.facts if f["held"] and not f["neg"] and f["o"] not in EVALUATIONS]
         degree: dict[str, int] = {}
         for f in held:
@@ -96,6 +123,8 @@ class Mirror:
                 "claims": [self._claim_view(c) for c in self.claims if nid in (c["cause"], c["effect"])],
             },
             "violations": [v for v in self.kb.violations if nid in json.dumps(v)],
+            "situations": self.situations_of(nid), "vignettes": self.situations_of(nid, "vignette", 20),
+            "typical": self.typical.get(nid),
         }
 
     def _fact_view(self, f: dict[str, Any]) -> dict[str, Any]:
@@ -112,10 +141,7 @@ class Mirror:
         if pid not in self.passages:
             raise KeyError(pid)
         p = self.passages[pid]
-        i = self.passage_ids.index(pid) if pid in self.passage_ids else None
-        levels = {v: self.matrix[v][i] for v in self.matrix if i is not None and self.matrix[v][i]} if i is not None else {}
-        return {**p, "levels": [{"id": v, "label": self.label(v), "level": lv, "variable": v in self.variables}
-                                for v, lv in levels.items()],
+        return {**p, "situations": [self.situation_view(x, brief=True) for x in self.situations if x.get("passage") == pid],
                 "facts": [self._fact_view(f) for f in self.facts if any(e["passage"] == pid for e in f["evidence"])],
                 "claims": [self._claim_view(c) for c in self.claims if any(e["passage"] == pid for e in c["evidence"])]}
 
@@ -147,8 +173,16 @@ class Mirror:
     def causal_view(self) -> dict[str, Any]:
         c = self.causal
         keys = ("settings", "selection", "variables", "n_rows", "class_size", "pins", "feedback_claims", "conflicts",
-                "n_tests", "depth_reached", "empty")
+                "n_tests", "depth_reached", "empty", "view", "views", "independences", "untestable", "coverage", "ambiguous")
         out = {k: c.get(k) for k in keys}
+        vig = c.get("vignettes")
+        out["vignettes"] = {k: vig.get(k) for k in ("targets", "n_vignettes", "class_size", "diff", "responses")} if vig else None
+        tiers = Counter(cell["tier"] for x in self.situations if x["origin"] == "corpus"
+                        for v, cell in x["cells"].items() if v in self.variables)
+        out["tiers"] = dict(tiers)
+        out["situations"] = sum(1 for x in self.situations if x["origin"] == "corpus")
+        out["transformation"] = self.transformation
+        out["typical"] = self.typical
         out["edges"] = [{**e, "a_label": self.label(e["a"]), "b_label": self.label(e["b"])} for e in c.get("edges", [])]
         out["removed"] = c.get("removed", [])[:200]
         out["labels"] = {v: self.label(v) for v in self.variables}
@@ -158,11 +192,15 @@ class Mirror:
         e = next((x for x in self.causal.get("edges", []) if {x["a"], x["b"]} == {a, b}), None)
         if e is None:
             raise KeyError(f"{a}|{b}")
-        rows = [i for i, _ in enumerate(self.passage_ids) if self.matrix[a][i] and self.matrix[b][i]]
-        together = [{"passage": self.passage_ids[i], "locator": self.passages[self.passage_ids[i]]["locator"],
-                     "levels": [self.matrix[a][i], self.matrix[b][i]]} for i in rows[:30]]
+        tiers = sit.VIEWS[self.view]
+        both = [x for x in self.situations if all((x["cells"].get(v) or {}).get("tier") in tiers for v in (a, b))]
+        corpus = [x for x in both if x["origin"] == "corpus"]
+        vig = [x for x in both if x["origin"] == "vignette"]
+        d = next((d for d in (self.causal.get("vignettes") or {}).get("diff", []) if {d["a"], d["b"]} == {a, b}), None)
         return {**e, "a_label": self.label(a), "b_label": self.label(b), "chain": self._why_chain(e),
-                "together": together, "n_together": len(rows),
+                "together": [self.situation_view(x, brief=True, only=(a, b)) for x in corpus[:40]], "n_together": len(corpus),
+                "vignettes": [self.situation_view(x, brief=True, only=(a, b)) for x in vig[:20]], "n_vignettes": len(vig),
+                "vignette_change": d,
                 "stated": [self._claim_view(c) for c in self.claims if {c["cause"], c["effect"]} == {a, b}]}
 
     def _why_chain(self, e: dict[str, Any]) -> list[dict[str, Any]]:
@@ -183,9 +221,44 @@ class Mirror:
         return out
 
     def effect(self, x: str, y: str) -> dict[str, Any]:
-        data = {v: self.matrix[v] for v in self.variables}
-        return {"data_only": effects(data, self.cpdag, x, y), "with_pins": effects(data, self.model, x, y),
-                "x_label": self.label(x), "y_label": self.label(y)}
+        data, _ = sit.table(self.situations, self.variables, self.view)
+        out = {"data_only": effects(data, self.cpdag, x, y), "with_pins": effects(data, self.model, x, y),
+               "x_label": self.label(x), "y_label": self.label(y)}
+        if self.vmodel is not None:
+            vdata, _ = sit.table(self.situations, self.variables, self.view, origins=("corpus", "vignette"))
+            out["with_vignettes"] = effects(vdata, self.vmodel, x, y)
+        return out
+
+    # ---------- situations and the subject transformation ----------
+
+    def situation_view(self, x: dict[str, Any], brief: bool = False, only: tuple[str, ...] | None = None) -> dict[str, Any]:
+        cells = [{"id": v, "label": self.label(v), "variable": v in self.variables, **c}
+                 for v, c in x["cells"].items() if only is None or v in only]
+        order = {t: i for i, t in enumerate(sit.TIERS)}
+        cells.sort(key=lambda c: (order.get(c["tier"], 9), not c["variable"], c["label"]))
+        if brief:
+            cells = [c for c in cells if c["tier"] != "defaulted"] if only is None else cells
+        return {k: x.get(k) for k in ("id", "passage", "locator", "origin", "kind", "description", "contrast", "target",
+                                      "based_on", "tensions")} | {"cells": cells}
+
+    def profile(self) -> dict[str, Any]:
+        """What the subject transformation knows about the subject, and how well it did on held-out situations."""
+        from .subject import build_profile
+
+        corpus = [x for x in self.situations if x["origin"] == "corpus"]
+        prof = build_profile(self.label(SELF), self.nodes, self.facts, self.kb, self.claims, corpus, self.passages,
+                             self.variables)
+        return {"profile": prof, **self.transformation}
+
+    def situation(self, sid: str) -> dict[str, Any]:
+        if sid not in self.by_situation:
+            raise KeyError(sid)
+        return self.situation_view(self.by_situation[sid])
+
+    def situations_of(self, nid: str, origin: str = "corpus", limit: int = 60) -> list[dict[str, Any]]:
+        hits = [x for x in self.situations if x["origin"] == origin and nid in x["cells"]
+                and x["cells"][nid]["tier"] != "defaulted"]
+        return [self.situation_view(x, brief=True) for x in hits[:limit]]
 
     # ---------- for the archetype face ----------
 
