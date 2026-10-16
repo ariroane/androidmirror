@@ -120,7 +120,7 @@ def build(spec: CorpusSpec, data_dir: Path, coder: Any = None, limit: int | None
     if not book or book.get("_key") != key:
         log("consolidating the codebook")
         use_llm = getattr(coder, "uses_llm", False) and llm.available() or not getattr(coder, "uses_llm", False)
-        book = cb.build(codings, spec.subject, coder.consolidate if use_llm else None)
+        book = cb.build(codings, spec.subject, coder.consolidate if use_llm else None, workers=workers, log=log)
         book["_key"] = key
         _write(root / "codebook.json", book)
     concepts = book["concepts"]

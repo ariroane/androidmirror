@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable
 
 from .schema import EVALUATIONS, SELF, VARIABLE_KINDS
@@ -60,7 +61,8 @@ def collect_mentions(codings: dict[str, dict[str, Any]]) -> dict[str, dict[str, 
 
 
 def build(codings: dict[str, dict[str, Any]], subject: str,
-          consolidate: Callable[[list[str], str], list[dict[str, Any]]] | None = None) -> dict[str, Any]:
+          consolidate: Callable[[list[str], str], list[dict[str, Any]]] | None = None,
+          workers: int = 4, log: Callable[[str], None] = lambda s: None) -> dict[str, Any]:
     mentions = collect_mentions(codings)
     concepts: dict[str, dict[str, Any]] = {}
     label_map: dict[str, list] = {}  # norm label -> [concept id, polarity]
@@ -79,9 +81,15 @@ def build(codings: dict[str, dict[str, Any]], subject: str,
         for n, rec in sorted(mentions.items(), key=lambda kv: (kv[1]["kinds"].most_common(1)[0][0], -len(kv[1]["passages"]))):
             gloss = rec["glosses"][0] if rec["glosses"] else ""
             lines.append(f"{n} | {rec['kinds'].most_common(1)[0][0]} | {len(rec['passages'])} | {gloss}")
-        groups: list[dict[str, Any]] = []
-        for i in range(0, len(lines), BATCH):
-            groups += _consolidate_safely(consolidate, lines[i:i + BATCH], subject)
+        batches = [lines[i:i + BATCH] for i in range(0, len(lines), BATCH)]
+        log(f"  {len(lines)} labels in {len(batches)} batches")
+        results: list[list[dict[str, Any]]] = [[] for _ in batches]
+        with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
+            futures = {pool.submit(_consolidate_safely, consolidate, b, subject): i for i, b in enumerate(batches)}
+            for done, fut in enumerate(as_completed(futures), 1):
+                results[futures[fut]] = fut.result()
+                log(f"  consolidated {done}/{len(batches)}")
+        groups = [c for r in results for c in r]  # batch order, so results do not depend on timing
         for c in groups:
             cid = slug(c["id"] or c["label"])
             if cid in (SELF, *EVALUATIONS):
