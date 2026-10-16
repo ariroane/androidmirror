@@ -1,4 +1,4 @@
-"""Empirical investigation, interventions, the Breaker and the Chernoff metrics.
+"""Empirical investigation, interventions, the Breaker and the diagnostic metrics.
 
 Everything here reads a snapshot of the ontology and never changes it.
 """
@@ -119,7 +119,7 @@ def breaker(onto: Ontology, top: int = 5) -> dict[str, Any]:
 
 
 def metrics(onto: Ontology) -> dict[str, float]:
-    """Scalar readings of the Mirror's state, each 0..1, for the Chernoff face."""
+    """Scalar readings of the Mirror's state, each 0..1, shown as diagnostics on the Face tab."""
     n = len(onto.nodes)
     if n == 0:
         return {"size": 0.0, "coherence": 0.0, "tension": 0.0, "valence": 0.5, "fragility": 0.0, "certainty": 0.0}

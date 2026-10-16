@@ -45,7 +45,7 @@ Patches from the engines carry a `kind` (`refactor`, `break`, `chain` or `evolve
 | Change | Raise or lower a node in the causal model and see what moves; optionally have Claude retell it in Marcus's voice | Only for the retelling |
 | Investigate | Most important nodes; the Breaker's cut points, load-bearing causes and tensions | No |
 | Engines | Run the Refactorer, Breaker, Chainer and Evolver: find suggestions and queue any of them, or propose your own split, cut, merge or chain | No |
-| Face | A Chernoff face drawn from the Mirror's state (coherence, tension, valence, fragility, certainty, size) | No |
+| Face | The Major Arcana card whose patterns the Mirror (or one idea's neighbourhood) shows most strongly, drawn as a face, with the nodes and quotes that matched; plus the raw diagnostics | No |
 
 The buttons above the canvas show both graphs, only the descriptive one, or only the causal one.
 
@@ -131,7 +131,7 @@ All commands are `python -m androidmirror <command>`; add `--data DIR` before th
 | `ingest --book 2 --start 0 --count 3` | Claude reads Book II, sections 1 to 3, and queues proposals |
 | `pending [--status proposed]` | List patches (also `approved`, `rejected`, `rolled_back`) |
 | `approve ID... --as "Your Name"` | Approve patches by id, or `all` |
-| `investigate` | Importance, Breaker findings and face metrics as JSON |
+| `investigate` | Importance, Breaker findings and diagnostic metrics as JSON |
 | `break-candidates`, `break-split`, `break-sever` | Breaker (see above) |
 | `chain merge`, `chain align`, `chain import` | Chainer (see above) |
 | `evolve` | Evolver (see above) |
@@ -146,7 +146,8 @@ The web app uses these routes; every one that changes anything only queues a pro
 
 | Route | What it does |
 | --- | --- |
-| `GET /api/status`, `GET /api/graph`, `GET /api/metrics` | Version and counts, both graphs, face metrics |
+| `GET /api/status`, `GET /api/graph`, `GET /api/metrics` | Version and counts, both graphs, diagnostic metrics |
+| `GET /api/archetype?focus=<node>` | The best-matching Major Arcana card for the Mirror, or for one node's two-hop neighbourhood, with evidence (read-only) |
 | `GET /api/patches?status=proposed` | List patches |
 | `POST /api/patches/{id}/approve` · `/reject` · `/rollback` | Decide on a patch (body: `{"approver": "...", "note": "..."}`) |
 | `POST /api/ingest` | Claude reads sections (`book`, `start`, `count`) |
@@ -171,7 +172,8 @@ androidmirror/
   ingest.py       reads corpus chunks and queues self-contained patches
   corpus.py       downloads and splits Meditations into "Book II, 1"-style sections
   query.py        finds relevant nodes and builds grounded facts for answers
-  analysis.py     importance, interventions (do-operator on the DAG), Breaker findings, face metrics
+  analysis.py     importance, interventions (do-operator on the DAG), Breaker findings, diagnostic metrics
+  archetypes.py   Face tab: matches the graphs to the cards in data/archetypes_major_arcana.json against a shuffled null
   refactor.py     Refactorer: duplicate merges, relation names, transitive edges, orphans
   breaker.py      Breaker: split and sever across both graphs (breaker_api.py adds routes and commands)
   chainer.py      Chainer: merge nodes; chain another mirror's ontology in
