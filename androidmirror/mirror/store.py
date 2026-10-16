@@ -190,13 +190,16 @@ class Mirror:
 
     def edge(self, a: str, b: str) -> dict[str, Any]:
         e = next((x for x in self.causal.get("edges", []) if {x["a"], x["b"]} == {a, b}), None)
-        if e is None:
+        d = next((d for d in (self.causal.get("vignettes") or {}).get("diff", []) if {d["a"], d["b"]} == {a, b}), None)
+        if e is None and d is None:
             raise KeyError(f"{a}|{b}")
+        if e is None:  # an edge only the vignettes find: no corpus evidence to show
+            e = {"a": a, "b": b, "directed": False, "status": None, "why": None, "member_direction": [a, b], "effect": None,
+                 "stability": {}, "weakest_test": None}
         tiers = sit.VIEWS[self.view]
         both = [x for x in self.situations if all((x["cells"].get(v) or {}).get("tier") in tiers for v in (a, b))]
         corpus = [x for x in both if x["origin"] == "corpus"]
         vig = [x for x in both if x["origin"] == "vignette"]
-        d = next((d for d in (self.causal.get("vignettes") or {}).get("diff", []) if {d["a"], d["b"]} == {a, b}), None)
         return {**e, "a_label": self.label(a), "b_label": self.label(b), "chain": self._why_chain(e),
                 "together": [self.situation_view(x, brief=True, only=(a, b)) for x in corpus[:40]], "n_together": len(corpus),
                 "vignettes": [self.situation_view(x, brief=True, only=(a, b)) for x in vig[:20]], "n_vignettes": len(vig),

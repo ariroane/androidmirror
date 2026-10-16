@@ -443,8 +443,8 @@ def leak_checks(ctx, coder, filled, profile, index, sample: int, seed: int, work
 # ---------- vignettes ----------
 
 
-def vignettes(ctx: dict[str, Any], coder: Any, trusted: list[str], causal: dict[str, Any], per_level: int = 3,
-              max_targets: int = 8, seed: int = 17, workers: int = 6, log: Callable[[str], None] = print) -> dict[str, Any]:
+def vignettes(ctx: dict[str, Any], coder: Any, trusted: list[str], causal: dict[str, Any], per_level: int = 6,
+              max_targets: int = 6, seed: int = 17, workers: int = 6, log: Callable[[str], None] = print) -> dict[str, Any]:
     """Factorial vignettes: set one variable low or high in a situation like the subject's, ask about the rest.
 
     Targets are trusted variables on edges the corpus leaves unoriented first,

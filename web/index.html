@@ -6,8 +6,8 @@
 <title>Android Mirror</title>
 <script src="/vendor/cytoscape.min.js"></script>
 <style>
-  :root { --bg:#f6f5f2; --panel:#fff; --ink:#1d1d1b; --quiet:#6b6a66; --line:#dddbd5; --accent:#3b6fd8; --pos:#2f8f5b; --neg:#c2453b; --mid:#9a8f6a; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#161615; --panel:#20201f; --ink:#ecebe7; --quiet:#a19f99; --line:#3a3936; --accent:#7aa2f0; --pos:#5cc08a; --neg:#ec7a70; --mid:#c2b68c; } }
+  :root { --bg:#f6f5f2; --panel:#fff; --ink:#1d1d1b; --quiet:#6b6a66; --line:#dddbd5; --accent:#3b6fd8; --pos:#2f8f5b; --neg:#c2453b; --mid:#9a8f6a; --vig:#d9822b; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#161615; --panel:#20201f; --ink:#ecebe7; --quiet:#a19f99; --line:#3a3936; --accent:#7aa2f0; --pos:#5cc08a; --neg:#ec7a70; --mid:#c2b68c; --vig:#f0a050; } }
   * { box-sizing: border-box; }
   body { margin:0; font:14px/1.45 system-ui, sans-serif; background:var(--bg); color:var(--ink); height:100vh; display:flex; flex-direction:column; }
   header { display:flex; gap:12px; align-items:center; padding:10px 16px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
@@ -45,6 +45,15 @@
   .passage { white-space:pre-wrap; border-left:3px solid var(--accent); padding:6px 10px; margin:6px 0; background:var(--bg); }
   ul.tree { padding-left:16px; margin:4px 0; } ul.tree li { margin:2px 0; }
   details > summary { cursor:pointer; }
+  .vig { color:var(--vig); border-color:var(--vig); } .vigcard { border-color:var(--vig); border-style:dashed; }
+  .chip { display:inline-block; border-radius:10px; padding:0 7px; font-size:12px; margin:2px 2px 0 0; border:1px solid var(--line); }
+  .chip.t-set { border-color:var(--vig); background:color-mix(in srgb, var(--vig) 14%, transparent); }
+  .chip.t-stated { border-color:var(--ink); }
+  .chip.t-implied { border-color:var(--accent); border-style:dashed; }
+  .chip.t-defaulted { color:var(--quiet); border-style:dotted; }
+  .chip.t-reading { color:var(--quiet); border-color:var(--mid); border-style:dotted; background:color-mix(in srgb, var(--mid) 12%, transparent); }
+  .chip.t-common-sense { color:var(--quiet); font-style:italic; }
+  .bar { display:inline-block; height:8px; background:var(--accent); border-radius:2px; vertical-align:middle; }
   @media (max-width: 760px) { main { flex-direction:column; } aside { width:auto; max-width:none; height:58vh; border-left:0; border-top:1px solid var(--line); } }
 </style>
 </head>
@@ -117,15 +126,32 @@ const loc = (pid, text) => `<button class="link" data-passage="${esc(pid)}">${es
 const quote = e => `<div class="small">${loc(e.passage, e.locator)} <span class="q">“${esc(e.quote)}”</span></div>`;
 
 // ---------- canvas ----------
-async function drawGraph() {
+let showVig = store.get('showVig') !== '0', graphCache = null;
+const VIG_CHANGE = {'added by vignettes':'added', 'oriented by vignettes':'oriented', 'reversed by vignettes':'reversed', 'removed by vignettes':'removed', 'unoriented by vignettes':'unoriented'};
+async function drawGraph(keepPositions) {
   let g;
-  try { g = await api(`/api/graph?layer=${layer}`); } catch (err) { return; }
+  if (keepPositions && graphCache && graphCache.layer === layer) g = graphCache;
+  else { try { g = graphCache = await api(`/api/graph?layer=${layer}`); } catch (err) { return; } }
   g.nodes.forEach(n => labels[n.id] = n.label);
   const els = g.nodes.map(n => ({data:{id:n.id, label:n.label, ev:n.evaluation||'none', size:12 + Math.min(26, Math.sqrt(n.support||1) * 3), variable:n.variable ? 1 : 0}}));
-  g.edges.forEach(e => els.push({data:{id:e.id, source:e.source, target:e.target, label: layer === 'kg' ? String(e.rel).replace(/_/g,' ') : (e.effect == null ? '' : (e.effect > 0 ? '+' : '') + e.effect.toFixed(2)),
-    status:e.status || 'kg', directed:e.directed ? 1 : 0, w: layer === 'kg' ? 1 + Math.min(4, Math.log2(1 + (e.support||1))) : 1 + 4 * (e.stability ?? 0.5), sign: (e.effect||0) >= 0 ? 1 : -1}}));
+  const fmt = x => x == null ? '' : (x > 0 ? '+' : '') + x.toFixed(2);
+  g.edges.forEach(e => {
+    if (layer === 'kg') { els.push({data:{id:e.id, source:e.source, target:e.target, label:String(e.rel).replace(/_/g,' '), status:'kg', directed:1, vig:'none', w:1 + Math.min(4, Math.log2(1 + (e.support||1)))}}); return; }
+    // the corpus graph, with what the vignettes change drawn in their own colour when shown
+    if (e.origin === 'vignette' && !showVig) return;
+    let [src, dst] = [e.source, e.target], vig = 'none', directed = e.directed;
+    if (e.origin === 'vignette') vig = 'added';
+    else if (showVig && e.change && VIG_CHANGE[e.change]) {
+      vig = VIG_CHANGE[e.change];
+      if ((vig === 'oriented' || vig === 'reversed') && e.vignette_direction) { [src, dst] = e.vignette_direction; directed = true; }
+    }
+    els.push({data:{id:e.id, source:src, target:dst, label:fmt(e.effect), status:e.status || 'reversible', directed:directed ? 1 : 0, vig,
+      w:1 + 4 * (e.stability ?? 0.5)}});
+  });
   const evColor = {good:css('--pos'), bad:css('--neg'), indifferent:css('--mid'), conflicted:'#b05fd8', none:'#8a8a86'};
+  const pos = keepPositions && cy ? Object.fromEntries(cy.nodes().map(n => [n.id(), {...n.position()}])) : null;
   if (!cy) {
+    const vc = css('--vig');
     cy = cytoscape({ container: $('#cy'), wheelSensitivity: 0.3, style: [
       {selector:'node', style:{'label':'data(label)','font-size':12,'color':css('--ink'),'text-valign':'bottom','text-margin-y':4,'width':'data(size)','height':'data(size)','background-color':e => evColor[e.data('ev')]}},
       {selector:'node[variable = 1]', style:{'border-width':2,'border-color':css('--accent')}},
@@ -134,17 +160,49 @@ async function drawGraph() {
       {selector:'edge[status = "compelled"]', style:{'line-color':css('--ink'),'target-arrow-color':css('--ink')}},
       {selector:'edge[status = "pinned"]', style:{'line-color':css('--accent'),'target-arrow-color':css('--accent')}},
       {selector:'edge[status = "implied by pins"]', style:{'line-color':css('--accent'),'target-arrow-color':css('--accent'),'line-style':'dotted'}},
+      // what only the vignettes say, in the vignette colour (section 4a of the design)
+      {selector:'edge[vig = "added"]', style:{'line-color':vc,'target-arrow-color':vc,'line-style':'solid','color':vc}},
+      {selector:'edge[vig = "oriented"], edge[vig = "reversed"]', style:{'target-arrow-shape':'triangle','target-arrow-color':vc,'arrow-scale':1.6}},
+      {selector:'edge[vig = "reversed"]', style:{'source-arrow-shape':'tee','source-arrow-color':vc}},
+      {selector:'edge[vig = "unoriented"]', style:{'target-arrow-shape':'tee','target-arrow-color':vc}},
+      {selector:'edge[vig = "removed"]', style:{'line-color':vc,'target-arrow-color':vc,'line-style':'dashed','line-dash-pattern':[6, 4]}},
       {selector:'.hl', style:{'border-width':4,'border-color':'#e0a800'}},
     ]});
     cy.on('tap', 'node', e => showNode(e.target.id()));
     cy.on('tap', 'edge', e => { if (layer === 'causal') { const [a, b] = [e.target.data('source'), e.target.data('target')]; tab('causal'); showEdge(a, b); } });
   }
   cy.elements().remove(); cy.add(els);
-  cy.layout({name:'cose', animate:false, randomize:true, nodeRepulsion:() => 500000, idealEdgeLength:() => 100, nodeOverlap:40, gravity:0.3, numIter:2500, padding:40}).run();
+  if (pos && cy.nodes().every(n => pos[n.id()])) cy.layout({name:'preset', positions:n => pos[n.id()], fit:false}).run();
+  else cy.layout({name:'cose', animate:false, randomize:true, nodeRepulsion:() => 500000, idealEdgeLength:() => 100, nodeOverlap:40, gravity:0.3, numIter:2500, padding:40}).run();
+  const vigCount = layer === 'causal' ? g.edges.filter(e => e.origin === 'vignette' || (e.change && VIG_CHANGE[e.change])).length : 0;
   $('#legend').innerHTML = layer === 'kg'
     ? `Node colour: the subject's evaluation (<span class="pos">good</span>, <span class="neg">bad</span>, indifferent, none). Stated facts the subject holds${g.hidden ? `; ${g.hidden} less-connected concepts hidden` : ''}.`
-    : 'Black arrow: compelled by the data. Blue: oriented by the subject\'s stated claims. Dashed, no arrow: reversible. Thickness: stability across resamples.';
+    : `Black arrow: compelled by the subject's situations. Blue: oriented by the subject's stated claims. Dashed, no arrow: reversible. Thickness: stability across resamples.` +
+      (g.vignettes ? `<br><span class="vig">Orange</span>: what vignettes add (${vigCount} edge${vigCount === 1 ? '' : 's'}): an orange line is new, an orange arrowhead is a direction only vignettes give, a dashed orange line is an edge vignettes remove.
+        <label class="small"><input type="checkbox" id="vigtoggle" ${showVig ? 'checked' : ''}> show vignettes</label>` : '');
+  const t = $('#vigtoggle');
+  if (t) t.onchange = () => { showVig = t.checked; store.set('showVig', showVig ? '1' : '0'); drawGraph(true); };
 }
+
+// ---------- situations ----------
+const TIER_NOTE = {set:'set by a vignette', stated:'stated in the text', implied:'follows from the subject\'s beliefs or cited reading', defaulted:'the subject\'s usual level', reading:'Claude\'s reading, uncited or failed a leak check', 'common sense':'what anyone would say'};
+const lvl = l => l > 0 ? '<span class="pos">high</span>' : l < 0 ? '<span class="neg">low</span>' : '<span class="muted">typical</span>';
+function cellChip(c) {
+  const why = c.tier === 'implied' && c.source === 'belief' && c.why ? `from ${c.why.text}` : c.cite ? `cites ${c.cite}` : c.quote ? `“${c.quote}”` : '';
+  return `<span class="chip t-${esc(c.tier.replace(' ', '-'))}" title="${esc(TIER_NOTE[c.tier] || c.tier)}${why ? ': ' + esc(why) : ''}">
+    <button class="link" data-node="${esc(c.id)}">${esc(c.label)}</button> ${lvl(c.level)}</span>`;
+}
+function situationCard(s, focus) {
+  const cells = [...s.cells].sort((a, b) => (b.id === focus) - (a.id === focus) || TIER_ORDER.indexOf(a.tier) - TIER_ORDER.indexOf(b.tier));
+  const head = s.origin === 'vignette'
+    ? `<span class="pill vig">vignette</span>${s.based_on ? ` <span class="small muted">built on ${esc(s.based_on)}</span>` : ''}`
+    : `${loc(s.passage, s.locator)} <span class="small muted">${esc(s.kind)}${s.contrast ? ', contrasted with ' + esc(s.contrast) : ''}</span>`;
+  return `<div class="card sit${s.origin === 'vignette' ? ' vigcard' : ''}"><div>${head}</div><div class="small">${esc(s.description)}</div>
+    <div>${cells.map(cellChip).join(' ')}</div>
+    ${(s.tensions || []).length ? `<div class="small neg">Tension: ${s.tensions.map(t => `${lbl(t.variable)} is stated ${t.stated > 0 ? 'high' : t.stated < 0 ? 'low' : 'typical'}, but “${esc(t.why.text)}” says otherwise`).join('; ')}</div>` : ''}</div>`;
+}
+const TIER_ORDER = ['set', 'stated', 'implied', 'defaulted', 'reading', 'common sense'];
+const tierKey = () => `<div class="small muted">${TIER_ORDER.map(t => `<span class="chip t-${t.replace(' ', '-')}" title="${esc(TIER_NOTE[t])}">${t}</span>`).join(' ')}</div>`;
 
 // ---------- node ----------
 async function showNode(id) {
@@ -171,7 +229,10 @@ async function showNode(id) {
         ${c.evidence.slice(0, 2).map(quote).join('')}</div>`).join('');
     if (n.causal.edges.length) h += `<h4>In the causal model</h4><table>${n.causal.edges.map(e => `<tr class="click" data-edge="${esc(e.a)}|${esc(e.b)}"><td>${lbl(e.a)} ${e.directed ? '→' : '—'} ${lbl(e.b)}</td><td>${esc(e.status)}</td></tr>`).join('')}</table>`;
     if (n.violations.length) h += `<h4>Inconsistencies</h4>` + n.violations.map(v => `<div class="small neg">${esc(v.type.replace(/_/g, ' '))}: ${esc(v.why || (v.facts || []).join(', '))}</div>`).join('');
-    h += `<h4>Passages (${n.mentions.length})</h4>` + (n.mentions.slice(0, 60).map(m => `<div class="small">${loc(m.passage, m.locator)} <span class="${m.level > 0 ? 'pos' : 'neg'}">${m.level > 0 ? '+' : '−'}</span> <span class="q">“${esc(m.quote)}”</span></div>`).join('') || '<p class="muted">None.</p>');
+    if (n.typical) h += `<div class="small">Usual level for the subject: ${lvl(n.typical.level)} (${Math.round(100 * n.typical.share)}% of ${n.typical.n} situations that state it).</div>`;
+    if ((n.situations || []).length) h += `<h4>Situations (${n.situations.length}${sel ? ' of ' + sel.support : ''})</h4>${tierKey()}<details open><summary class="small muted">What the subject's situations say about ${esc(n.label)}</summary>${n.situations.slice(0, 30).map(s => situationCard(s, n.id)).join('')}</details>`;
+    if ((n.vignettes || []).length) h += `<h4 class="vig">Vignettes (${n.vignettes.length})</h4><p class="small muted">Invented situations answered through the subject transformation. Kept apart from the subject's own passages.</p><details><summary class="small">Show</summary>${n.vignettes.slice(0, 30).map(s => situationCard(s, n.id)).join('')}</details>`;
+    h += `<h4>Passages (${n.mentions.length})</h4>` + (n.mentions.slice(0, 60).map(m => `<div class="small">${loc(m.passage, m.locator)} <span class="q">“${esc(m.quote)}”</span></div>`).join('') || '<p class="muted">None.</p>');
     h += '<div id="ptext"></div>';
     el.innerHTML = h;
   } catch (err) { fail(el, err); }
@@ -182,7 +243,7 @@ async function showPassage(pid, target) {
   try {
     const p = await api(`/api/passage/${encodeURIComponent(pid)}`);
     el.innerHTML = `<h4>${esc(p.locator)}</h4><div class="passage">${esc(p.text)}</div>` +
-      (p.levels.length ? `<div class="small">Measured here: ${p.levels.map(l => `<button class="link" data-node="${esc(l.id)}">${esc(l.label)}</button> <span class="${l.level > 0 ? 'pos' : 'neg'}">${l.level > 0 ? '+' : '−'}</span>`).join(', ')}</div>` : '') +
+      ((p.situations || []).length ? `<h4>Situations read here (${p.situations.length})</h4>` + p.situations.map(x => situationCard(x)).join('') : '') +
       (p.facts.length ? `<div class="small">Facts coded: ${p.facts.map(f => `${esc(f.s_label)} ${f.neg ? 'not ' : ''}<i>${rel(f.r)}</i> ${esc(f.o_label)}`).join('; ')}</div>` : '') +
       (p.claims.length ? `<div class="small">Claims coded: ${p.claims.map(c => `${esc(c.cause_label)} ${c.sign > 0 ? 'raises' : 'lowers'} ${esc(c.effect_label)}`).join('; ')}</div>` : '');
     el.scrollIntoView({behavior:'smooth', block:'start'});
@@ -226,6 +287,8 @@ async function checkHolds(s, r, o) {
 }
 
 // ---------- causal ----------
+const pct = x => x == null ? '–' : Math.round(100 * x) + '%';
+const pval = t => t.p < 0.0001 ? 'p < 0.0001' : 'p = ' + t.p;
 async function loadCausal() {
   const el = $('#causal');
   try {
@@ -234,51 +297,102 @@ async function loadCausal() {
     if (c.empty || !c.edges) { el.innerHTML = '<p class="muted">Too few variables passed selection to run discovery.</p>'; return; }
     const size = s => s ? (s.count != null ? s.count.toLocaleString() : s.log10 != null ? `about 10^${s.log10}` : 'too large to count here') : '?';
     const sel = c.selection.filter(r => r.status === 'selected'), ex = c.selection.filter(r => r.status !== 'selected');
-    const st = c.settings;
+    const st = c.settings, vg = c.vignettes, tr = c.transformation || {};
+    const vigByPair = Object.fromEntries((vg ? vg.diff : []).map(d => [[d.a, d.b].sort().join('|'), d]));
     const statusOrder = {compelled:0, pinned:1, 'implied by pins':2, reversible:3};
     const edges = [...c.edges].sort((a, b) => statusOrder[a.status] - statusOrder[b.status] || Math.abs(b.effect || 0) - Math.abs(a.effect || 0));
     const vopts = sel.map(r => `<option value="${esc(r.id)}">${esc(r.label)}</option>`).join('');
-    el.innerHTML = `<p>${c.variables.length} variables measured across ${c.n_rows} passages. PC at α = ${st.alpha}, conditioning on up to ${st.max_depth} variables (${c.n_tests.toLocaleString()} tests).</p>
+    const tierTotal = Object.values(c.tiers || {}).reduce((a, b) => a + b, 0) || 1;
+    const viewNames = {stated:'Stated only', implied:'Stated + implied', all:'Everything (+ defaults, readings)'};
+    let h = `<p>The subject's own causal model, learned from ${c.situations.toLocaleString()} situations they describe (${c.n_rows.toLocaleString()} used), over ${c.variables.length} of their own concepts.
+      PC at α = ${st.alpha}, conditioning on up to ${st.max_depth} variables (${c.n_tests.toLocaleString()} tests). Evidence used: <b>${esc(viewNames[c.view] || c.view)}</b>.</p>
+      <h4>How each value is known</h4>${tierKey()}
+      <table>${TIER_ORDER.filter(t => c.tiers[t]).map(t => `<tr><td><span class="chip t-${t.replace(' ', '-')}">${t}</span></td><td>${c.tiers[t].toLocaleString()}</td><td><span class="bar" style="width:${Math.max(2, 140 * c.tiers[t] / tierTotal)}px"></span></td><td class="small muted">${esc(TIER_NOTE[t])}</td></tr>`).join('')}</table>
+      <p class="small muted">A concept a situation doesn't touch is unknown there, not zero. Each test uses only the situations where all its variables are known${c.untestable ? `; ${c.untestable} test(s) had too few such situations` : ''}.</p>
       <table><tr><th></th><th>DAGs in the class</th><th>Reversible edges</th></tr>
-      <tr><td>Data alone</td><td>${size(c.class_size.data)}</td><td>${c.class_size.data.undirected_edges}</td></tr>
-      <tr><td>With the subject's claims</td><td>${size(c.class_size.with_pins)}</td><td>${c.class_size.with_pins.undirected_edges}</td></tr></table>
+      <tr><td>The situations</td><td>${size(c.class_size.data)}</td><td>${c.class_size.data.undirected_edges}</td></tr>
+      <tr><td>With the subject's claims</td><td>${size(c.class_size.with_pins)}</td><td>${c.class_size.with_pins.undirected_edges}</td></tr>
+      ${vg ? `<tr class="vig"><td>With vignettes</td><td>${size(vg.class_size)}</td><td>${vg.class_size.undirected_edges}</td></tr>` : ''}</table>
+      ${c.class_size.data.note ? `<p class="small muted">${esc(c.class_size.data.note)}</p>` : ''}
       <div id="edgeout"></div>
       <h4>Edges</h4>
-      <table><tr><th>Edge</th><th>Status</th><th>Effect</th><th>Stable</th></tr>${edges.map(e => `<tr class="click" data-edge="${esc(e.a)}|${esc(e.b)}">
-        <td>${esc(e.a_label)} ${e.directed ? '→' : '—'} ${esc(e.b_label)}</td><td>${esc(e.status)}</td>
+      <table><tr><th>Edge</th><th>Status</th><th>Effect</th><th>Stable</th></tr>${edges.map(e => { const d = vigByPair[[e.a, e.b].sort().join('|')];
+        return `<tr class="click" data-edge="${esc(e.a)}|${esc(e.b)}">
+        <td>${esc(e.a_label)} ${e.directed ? '→' : '—'} ${esc(e.b_label)}</td><td>${esc(e.status)}${d && d.change !== 'same' ? `<div class="small vig">${esc(d.change)}</div>` : ''}</td>
         <td class="${(e.effect || 0) >= 0 ? 'pos' : 'neg'}">${e.effect == null ? '' : (e.effect > 0 ? '+' : '') + e.effect.toFixed(2)}</td>
-        <td>${e.stability.adjacent != null ? Math.round(100 * e.stability.adjacent) + '%' : ''}</td></tr>`).join('')}</table>
+        <td>${e.stability.adjacent != null ? pct(e.stability.adjacent) : ''}</td></tr>`; }).join('')}
+      ${(vg ? vg.diff.filter(d => d.change === 'added by vignettes') : []).map(d => `<tr class="click vig" data-edge="${esc(d.a)}|${esc(d.b)}"><td>${lbl(d.a)} ${Array.isArray(d.with_vignettes) ? '→' : '—'} ${lbl(d.b)}</td><td>added by vignettes</td><td>${d.effect_with_vignettes == null ? '' : d.effect_with_vignettes.toFixed(2)}</td><td></td></tr>`).join('')}</table>
       <h4>What does changing one variable do to another?</h4>
       <p class="muted small">Possible effects across every DAG in the class (IDA), without listing the class.</p>
       <div class="row"><select id="ex">${vopts}</select> on <select id="ey">${vopts}</select><button class="b primary" id="ebtn">Estimate</button></div>
       <div id="eout"></div>
-      <h4>The subject's causal claims, tested against the data (${c.pins.length})</h4>
+      <h4>The subject's causal claims, tested against their situations (${c.pins.length})</h4>
       ${c.pins.length ? `<table>${c.pins.map(p => `<tr class="click" data-edge="${esc(p.src)}|${esc(p.dst)}"><td>${lbl(p.src)} → ${lbl(p.dst)}</td><td>${esc(p.status)}</td><td class="muted small">${esc(p.source)}${p.support && p.support < 1e6 ? ', ' + p.support : ''}</td></tr>`).join('')}</table>` : '<p class="muted">No grounded claims between two selected variables.</p>'}
+      ${(c.independences || []).length ? `<h4>The subject's "not this but that" and "whether or not", tested (${c.independences.length})</h4><table>${c.independences.map(i => `<tr><td>${i.kind === 'whether_or_not' ? `${lbl(i.y)} whether or not ${lbl(i.x)}` : `${lbl(i.x)} doesn't matter for ${lbl(i.y)} once ${i.given.map(lbl).join(', ')} is known`}</td><td class="${i.status === 'agrees' ? 'pos' : i.status === 'disagrees' ? 'neg' : 'muted'}">${esc(i.status)}</td><td class="small muted">${i.test ? pval(i.test) + ', n = ' + i.test.n : ''} ${(i.evidence || []).slice(0, 1).map(e => loc(e.passage, e.locator)).join('')}</td></tr>`).join('')}</table>` : ''}
       ${c.feedback_claims.length ? `<p class="small">Claimed in both directions (feedback): ${c.feedback_claims.map(f => `${lbl(f.pair[0])} ⇄ ${lbl(f.pair[1])}`).join(', ')}</p>` : ''}
-      ${(c.ambiguous || []).length ? `<p class="small muted">Undecided colliders (separating sets split evenly): ${c.ambiguous.map(a => a.triple.map(lbl).join(' – ')).join('; ')}</p>` : ''}
-      ${c.conflicts.length ? `<p class="small neg">${c.conflicts.map(x => x.note || `conflicting colliders on ${x.edge.map(lbl).join(' – ')}`).map(esc).join('; ')}</p>` : ''}
-      <h4>Variables (${sel.length} chosen of ${c.selection.length} candidates)</h4>
-      <table>${sel.map(r => `<tr class="click" data-node="${esc(r.id)}"><td>${esc(r.label)}</td><td class="small muted">${esc(r.reason)}</td></tr>`).join('')}</table>
+      ${(c.ambiguous || []).length ? `<p class="small muted">Undecided colliders (the tests can't tell): ${c.ambiguous.map(a => (a.triple || a).map(lbl).join(' – ')).join('; ')}</p>` : ''}
+      ${c.conflicts.length ? `<p class="small neg">${c.conflicts.map(x => x.note || `conflicting colliders on ${x.edge.map(lbl).join(' – ')}`).map(esc).join('; ')}</p>` : ''}`;
+    if (c.views && Object.keys(c.views).length > 1) h += `<h4>Does the answer depend on what counts as evidence?</h4>
+      <table><tr><th>Evidence</th><th>Values</th><th>Edges</th><th>DAGs</th><th>Differs from the default</th></tr>${Object.entries(c.views).map(([k, v]) => `<tr${k === c.view ? ' style="font-weight:600"' : ''}><td>${esc(viewNames[k] || k)}</td><td>${v.cells.toLocaleString()}</td><td>${v.edges.length}</td><td>${size(v.class_size)}</td><td class="small">${k === c.view ? 'default' : v.only_here || v.missing_here ? `${v.only_here} more, ${v.missing_here} fewer` : 'same edges'}</td></tr>`).join('')}</table>
+      <p class="small muted">Run <code>python -m androidmirror causal --view stated</code> (or implied, all) to switch.</p>`;
+    h += transformationHtml(tr, c);
+    h += `<h4>Variables (${sel.length} chosen of ${c.selection.length} candidates)</h4>
+      <table>${sel.map(r => `<tr class="click" data-node="${esc(r.id)}"><td>${esc(r.label)}</td><td class="small muted">${esc(r.reason)}${c.typical && c.typical[r.id] ? `; usually ${c.typical[r.id].level > 0 ? 'high' : c.typical[r.id].level < 0 ? 'low' : 'typical'}` : ''}</td></tr>`).join('')}</table>
       <details><summary class="muted">Left out (${ex.length})</summary><table>${ex.map(r => `<tr class="click" data-node="${esc(r.id)}"><td>${esc(r.label)}</td><td class="small muted">${esc(r.reason)}</td></tr>`).join('')}</table></details>
-      <p class="muted small">Assumptions: passages are the units; each variable is −1, 0 (not engaged) or +1 in a passage; no hidden common causes; faithfulness. Neighbouring passages are not independent, so resampling is done in blocks. The model describes the corpus, not the subject's life.</p>`;
+      <p class="muted small">Assumptions: situations are the units; each variable is low, typical or high in a situation, or unknown; no hidden common causes; faithfulness. This is the subject's model of how things work as their writing shows it, not a model of the world or of the subject's life. Neighbouring passages are not independent, so resampling is done in blocks.</p>`;
+    el.innerHTML = h;
     if ($('#ey').options.length > 1) $('#ey').selectedIndex = 1;
     $('#ebtn').onclick = runEffect;
+    const pb = $('#profbtn'); if (pb) pb.onclick = loadProfile;
   } catch (err) { fail(el, err); }
 }
+function transformationHtml(tr, c) {
+  const v = tr.validation, f = tr.fill, g = tr.vignettes;
+  let h = `<h4>The subject transformation</h4><p class="small muted">Claude answers as the subject, from a profile built only from the corpus, and must cite a passage or belief. It is scored on held-out situations against plain Claude and a generic adult, before it may fill in anything.</p>`;
+  if (!v) return h + `<p class="small">Not validated yet. Run <code>python -m androidmirror validate</code>, then <code>fill</code> and <code>vignettes</code>.</p>`;
+  const row = (name, s) => `<tr><td>${name}</td><td>${s.answered} of ${s.asked}</td><td>${pct(s.precision)}</td><td>${pct(s.accuracy)}</td></tr>`;
+  h += `<table><tr><th>On ${v.held_out} held-out situations</th><th>Answered</th><th>Right when answering</th><th>Right overall</th></tr>
+    ${row('As the subject', v.overall.subject)}${row('Plain Claude', v.overall.plain)}${row('A generic adult', v.overall.generic)}</table>
+    <details><summary class="small">Per variable (${v.variables.filter(x => x.trusted).length} trusted of ${v.variables.length})</summary><table>${v.variables.map(x => `<tr><td>${esc(x.label)}</td><td class="${x.trusted ? 'pos' : 'neg'}">${x.trusted ? 'trusted' : 'not trusted'}</td><td class="small muted">${esc(x.why)}</td></tr>`).join('')}</table></details>`;
+  if (f) h += `<p class="small">Fill: ${f.trusted.length} trusted variables filled where the text is silent. Prior leak rate on ${f.leak_checks.length} checked answers: <b>${pct(f.prior_leak_rate)}</b> (answers that held up without their citation, or matched what a generic adult says, are demoted to Claude's reading).</p>`;
+  else h += `<p class="small muted">Not filled yet: <code>python -m androidmirror fill</code>.</p>`;
+  if (g) h += `<p class="small vig">Vignettes: ${g.n} invented situations setting ${g.targets.map(lbl).join(', ')}. ${c.vignettes ? `${c.vignettes.responses.length} responses tested. What they change is drawn in orange.` : ''}</p>`;
+  else h += `<p class="small muted">No vignettes yet: <code>python -m androidmirror vignettes</code>.</p>`;
+  return h + `<div class="row"><button class="b" id="profbtn">Show the subject profile</button></div><div id="profout"></div>`;
+}
+async function loadProfile() {
+  const out = $('#profout');
+  try {
+    const { profile: p } = await api('/api/profile');
+    const list = (title, xs, f) => xs && xs.length ? `<h4>${title} (${xs.length})</h4><ul>${xs.slice(0, 40).map(x => `<li class="small">${f(x)}</li>`).join('')}</ul>` : '';
+    out.innerHTML = `<div class="card"><p class="small muted">Everything the transformation knows about ${esc(p.subject)}, all drawn from the corpus.</p>
+      ${list('Vocabulary', p.vocabulary, x => `<b>${esc(x.label)}</b>: ${esc(x.gloss)}`)}
+      ${list('Beliefs', p.beliefs, x => `${esc(x.text)} <span class="muted">${esc(x.cite)}</span>`)}
+      ${list('Denials', p.denials, x => `${esc(x.text)} <span class="muted">${esc(x.cite)}</span>`)}
+      ${list('Follows from the beliefs', p.derived, x => esc(x.text || x))}
+      ${list('Causal beliefs', p.causal, x => `${esc(x.text)} <span class="muted">${esc(x.cite)}, ${x.support}</span>`)}
+      ${list('Voice passages', p.voice, x => `<span class="muted">${esc(x.locator)}</span> ${esc(x.text.slice(0, 200))}`)}
+      ${p.others && p.others.length ? `<p class="small">Views of others it must not adopt: ${p.others.map(esc).join(', ')}</p>` : ''}</div>`;
+  } catch (err) { fail(out, err); }
+}
+const dirText = (d, vc) => Array.isArray(d) ? d.map(lbl).join(' → ') : d === 'absent' ? 'no edge' : `${lbl(vc.a)} — ${lbl(vc.b)}, unoriented`;
 async function showEdge(a, b) {
   if (!causalData) await loadCausal();
   const out = $('#edgeout'); if (!out) return;
   try {
     const e = await api(`/api/edge?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`);
-    const st = e.stability, t = e.weakest_test;
-    const dirs = Object.entries(st).filter(([k]) => k.includes('>')).map(([k, v]) => `${k.split('>').map(lbl).join(' → ')} ${Math.round(100 * v)}%`);
-    out.innerHTML = `<div class="card"><h3>${esc(e.a_label)} ${e.directed ? '→' : '—'} ${esc(e.b_label)} <span class="pill">${esc(e.status)}</span></h3>
-      ${e.chain.length ? `<div><b>Why this direction</b><ul class="tree">${e.chain.map(w => `<li>${w.edge.map(lbl).join(' → ')}: ${esc(w.text || w.rule)}</li>`).join('')}</ul></div>` : '<p class="small muted">The data alone cannot orient this edge: both directions fit equally.</p>'}
-      ${t ? `<p class="small">Weakest test of the link: ${lbl(t.x)} and ${lbl(t.y)} given ${t.given.length ? t.given.map(lbl).join(', ') : 'nothing'}, p ${t.p < 0.0001 ? '< 0.0001' : '= ' + t.p}${t.enough_data ? '' : ' (too little data to test)'}.</p>` : ''}
-      ${st.runs ? `<p class="small">In ${st.runs} resamples of the passages: linked ${Math.round(100 * (st.adjacent || 0))}%, undirected ${Math.round(100 * (st.undirected || 0))}%${dirs.length ? ', ' + dirs.join(', ') : ''}.</p>` : ''}
-      <p class="small">Adjusted effect in the drawn member (${lbl(e.member_direction[0])} → ${lbl(e.member_direction[1])}): ${e.effect ?? 'n/a'}${e.coverage != null ? `, using ${Math.round(100 * e.coverage)}% of passages` : ''}.</p>
+    const st = e.stability || {}, t = e.weakest_test, vc = e.vignette_change;
+    const dirs = Object.entries(st).filter(([k]) => k.includes('>')).map(([k, v]) => `${k.split('>').map(lbl).join(' → ')} ${pct(v)}`);
+    const arrow = e.directed ? '→' : e.status ? '—' : '·';
+    out.innerHTML = `<div class="card"><h3>${esc(e.a_label)} ${arrow} ${esc(e.b_label)} <span class="pill">${esc(e.status || 'not in the corpus graph')}</span></h3>
+      ${e.status ? (e.chain.length ? `<div><b>Why this direction</b><ul class="tree">${e.chain.map(w => `<li>${w.edge.map(lbl).join(' → ')}: ${esc(w.text || w.rule)}</li>`).join('')}</ul></div>` : '<p class="small muted">The situations alone cannot orient this edge: both directions fit equally.</p>') : ''}
+      ${t ? `<p class="small">Weakest test of the link: ${lbl(t.x)} and ${lbl(t.y)} given ${t.given.length ? t.given.map(lbl).join(', ') : 'nothing'}, ${pval(t)}, on ${t.n} situations${t.enough_data ? '' : ' (too little data to test)'}.</p>` : ''}
+      ${st.runs ? `<p class="small">In ${st.runs} resamples: linked ${pct(st.adjacent || 0)}, undirected ${pct(st.undirected || 0)}${dirs.length ? ', ' + dirs.join(', ') : ''}.</p>` : ''}
+      ${e.effect != null ? `<p class="small">Effect of high vs low ${lbl(e.member_direction[0])} on ${lbl(e.member_direction[1])}, adjusted, in the drawn member: ${e.effect}${e.both_known != null ? `; both known in ${e.both_known} situations` : ''}.</p>` : ''}
+      ${vc && vc.change !== 'same' ? `<div class="card vigcard"><b class="vig">${esc(vc.change)}</b><div class="small">Corpus alone: ${dirText(vc.corpus, vc)}. With vignettes: ${dirText(vc.with_vignettes, vc)}.</div></div>` : ''}
       ${e.stated.length ? `<div><b>What the text claims</b>${e.stated.map(c => `<div class="small">${esc(c.cause_label)} ${c.sign > 0 ? 'raises' : 'lowers'} ${esc(c.effect_label)} (${c.support})</div>${c.evidence.slice(0, 3).map(quote).join('')}`).join('')}</div>` : ''}
-      <details><summary class="small">Passages engaging both (${e.n_together})</summary>${e.together.map(p => `<div class="small">${loc(p.passage, p.locator)} ${p.levels.map(l => l > 0 ? '+' : '−').join(' ')}</div>`).join('')}</details>
+      <details><summary class="small">Situations where both are known (${e.n_together})</summary>${e.together.slice(0, 40).map(s => situationCard(s)).join('')}</details>
+      ${e.n_vignettes ? `<details><summary class="small vig">Vignettes behind this edge (${e.n_vignettes})</summary>${e.vignettes.slice(0, 30).map(s => situationCard(s)).join('')}</details>` : ''}
       <div id="edgeptext"></div></div>`;
     out.scrollIntoView({behavior:'smooth', block:'start'});
   } catch (err) { fail(out, err); }
@@ -288,10 +402,10 @@ async function runEffect() {
   if (x === y) { out.innerHTML = '<p class="muted">Pick two different variables.</p>'; return; }
   try {
     const r = await api(`/api/effect?x=${encodeURIComponent(x)}&y=${encodeURIComponent(y)}`);
-    const show = (name, s) => s.min == null ? `<tr><td>${name}</td><td colspan="2" class="muted">not estimable</td></tr>` :
-      `<tr><td>${name}</td><td>${s.min === s.max ? s.min : `${s.min} to ${s.max}`}</td><td>${s.sign === 'mixed' ? 'depends on the member' : (s.sign === '+' ? 'raises' : 'lowers') + (s.identified ? ', identified' : `, at least ${s.min_abs}`)}</td></tr>`;
-    out.innerHTML = `<p>Effect of more ${esc(r.x_label)} on ${esc(r.y_label)}:</p><table><tr><th></th><th>Possible effects</th><th>Reading</th></tr>${show('Data alone', r.data_only)}${show('With claims', r.with_pins)}</table>
-      <p class="muted small">${r.with_pins.n_parent_sets} possible parent set(s) of ${esc(r.x_label)}. Effect: E[${esc(r.y_label)} | do(${esc(r.x_label)} present)] − E[… | not engaged], on the −1..1 scale.</p>`;
+    const show = (name, s, cls) => !s || s.min == null ? `<tr class="${cls || ''}"><td>${name}</td><td colspan="2" class="muted">not estimable</td></tr>` :
+      `<tr class="${cls || ''}"><td>${name}</td><td>${s.min === s.max ? s.min : `${s.min} to ${s.max}`}</td><td>${s.sign === 'mixed' ? 'depends on the member' : (s.sign === '+' ? 'raises' : 'lowers') + (s.identified ? ', identified' : `, at least ${s.min_abs}`)}</td></tr>`;
+    out.innerHTML = `<p>Effect of more ${esc(r.x_label)} on ${esc(r.y_label)}:</p><table><tr><th></th><th>Possible effects</th><th>Reading</th></tr>${show('The situations', r.data_only)}${show('With claims', r.with_pins)}${r.with_vignettes ? show('With vignettes', r.with_vignettes, 'vig') : ''}</table>
+      <p class="muted small">${r.with_pins.n_parent_sets} possible parent set(s) of ${esc(r.x_label)}. Effect: E[${esc(r.y_label)} | do(${esc(r.x_label)} high)] − E[… | do(${esc(r.x_label)} low)], with levels low −1, typical 0, high +1, so it runs from −2 to 2.</p>`;
   } catch (err) { fail(out, err); }
 }
 
