@@ -27,6 +27,10 @@ load_dotenv()
 DEFAULT_MODEL = os.environ.get("ANDROIDMIRROR_MODEL", "claude-opus-5-5")
 
 
+class LLMTruncated(RuntimeError):
+    """The answer was cut off or malformed; a smaller request usually succeeds."""
+
+
 class LLMUnavailable(RuntimeError):
     pass
 
@@ -121,11 +125,12 @@ def _client():
     return anthropic.Anthropic()
 
 
-def _json_call(system: str, user: str, schema: dict[str, Any], effort: str = "medium") -> dict[str, Any]:
+def _json_call(system: str, user: str, schema: dict[str, Any], effort: str = "medium",
+               max_tokens: int = 16000) -> dict[str, Any]:
     client = _client()
     response = client.messages.create(
         model=DEFAULT_MODEL,
-        max_tokens=16000,
+        max_tokens=max_tokens,
         system=system,
         messages=[{"role": "user", "content": user}],
         output_config={"effort": effort, "format": {"type": "json_schema", "schema": schema}},
@@ -136,8 +141,13 @@ def _json_call(system: str, user: str, schema: dict[str, Any], effort: str = "me
     )
     if response.stop_reason == "refusal":
         raise LLMUnavailable("Claude declined this request")
+    if response.stop_reason == "max_tokens":
+        raise LLMTruncated(f"Claude's answer hit the {max_tokens}-token limit before the JSON was complete")
     text = next(b.text for b in response.content if b.type == "text")
-    return json.loads(text)
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError as e:
+        raise LLMTruncated(f"Claude's answer was not complete JSON: {e}") from e
 
 
 def extract(passage: str, locator: str, known_nodes: str) -> list[dict[str, Any]]:

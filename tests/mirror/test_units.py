@@ -207,3 +207,26 @@ def test_cli_routes_p1_and_causal(tmp_path, capsys):
     main(["--data", str(tmp_path), "causal", "--corpus", str(spec), "--alpha", "0.01", "--bootstrap", "0"])
     assert "variables" in capsys.readouterr().out
     main(["p1", "--data", str(tmp_path), "pending"])  # the paused app still answers
+
+
+def test_consolidation_survives_truncated_answers():
+    from androidmirror.mirror import codebook as cb
+
+    codings = {f"p{i}": {"concepts": [{"label": f"idea{i}", "kind": "belief", "gloss": "", "level": 1, "quote": ""}]}
+               for i in range(40)}
+    calls = []
+
+    def flaky(lines, subject):
+        calls.append(len(lines))
+        if len(lines) > 10:
+            raise RuntimeError("answer cut off")
+        if any(l.startswith("idea3 ") for l in lines):
+            raise RuntimeError("still bad")
+        return [{"id": "x_" + l.split(" |")[0], "label": l.split(" |")[0], "kind": "belief", "gloss": "",
+                 "variable": True, "members": [{"label": l.split(" |")[0], "polarity": 1}]} for l in lines]
+
+    book = cb.build(codings, "someone", flaky)
+    assert max(calls) == 40 and min(calls) <= cb.MIN_BATCH
+    assert book["label_map"]["idea25"][0] == "x_idea25"   # consolidated after splitting
+    assert book["label_map"]["idea3"][0] == "idea3"     # its batch kept failing: normal-form fallback
+    assert len(book["label_map"]) == 40

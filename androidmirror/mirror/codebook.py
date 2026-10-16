@@ -14,7 +14,8 @@ from typing import Any, Callable
 
 from .schema import EVALUATIONS, SELF, VARIABLE_KINDS
 
-BATCH = 250
+BATCH = 60  # labels per consolidation call; larger batches can overflow Claude's answer
+MIN_BATCH = 8
 
 
 def norm(label: str) -> str:
@@ -78,16 +79,18 @@ def build(codings: dict[str, dict[str, Any]], subject: str,
         for n, rec in sorted(mentions.items(), key=lambda kv: (kv[1]["kinds"].most_common(1)[0][0], -len(kv[1]["passages"]))):
             gloss = rec["glosses"][0] if rec["glosses"] else ""
             lines.append(f"{n} | {rec['kinds'].most_common(1)[0][0]} | {len(rec['passages'])} | {gloss}")
+        groups: list[dict[str, Any]] = []
         for i in range(0, len(lines), BATCH):
-            for c in consolidate(lines[i:i + BATCH], subject):
-                cid = slug(c["id"] or c["label"])
-                if cid in (SELF, *EVALUATIONS):
-                    continue
-                add(cid, c["label"], c["kind"], c["gloss"], bool(c["variable"]))
-                for m in c["members"]:
-                    n = norm(m["label"])
-                    if n in mentions and n not in label_map:
-                        label_map[n] = [cid, m["polarity"]]
+            groups += _consolidate_safely(consolidate, lines[i:i + BATCH], subject)
+        for c in groups:
+            cid = slug(c["id"] or c["label"])
+            if cid in (SELF, *EVALUATIONS):
+                continue
+            add(cid, c["label"], c["kind"], c["gloss"], bool(c["variable"]))
+            for m in c["members"]:
+                n = norm(m["label"])
+                if n in mentions and n not in label_map:
+                    label_map[n] = [cid, m["polarity"]]
 
     for n, rec in mentions.items():  # anything consolidation left out stands on its own
         if n in label_map:
@@ -104,6 +107,24 @@ def build(codings: dict[str, dict[str, Any]], subject: str,
             if lab != concepts[cid]["label"].lower() and lab not in concepts[cid]["aliases"]:
                 concepts[cid]["aliases"].append(lab if pol == 1 else f"{lab} (opposite)")
     return {"concepts": concepts, "label_map": label_map}
+
+
+def _consolidate_safely(consolidate, lines: list[str], subject: str) -> list[dict[str, Any]]:
+    """Consolidate one batch; if the answer fails, halve the batch and retry.
+
+    A batch that still fails at MIN_BATCH labels is left to the normal-form
+    grouping, so one bad answer never stops a build.
+    """
+    from ..llm import LLMUnavailable
+    try:
+        return consolidate(lines, subject)
+    except LLMUnavailable:
+        raise
+    except Exception:
+        if len(lines) <= MIN_BATCH:
+            return []
+        mid = len(lines) // 2
+        return _consolidate_safely(consolidate, lines[:mid], subject) + _consolidate_safely(consolidate, lines[mid:], subject)
 
 
 def resolve(codebook: dict[str, Any], label: str) -> tuple[str, int] | None:
