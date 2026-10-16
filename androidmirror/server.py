@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import analysis, corpus, evolver, llm, query
+from . import analysis, archetypes, corpus, evolver, llm, query
 from .ingest import ingest_chunks
 from .ontology import Ontology
 from .steward import GovernanceError, Steward, normalize
@@ -170,6 +170,14 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
     @app.get("/api/metrics")
     def metrics() -> dict:
         return analysis.metrics(onto)
+
+    @app.get("/api/archetype")
+    def archetype(focus: str | None = None) -> dict:
+        """The archetype the Mirror (or one node's neighbourhood) most resembles. Read-only."""
+        try:
+            return archetypes.match(onto.graph_snapshot(), focus=focus)
+        except KeyError:
+            raise HTTPException(status_code=404, detail=f"no such node: {focus}") from None
 
     from . import chainer, refactor
 

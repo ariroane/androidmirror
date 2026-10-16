@@ -27,6 +27,10 @@ def test_review_flow(tmp_path, monkeypatch):
     assert c.post("/api/query", json={"question": "Why does vexation matter?"}).json()["facts"]
     assert c.get("/api/investigate").json()["breaker"]["cut_points"]
     assert set(c.get("/api/metrics").json()) >= {"coherence", "tension", "valence"}
+    face = c.get("/api/archetype").json()
+    assert face["archetype"]["name"] == "The Hierophant" and face["evidence"]
+    assert c.get("/api/archetype", params={"focus": "vexation"}).json()["focus"] == "vexation"
+    assert c.get("/api/archetype", params={"focus": "nope"}).status_code == 404
     assert c.post("/api/ingest", json={"book": 1}).status_code in (400, 502)  # no key or no network here
 
 
