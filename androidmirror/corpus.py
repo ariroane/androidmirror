@@ -1,4 +1,4 @@
-"""Seed corpus: Marcus Aurelius, Meditations (George Long translation, public domain).
+"""Seed corpus: Marcus Aurelius, Meditations (Meric Casaubon's 1634 translation, public domain).
 
 The text is downloaded from Project Gutenberg on first use and cached in
 data/corpus/. It is split into chunks of one numbered section each, so every
@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 GUTENBERG_URL = "https://www.gutenberg.org/cache/epub/2680/pg2680.txt"
-WORK = "Marcus Aurelius, Meditations (tr. George Long)"
+WORK = "Marcus Aurelius, Meditations (tr. Meric Casaubon)"
 
 BOOK_WORDS = ["FIRST", "SECOND", "THIRD", "FOURTH", "FIFTH", "SIXTH",
               "SEVENTH", "EIGHTH", "NINTH", "TENTH", "ELEVENTH", "TWELFTH"]
@@ -61,6 +61,10 @@ def split_sections(text: str, max_chars: int = 6000) -> list[Chunk]:
     body = strip_gutenberg(text).replace("\r\n", "\n")
     book_re = re.compile(r"^\s*THE\s+(" + "|".join(BOOK_WORDS) + r")\s+BOOK\s*$", re.M)
     heads = list(book_re.finditer(body))
+    if heads:  # the translator's appendix, notes and glossary follow the last book
+        back = re.compile(r"^\s*(APPENDIX|NOTES|GLOSSARY|INDEX)\s*$", re.M).search(body, heads[-1].end())
+        if back:
+            body = body[: back.start()]
     chunks: list[Chunk] = []
     for i, m in enumerate(heads):
         book = BOOK_WORDS.index(m.group(1)) + 1

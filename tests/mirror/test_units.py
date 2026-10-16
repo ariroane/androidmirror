@@ -230,3 +230,13 @@ def test_consolidation_survives_truncated_answers():
     assert book["label_map"]["idea25"][0] == "x_idea25"   # consolidated after splitting
     assert book["label_map"]["idea3"][0] == "idea3"     # its batch kept failing: normal-form fallback
     assert len(book["label_map"]) == 40
+
+
+def test_meditations_split_stops_before_translators_back_matter():
+    from androidmirror.corpus import split_sections
+
+    text = ("THE FIRST BOOK\n\nI. Of my grandfather Verus.\n\nTHE TWELFTH BOOK\n\nI. All those things.\n\n"
+            "II. Go thy ways then well pleased.\n\n\nAPPENDIX\n\nI. A letter of Fronto.\n\nNOTES\n\nII. A note.\n")
+    chunks = split_sections(text)
+    assert [(c.book, c.section) for c in chunks] == [(1, "I"), (12, "I"), (12, "II")]
+    assert "Fronto" not in chunks[-1].text

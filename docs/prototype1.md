@@ -8,7 +8,7 @@ It combines works through a combination of three knowledge structures: Claude (t
 - **Descriptive ontology:** a knowledge graph of people, virtues, vices, emotions, beliefs, practices and values, and how they relate.
 - **Causal ontology:** a DAG saying what drives what, with a sign, a strength and a confidence on each edge.
 
-This initial prototype (Build A) is seeded with **Marcus Aurelius, *Meditations*** (George Long translation, public domain, downloaded from Project Gutenberg).
+This initial prototype (Build A) is seeded with **Marcus Aurelius, *Meditations*** (Meric Casaubon translation, public domain, downloaded from Project Gutenberg).
 
 ## Run it on your computer
 

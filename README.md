@@ -9,7 +9,7 @@ Two corpora come with it:
 
 | Corpus | Subject | Units |
 |---|---|---|
-| `meditations` | Marcus Aurelius, *Meditations* (George Long translation, Project Gutenberg) | about 490 numbered sections |
+| `meditations` | Marcus Aurelius, *Meditations* (Meric Casaubon translation, Project Gutenberg #2680) | about 410 numbered sections |
 | `fomc` | The Federal Reserve's FOMC, every policy statement since 1994 (federalreserve.gov) | one statement per meeting |
 
 Any other subject works too: write a spec in `data/corpora/` pointing at a text file, or at a folder of `.txt` documents.
