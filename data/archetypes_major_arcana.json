@@ -11,7 +11,7 @@
   },
   "relation_families": {
     "LINEAGE": ["learned_from", "taught", "mentored_by", "mentored", "inherited_from", "studied_under", "influenced_by"],
-    "EMBODY": ["exemplifies", "embodies", "practices", "displays", "shows"],
+    "EMBODY": ["exemplifies", "embodies", "practices", "displays", "shows", "expresses"],
     "COMMIT": ["values", "believes_in", "holds", "strives_for", "aspires_to", "commits_to", "seeks"],
     "OPPOSE": ["opposes", "rejects", "resists", "avoids", "contrasts_with", "counters"],
     "PART": ["part_of", "includes", "is_a", "contains", "member_of"]

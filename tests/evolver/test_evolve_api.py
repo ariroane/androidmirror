@@ -1,7 +1,7 @@
 from fastapi.testclient import TestClient
 
 from androidmirror import evolver
-from androidmirror.server import create_app
+from androidmirror.p1_server import create_app
 
 
 def test_evolve_endpoint_only_proposes(tmp_path, monkeypatch):

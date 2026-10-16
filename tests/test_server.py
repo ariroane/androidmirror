@@ -4,7 +4,7 @@ from fastapi.testclient import TestClient
 
 from androidmirror.ingest import load_seed
 from androidmirror.patches import Op
-from androidmirror.server import create_app
+from androidmirror.p1_server import create_app
 
 SEED = Path(__file__).resolve().parent.parent / "data" / "seed_book1.json"
 

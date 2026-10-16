@@ -1,16 +1,22 @@
 # Android Mirror
 
-A contextual generation engine: a reflective model the subjective operating frame of a person, persons, or system, built from their language.
-It combines works through a combination of three knowledge structures: Claude (through the Anthropic API) with two linked ontologies over the same nodes:
+A reflective model of a subjective system (a person, a group, an institution) built only from its own words. Prototype 2 reads a whole corpus once and builds two linked structures over the same concepts:
 
-- **Descriptive ontology:** a knowledge graph of people, virtues, vices, emotions, beliefs, practices and values, and how they relate.
-- **Causal ontology:** a DAG saying what drives what, with a sign, a strength and a confidence on each edge.
+- **Descriptive ontology:** a knowledge graph with a schema and rules, so it can be reasoned over, not only browsed. Every answer it gives has a proof that bottoms out in quotes.
+- **Causal model:** the corpus treated as an observational dataset (passages are the units, concepts are the variables), from which the PC algorithm finds the **Markov equivalence class** of causal DAGs the text supports. The subject's own stated causal claims are then applied as background knowledge, so you can see what the data establishes on its own and what the subject's claims add.
 
-This initial prototype (Build A) is seeded with **Marcus Aurelius, *Meditations*** (George Long translation, public domain, downloaded from Project Gutenberg).
+Two corpora come with it:
+
+| Corpus | Subject | Units |
+|---|---|---|
+| `meditations` | Marcus Aurelius, *Meditations* (George Long translation, Project Gutenberg) | about 490 numbered sections |
+| `fomc` | The Federal Reserve's FOMC, every policy statement since 1994 (federalreserve.gov) | one statement per meeting |
+
+Any other subject works too: write a spec in `data/corpora/` pointing at a text file, or at a folder of `.txt` documents.
 
 ## Run it on your computer
 
-You need Python 3.10 or newer.
+You need Python 3.10 or newer and an Anthropic API key in a local `.env` (never committed).
 
 ```powershell
 git clone https://github.com/ariroane/androidmirror
@@ -19,178 +25,105 @@ python -m venv .venv
 .venv\Scripts\activate          # macOS/Linux: source .venv/bin/activate
 pip install -e .
 copy .env.example .env          # then put your key in .env: ANTHROPIC_API_KEY=sk-ant-...
+
+python -m androidmirror build --corpus meditations --limit 30   # a cheap trial on 30 passages
+python -m androidmirror build --corpus meditations              # the whole book
+python -m androidmirror build --corpus fomc                     # downloads the statements first
 python -m androidmirror serve
 ```
 
-Open http://localhost:8000. The key stays in `.env` on your machine; `.env` is ignored by git.
+Open http://localhost:8000. Building makes two Claude calls per passage plus a few to consolidate the vocabulary, cached under `data/mirror/<corpus>/`; a build that stops resumes where it left off. Extending `--limit` codes only the new passages, but re-measures every passage if the list of candidate variables changes. `--model` picks a cheaper model for the bulk coding.
 
-To start with something on the canvas, queue the hand-drafted patches from Books I and II and approve them in the Review tab:
+## How a Mirror is built
 
-```powershell
-python -m androidmirror seed
-```
+1. **Passages.** The corpus is split into units of observation: numbered sections for the Meditations, one statement per meeting for the FOMC.
+2. **Open coding (one Claude call per passage).** Concept mentions, each with its level in the passage (+1 present or affirmed, −1 absent, negated or to be got rid of); descriptive statements in a fixed relation vocabulary, each with its modality (asserts, prescribes, asks, entertains), attribution (the subject, or someone it quotes) and polarity; and causal claims with how their direction is grounded (an explicit connective, temporal order, or inferred). Passages are coded independently, so nothing depends on reading order.
+3. **Codebook.** All labels are consolidated into one fixed set of concepts: synonyms merged, opposites folded in with polarity −1 ("freedom from anger" is anger at −1), word senses kept apart, and each concept marked as a *quantity* (can be more or less present) or not.
+4. **Measurement (one Claude call per passage).** With the codebook fixed, each passage is measured against the same candidate variables. This is what turns the corpus into a dataset: every passage is a row, every variable a column, each cell −1, 0 (not engaged) or +1.
+5. **Knowledge graph and inference** (no Claude calls; see below).
+6. **Causal discovery** (no Claude calls; see below). Re-run it with other settings any time: `python -m androidmirror causal --alpha 0.01 --max-vars 20`.
 
-## The one rule: nothing changes without your approval
+There is no review queue: the whole corpus seeds the Mirror at once. To review, click any node or edge; every fact, claim and variable shows the passages it came from.
 
-Every part of the Mirror, whether it is Claude reading the book or one of the engines below, only **proposes** patches. A patch lists its operations, why it was made, and the quote it rests on. Proposals wait in the Review tab (or `pending` on the command line) until a person approves them by name. The Steward then applies the patch to both graphs at once and stores its inverse, so any approved patch can be rolled back. Duplicates are dropped, and quotes are checked against the book.
+## The descriptive ontology: built for inference
 
-Patches from the engines carry a `kind` (`refactor`, `break`, `chain` or `evolve`) so you can tell where each came from. Most also refuse to apply if a node they touch changed after they were proposed; propose again to get a fresh one.
+Following the two families of inference in Stanford CS520's notes ([What are some inference algorithms?](https://web.stanford.edu/class/cs520/2020/notes/What_Are_Some_Inference_Algorithms.html)):
+
+- **Taxonomic.** Every node has a declared *kind* (agent, disposition, emotion, practice, belief, state, faculty, concept, class, ...). `is_a` is transitive, so membership and evaluation are inherited: *justice is a virtue* and *virtue is good* gives *justice is good*. The evaluations `good`, `bad` and `indifferent` are built-in classes that form a partition, so calling something both good and bad is a detectable inconsistency.
+- **Rule-based.** Thirteen relations with declared domains, ranges and properties: `is_a`, `part_of`, `requires` and `same_as` are transitive; `opposes` and `same_as` are symmetric; `opposes`, `requires` and `accords_with` pass from a class to its members; `values` and `rejects` pass from a class to its members on the object side (*valuing the good* means *valuing justice*). The rules run bottom-up to a fixpoint, and every derived fact keeps the rule and premises that produced it.
+- **Only what the subject holds is reasoned over.** Its own assertions and self-prescriptions count; quoted views of others, questions and hypotheses are kept as reported speech and never enter inference.
+- **Evidence accumulates.** The tenth passage that says the same thing adds to that fact's support instead of being dropped or overwriting it.
+- **Checks.** Disjoint evaluations, values-and-rejects, a stated denial of something that follows, taxonomy cycles, and domain/range violations are listed in the Knowledge tab with their proofs.
+- **Open world.** A fact that is neither stated nor derived is "not found", never false.
+
+## The causal model: the corpus as observational data
+
+**Choosing the variables matters most.** A concept becomes a DAG node only if it is a quantity (people, places and events cannot be intervened on), is engaged in enough passages for the tests to have power, varies (is not in nearly every passage), and is not a near-duplicate of a stronger variable (near-deterministic pairs are usually one idea or a definition, which breaks faithfulness and belongs in the knowledge graph). The top 25 by support and by how often the subject makes causal claims about them are kept. Every candidate's decision and reason is shown in the Causal tab.
+
+**Discovery.** PC-stable with a G² test for discrete data, conditioning sets up to size 3, and the majority rule for colliders (each unshielded triple is re-tested against every separating set, so one unlucky test cannot orient edges). The result is a CPDAG: compelled edges are the same in every DAG of the class; reversible edges are not.
+
+**Without listing the class.** The class can be super-exponential, so it is never enumerated. Instead the app shows summaries that are cheap to compute:
+
+- each edge's **status**: compelled, pinned by the subject's claims, implied by those pins, or reversible;
+- **why** each arrow points the way it does: the v-structure and the independence test that created it, or the chain of Meek rules from one;
+- the **class size**, counted exactly per chain component (He, Jia and Yu 2015), before and after the subject's claims;
+- **possible effects** of one variable on another across the class (local IDA, Maathuis, Kalisch and Bühlmann 2009), from the variable's neighbourhood alone;
+- each edge's **stability** across 20 block-bootstrap resamples of the passages.
+
+**The subject's claims as background knowledge.** Claims grounded in explicit or temporal wording become pins (required orientations), strongest first. A pin is kept only if a DAG in the class still fits: it can orient a reversible edge, and Meek's rules carry it further, but it cannot reverse a compelled edge or create a collider the data did not find. Each claim is reported as agreeing with the data, applied, contradicted, or with **no link in the data** (the two variables are independent once others are accounted for).
+
+**Assumptions, stated in the app:** passages are the units; no hidden common causes; faithfulness. Neighbouring passages share themes, so resampling is done in blocks. The model describes the writing, not the writer's life.
+
+The structure exposes what the "Shifting the Markov equivalence class" brainstorm needs later (per-edge provenance, class size, IDA ranges, pins and tiers, resampling) without building those levers yet. Tiers are already accepted: `python -m androidmirror causal --tiers tiers.json`.
 
 ## The web app
 
-| Tab | What it does | Needs Claude |
-| --- | --- | --- |
-| Review | Have Claude read sections of a book and propose changes; approve or reject each proposal (from Claude or any engine) with its source quote | Reading: yes. Approving: no |
-| Ask | Ask a question; the Mirror finds the relevant nodes and answers from them | For a written answer (otherwise shows the matching facts) |
-| Change | Raise or lower a node in the causal model and see what moves; optionally have Claude retell it in Marcus's voice | Only for the retelling |
-| Investigate | Most important nodes; the Breaker's cut points, load-bearing causes and tensions | No |
-| Engines | Run the Refactorer, Breaker, Chainer and Evolver: find suggestions and queue any of them, or propose your own split, cut, merge or chain | No |
-| Face | The Major Arcana card whose patterns the Mirror (or one idea's neighbourhood) shows most strongly, drawn as a face, with the nodes and quotes that matched; plus the raw diagnostics | No |
-
-The buttons above the canvas show both graphs, only the descriptive one, or only the causal one.
-
-## The engines
-
-Four engines reshape the ontology. None of them calls Claude or writes to the ontology; each turns the current graphs into proposals for you to review. Each has a panel in the **Engines** tab, and every button there only adds proposals to Review.
-
-### Refactorer: tidy up
-
-Finds redundancy and inconsistency and proposes `refactor` patches:
-
-- **Merge duplicates:** nodes of the same type with nearly identical labels.
-- **Normalize relations:** relation names that differ only in form (`value` / `values`).
-- **Reduce transitive edges:** a causal edge already explained by a longer path and with no quote of its own.
-- **Archive orphans:** nodes with no edges and no quote are marked archived, never deleted.
-
-Contradictions (a direct causal edge whose sign disagrees with a longer path) are listed as findings for you to judge; it never resolves them itself. Each patch shows a risk level and before/after metrics.
-
-```powershell
-python -m androidmirror.refactor --dry     # show suggestions only
-python -m androidmirror.refactor           # queue them for approval
-```
-
-### Breaker: take apart
-
-Finds where the world is fragile and proposes `break` patches:
-
-- **Split** one node into two or more parts. Each relation and causal edge moves to one part (or is copied to every part), so both graphs stay in step. With no parts named, it makes one part per cluster the node alone holds together. The original is archived with `split_into`, never deleted, and a split can never create a cycle.
-- **Sever** two nodes: cut the causal edge and the descriptive relations between them together. The proposal says how much causal influence is lost and warns if the cut disconnects the graph.
-
-Suggestions are ranked by how many separate clusters a node bridges and how weak a link is (people are left out of split suggestions). You can propose them from the Engines tab or here:
-
-```powershell
-python -m androidmirror break-candidates                      # what the Breaker would split or sever
-python -m androidmirror break-split simplicity --parts "Plain living" "Plain speech"
-python -m androidmirror break-sever duty calm                 # cut every link between two nodes
-python -m androidmirror break-sever duty calm --rel RELATION  # only the named relations
-python -m androidmirror break-sever duty calm --keep-causal   # leave the causal edge
-```
-
-### Chainer: join together
-
-Proposes `chain` patches that union things across both graphs:
-
-- **Merge** one or more nodes into a survivor. Their relations and causal edges move to the survivor, duplicate edges collapse (keeping every quote), and the old labels are kept as aliases.
-- **Chain** another mirror's `ontology.json` into this one. Nodes that mean the same thing are aligned onto existing ones; the rest come in under a namespace (`epictetus:fear`), so several mirrors can form one shared context.
-
-It refuses rather than guesses when a union would create a causal cycle, or when two causal edges between the same pair have opposite signs. Use `--on-conflict keep_existing` or `keep_incoming` to say which side wins.
-
-```powershell
-python -m androidmirror chain merge anger wrath --label Anger         # fold Wrath into Anger
-python -m androidmirror chain align other/ontology.json               # preview which nodes would match
-python -m androidmirror chain import other/ontology.json --as Epictetus
-python -m androidmirror chain import other/ontology.json --align fear=anxiety --separate pride
-```
-
-### Evolver: search for a better design
-
-The Evolver looks for a better *shape* of the ontology, not new facts. It takes the operations the Refactorer, Breaker and Chainer propose, tries sequences of them on private copies of both graphs, and scores each resulting design on how well it mirrors the subject:
-
-- **Probes:** claims about the subject the model should reproduce, each tied to a quote (`data/probes_meditations.json`; put your own in `data/probes.json`). A design that loses a probe the current ontology passes is thrown out.
-- **Fidelity, distinctness:** still carries what the current ontology says (following merges and splits), and doesn't fold together concepts the subject names differently.
-- **Coverage, grounding:** keeps the quoted evidence, and stays backed by quotes.
-- **Coherence, robustness, parsimony:** connected, few single points of failure, no bigger than it needs to be.
-
-Structure alone moves the score only a little, so a design wins by keeping what the subject said or reproducing more of it. Every step in a design has to improve on the shorter design it extends. A beam search keeps the best few designs each round; the winners go to Review as one `evolve` patch each, with the steps, the fitness before and after, and which probes it now passes. A design refuses to apply if the ontology changed after it was found.
-
-```powershell
-python -m androidmirror evolve --dry-run                 # show the best designs
-python -m androidmirror evolve --keep 3                  # queue them for approval
-python -m androidmirror evolve --generations 5 --beam 6 --probes my_probes.json
-```
+- **Canvas:** the knowledge graph (node colour is the subject's evaluation) or the causal model (black arrows compelled by the data, blue oriented by the subject's claims, dashed reversible, thickness for stability). Click a node for its card; click a causal edge for its provenance.
+- **Node:** what the concept is, its aliases and classes, stated facts with quotes, inferred facts with their rules, causal claims, its place in the causal model, and every passage it was coded from. Click a locator to read the passage and what was coded from it.
+- **Knowledge:** "does it follow?" queries with proof trees, and the list of inconsistencies.
+- **Causal:** class size, edges with status, effect and stability, the effect explorer, the subject's claims tested against the data, and the variable selection report.
+- **Ask:** the Oracle answers from stated and inferred facts, claims, the causal model and the most relevant passages, and cites passages by locator.
+- **Face:** the Major Arcana card the Mirror most resembles (from Prototype 1), now read from the new graphs.
 
 ## Command reference
 
-All commands are `python -m androidmirror <command>`; add `--data DIR` before the command to use a different data folder.
-
 | Command | What it does |
-| --- | --- |
-| `serve [--port 8000]` | Run the web app |
-| `download` | Download the *Meditations* text |
-| `seed [file]` | Queue hand-drafted patches (default `data/seed_book1.json`) |
-| `ingest --book 2 --start 0 --count 3` | Claude reads Book II, sections 1 to 3, and queues proposals |
-| `pending [--status proposed]` | List patches (also `approved`, `rejected`, `rolled_back`) |
-| `approve ID... --as "Your Name"` | Approve patches by id, or `all` |
-| `investigate` | Importance, Breaker findings and diagnostic metrics as JSON |
-| `break-candidates`, `break-split`, `break-sever` | Breaker (see above) |
-| `chain merge`, `chain align`, `chain import` | Chainer (see above) |
-| `evolve` | Evolver (see above) |
+|---|---|
+| `build --corpus NAME [--limit N] [--workers 6] [--model ID] [--no-measure]` | Code, consolidate, measure, reason and discover. Needs the key. |
+| `causal --corpus NAME [--alpha] [--depth] [--max-vars] [--min-support] [--bootstrap] [--no-claims] [--tiers FILE]` | Re-run only the causal layer. No Claude calls. |
+| `serve [--port 8000]` | The web app. |
+| `ask "question" [--corpus NAME]` | The Oracle from the command line. |
+| `p1 ...` | The paused Prototype 1 app (patch review, Refactorer, Breaker, Chainer, Evolver): [docs/prototype1.md](docs/prototype1.md). |
 
-The Refactorer runs as its own module: `python -m androidmirror.refactor [--dry] [--data DIR]`.
+## Adding a corpus
 
-State lives in `data/` (`ontology.json`, `patches.json`, `corpus/`) and is not committed.
+Write `data/corpora/<id>.json`:
 
-## HTTP API
-
-The web app uses these routes; every one that changes anything only queues a proposal, except approve, reject and rollback.
-
-| Route | What it does |
-| --- | --- |
-| `GET /api/status`, `GET /api/graph`, `GET /api/metrics` | Version and counts, both graphs, diagnostic metrics |
-| `GET /api/archetype?focus=<node>` | The best-matching Major Arcana card for the Mirror, or for one node's two-hop neighbourhood, with evidence (read-only) |
-| `GET /api/patches?status=proposed` | List patches |
-| `POST /api/patches/{id}/approve` · `/reject` · `/rollback` | Decide on a patch (body: `{"approver": "...", "note": "..."}`) |
-| `POST /api/ingest` | Claude reads sections (`book`, `start`, `count`) |
-| `POST /api/query` | Ask a question |
-| `POST /api/intervene` | Raise or lower a node (`node`, `delta`, `retell`) |
-| `GET /api/investigate` | Importance and Breaker findings |
-| `GET /api/refactor`, `POST /api/refactor/queue` | The Refactorer's suggestions; queue some (`keys`) or all of them |
-| `GET /api/break/candidates`, `GET /api/break/links/{node}` | Split and sever suggestions; a node's links |
-| `POST /api/break/split`, `POST /api/break/sever` | Propose a split or a cut |
-| `GET /api/chain/candidates` | Pairs of nodes that look like one concept |
-| `POST /api/chain/merge`, `/align`, `/import` | Propose a merge; preview or propose chaining another ontology |
-| `GET /api/probes`, `POST /api/evolve` | The probes in use; run the Evolver (`generations`, `beam`, `keep`, `queue`) |
-
-## How it is built
-
-```
-androidmirror/
-  ontology.py     two linked graphs; atomic apply_ops returning inverse ops; versioned snapshots
-  patches.py      the Patch / Op format (open `kind`, `extra` for engine-specific fields)
-  steward.py      governance: dedupe, quote check against the corpus, approval queue, rollback
-  llm.py          Claude agents: Cartographer + Causal Modeler, Oracle (answers), Storyteller
-  ingest.py       reads corpus chunks and queues self-contained patches
-  corpus.py       downloads and splits Meditations into "Book II, 1"-style sections
-  query.py        finds relevant nodes and builds grounded facts for answers
-  analysis.py     importance, interventions (do-operator on the DAG), Breaker findings, diagnostic metrics
-  archetypes.py   Face tab: matches the graphs to the cards in data/archetypes_major_arcana.json against a shuffled null
-  refactor.py     Refactorer: duplicate merges, relation names, transitive edges, orphans
-  breaker.py      Breaker: split and sever across both graphs (breaker_api.py adds routes and commands)
-  chainer.py      Chainer: merge nodes; chain another mirror's ontology in
-  evolver/        Evolver: search over engine sequences on sandboxes (operators, fitness, search)
-  server.py       FastAPI app; web/index.html is the UI (Cytoscape.js, vendored)
-  cli.py          the commands above
+```json
+{"id": "letters", "title": "Seneca, Letters", "subject": "Seneca", "file": "corpus/letters.txt", "splitter": "paragraphs"}
 ```
 
-The Mirror's agents use `claude-opus-5-5` by default with structured outputs and server-side refusal fallback; set `ANDROIDMIRROR_MODEL` in `.env` to change it.
+Splitters: `paragraphs` (one text file, short paragraphs merged), `documents` (a folder of `.txt` files, one passage per file or per paragraph with `"unit": "paragraph"`; a first line `# Locator` and a line `group: name` are optional), and `meditations`.
 
-### Writing a new engine
+## Code map
 
-An engine reads `Ontology.graph_snapshot()` (frozen copies of both graphs plus the `version`; every node and edge carries `provenance`) and exposes `propose(snapshot: GraphSnapshot) -> list[Patch]`. Give each patch its own `kind`, a `base_version`, a `rationale`, and anything else in `extra`. Setting `extra["require_fresh_base"] = True` makes the Steward refuse the patch if a node it touches changed after `base_version`. Patches are applied only through the Steward, only with an approval record, and each stores its `inverse`. The Evolver picks up `androidmirror.refactor`, `androidmirror.breaker` and `androidmirror.chainer` through this interface and skips any that is missing.
+| Path | What |
+|---|---|
+| `androidmirror/mirror/corpus.py`, `sources/fomc.py` | Passages; the FOMC downloader |
+| `androidmirror/mirror/coding.py` | The three Claude calls and their schemas |
+| `androidmirror/mirror/codebook.py` | Consolidating labels into concepts |
+| `androidmirror/mirror/schema.py` | Kinds, relations and their logical properties |
+| `androidmirror/mirror/kg.py` | Knowledge base, rules, proofs, checks |
+| `androidmirror/mirror/causal/` | Variable selection, G² test, PC, Meek rules, pins, class size, IDA, bootstrap |
+| `androidmirror/mirror/build.py`, `store.py`, `ask.py` | The pipeline, the read views, the Oracle |
+| `androidmirror/server.py`, `web/index.html` | The app |
+| `androidmirror/p1_*`, `refactor.py`, `breaker.py`, `chainer.py`, `evolver/` | Prototype 1, paused |
 
 ## Tests
 
-```powershell
+```
 pip install -e ".[dev]"
 pytest
 ```
+
+The Prototype 2 tests build a Mirror end to end from a synthetic corpus with a known causal structure, using an offline stand-in for Claude, and check that PC recovers its equivalence class.

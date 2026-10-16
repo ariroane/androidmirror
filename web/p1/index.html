@@ -1,0 +1,507 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Android Mirror</title>
+<script src="/vendor/cytoscape.min.js"></script>
+<style>
+  :root { --bg:#f6f5f2; --panel:#fff; --ink:#1d1d1b; --quiet:#6b6a66; --line:#dddbd5; --accent:#3b6fd8; --pos:#2f8f5b; --neg:#c2453b; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#161615; --panel:#20201f; --ink:#ecebe7; --quiet:#a19f99; --line:#3a3936; --accent:#7aa2f0; --pos:#5cc08a; --neg:#ec7a70; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font:14px/1.45 system-ui, sans-serif; background:var(--bg); color:var(--ink); height:100vh; display:flex; flex-direction:column; }
+  header { display:flex; gap:16px; align-items:center; padding:10px 16px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header h1 { font-size:16px; margin:0; }
+  header .stat { color:var(--quiet); }
+  main { flex:1; display:flex; min-height:0; }
+  #graphwrap { flex:1; position:relative; min-width:0; }
+  #cy { position:absolute; inset:0; }
+  #layers { position:absolute; top:10px; left:10px; z-index:2; display:flex; gap:4px; }
+  aside { width:420px; max-width:45vw; border-left:1px solid var(--line); background:var(--panel); display:flex; flex-direction:column; min-height:0; }
+  nav { display:flex; border-bottom:1px solid var(--line); }
+  nav button { flex:1; border:0; background:none; padding:10px 4px; color:var(--quiet); cursor:pointer; font:inherit; }
+  nav button.on { color:var(--ink); box-shadow: inset 0 -2px var(--accent); }
+  section { display:none; padding:14px; overflow:auto; flex:1; }
+  section.on { display:block; }
+  button.b { border:1px solid var(--line); background:var(--panel); color:var(--ink); border-radius:6px; padding:5px 10px; cursor:pointer; font:inherit; }
+  button.b.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.b.sel { border-color:var(--accent); color:var(--accent); }
+  input, select, textarea { font:inherit; color:var(--ink); background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:6px 8px; }
+  .card { border:1px solid var(--line); border-radius:8px; padding:10px; margin-bottom:10px; }
+  .card .q { font-style:italic; color:var(--quiet); margin:6px 0; }
+  .card .ops { font-family: ui-monospace, monospace; font-size:12px; white-space:pre-wrap; }
+  .warn { color:var(--neg); font-size:12px; }
+  .row { display:flex; gap:8px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+  .muted { color:var(--quiet); }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  td, th { text-align:left; padding:4px 6px; border-bottom:1px solid var(--line); }
+  .engine { border-top:1px solid var(--line); padding-top:6px; margin-top:14px; }
+  .engine:first-of-type { border-top:0; margin-top:0; }
+  .engine h3 { margin:6px 0 2px; }
+  .engine h4 { margin:12px 0 4px; font-size:13px; }
+  .out { margin-top:6px; }
+  .pos { color:var(--pos); } .neg { color:var(--neg); }
+  #detail { position:absolute; bottom:10px; left:10px; right:10px; z-index:2; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px; display:none; max-height:40%; overflow:auto; }
+  @media (max-width: 760px) { main { flex-direction:column; } aside { width:auto; max-width:none; height:55vh; border-left:0; border-top:1px solid var(--line); } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Android Mirror</h1>
+  <span class="stat" id="stat">loading…</span>
+  <span style="flex:1"></span>
+  <label class="muted">Approver <input id="approver" size="12" placeholder="your name"></label>
+</header>
+<main>
+  <div id="graphwrap">
+    <div id="layers">
+      <button class="b sel" data-layer="both">Both</button>
+      <button class="b" data-layer="kg">Descriptive</button>
+      <button class="b" data-layer="dag">Causal</button>
+    </div>
+    <div id="cy"></div>
+    <div id="detail"></div>
+  </div>
+  <aside>
+    <nav>
+      <button data-tab="review" class="on">Review</button>
+      <button data-tab="ask">Ask</button>
+      <button data-tab="change">Change</button>
+      <button data-tab="investigate">Investigate</button>
+      <button data-tab="engines">Engines</button>
+      <button data-tab="face">Face</button>
+    </nav>
+    <section id="review" class="on">
+      <div class="row">
+        <span class="muted">Read sections of Book</span>
+        <input id="ibook" type="number" min="1" max="12" value="1" style="width:56px">
+        <span class="muted">from</span><input id="istart" type="number" min="0" value="0" style="width:56px">
+        <span class="muted">count</span><input id="icount" type="number" min="1" max="10" value="2" style="width:56px">
+        <button class="b" id="ingest">Read</button>
+      </div>
+      <div id="ingestmsg" class="muted"></div>
+      <div class="row"><strong id="pcount"></strong><span style="flex:1"></span><button class="b" id="approveall">Approve all</button></div>
+      <div id="patches"></div>
+    </section>
+    <section id="ask">
+      <div class="row"><input id="question" style="flex:1" placeholder="What does Marcus believe about anger?"><button class="b primary" id="askbtn">Ask</button></div>
+      <div id="answer"></div>
+    </section>
+    <section id="change">
+      <p class="muted">Intervene on the causal model: set a node higher or lower and see what moves.</p>
+      <div class="row"><select id="inode" style="flex:1"></select></div>
+      <div class="row"><span class="muted">Change</span><input id="idelta" type="range" min="-1" max="1" step="0.1" value="1" style="flex:1"><span id="ideltav">+1.0</span></div>
+      <div class="row"><button class="b primary" id="intervene">Run</button><label class="muted"><input type="checkbox" id="retell"> Retell as a story (uses Claude)</label></div>
+      <div id="effects"></div>
+    </section>
+    <section id="investigate">
+      <button class="b" id="invbtn">Run investigation</button>
+      <div id="inv"></div>
+    </section>
+    <section id="engines">
+      <p class="muted">Each engine suggests changes to the shape of the ontology. Its buttons only add proposals to Review; nothing changes until you approve there.</p>
+      <div class="engine">
+        <h3>Tidy up <span class="muted">Refactorer</span></h3>
+        <p class="muted">Merge duplicates, normalize relation names, drop causal edges a longer path already explains, archive orphans.</p>
+        <div class="row"><button class="b" id="rfind">Find suggestions</button><button class="b" id="rall" disabled>Queue all</button></div>
+        <div id="rout" class="out"></div>
+      </div>
+      <div class="engine">
+        <h3>Take apart <span class="muted">Breaker</span></h3>
+        <p class="muted">Split a node that is really two things, or cut every link between two nodes, in both graphs.</p>
+        <div class="row"><button class="b" id="bfind">Find suggestions</button></div>
+        <div id="bout" class="out"></div>
+        <h4>Split a node</h4>
+        <div class="row"><select id="bsnode" class="nodesel" style="flex:1"></select></div>
+        <div class="row"><input id="bsparts" style="flex:1" placeholder="Part names, comma separated (blank: one per cluster)"><button class="b" id="bsplit">Propose split</button></div>
+        <h4>Cut the links between two nodes</h4>
+        <div class="row"><select id="bvsrc" class="nodesel" style="flex:1"></select><select id="bvdst" class="nodesel" style="flex:1"></select></div>
+        <div class="row"><label class="muted"><input type="checkbox" id="bvkeep"> Keep the causal edge</label><span style="flex:1"></span><button class="b" id="bsever">Propose cut</button></div>
+      </div>
+      <div class="engine">
+        <h3>Join together <span class="muted">Chainer</span></h3>
+        <p class="muted">Fold nodes that mean the same thing into one, or chain another mirror's ontology into this one.</p>
+        <div class="row"><button class="b" id="cfind">Find merge suggestions</button></div>
+        <div id="cout" class="out"></div>
+        <h4>Merge nodes</h4>
+        <div class="row"><span class="muted">Keep</span><select id="cmkeep" class="nodesel" style="flex:1"></select></div>
+        <div class="row"><span class="muted">Fold in</span><select id="cmabsorb" class="nodesel" style="flex:1"></select></div>
+        <div class="row"><input id="cmlabel" style="flex:1" placeholder="New label (optional)"><button class="b" id="cmerge">Propose merge</button></div>
+        <h4>Chain another mirror</h4>
+        <div class="row"><input type="file" id="cfile" accept=".json,application/json" style="flex:1"><input id="cns" size="12" placeholder="Name, e.g. Epictetus"></div>
+        <div class="row"><button class="b" id="calign" disabled>Preview matches</button><button class="b" id="cchain" disabled>Propose chain</button></div>
+        <div id="chainout" class="out"></div>
+      </div>
+      <div class="engine">
+        <h3>Search for a better design <span class="muted">Evolver</span></h3>
+        <p class="muted">Tries sequences of the engines above on private copies and scores each design on how well it mirrors the subject.</p>
+        <div class="row"><span class="muted">Rounds</span><input id="egen" type="number" min="1" max="10" value="3" style="width:56px">
+          <span class="muted">Beam</span><input id="ebeam" type="number" min="1" max="12" value="4" style="width:56px">
+          <span class="muted">Keep</span><input id="ekeep" type="number" min="1" max="10" value="3" style="width:56px"></div>
+        <div class="row"><button class="b" id="epreview">Preview designs</button><button class="b" id="equeue">Queue best designs</button></div>
+        <div id="eout" class="out"></div>
+      </div>
+    </section>
+    <section id="face">
+      <p class="muted">The Major Arcana card whose patterns the Mirror shows most strongly. The card is a vocabulary, not a validated psychological test: it means these patterns occur more often in the Mirror than in shuffled copies of it.</p>
+      <div class="row"><select id="ffocus"></select><button class="b" id="frun">Read</button></div>
+      <svg id="aface" viewBox="0 0 240 290" width="100%" style="max-width:300px"></svg>
+      <div id="fcard"></div>
+      <h4>Diagnostics</h4>
+      <table id="mtable"></table>
+    </section>
+  </aside>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const api = async (path, body) => {
+  const r = await fetch(path, body ? {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)} : {});
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.detail || r.statusText);
+  return j;
+};
+const store = { get(k){ try { return localStorage.getItem(k); } catch { return null; } }, set(k,v){ try { localStorage.setItem(k,v); } catch {} } };
+$('#approver').value = store.get('approver') || '';
+$('#approver').onchange = e => store.set('approver', e.target.value);
+const approver = () => { const a = $('#approver').value.trim(); if (!a) { alert('Enter your name as approver first.'); throw new Error('no approver'); } return a; };
+
+let cy, graph = null, layer = 'both';
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const typeColor = {person:'#8a6bd1', virtue:'#2f8f5b', value:'#2f8f5b', practice:'#3b9c9c', vice:'#c2453b', emotion:'#d98a2b', belief:'#3b6fd8', concept:'#888', event:'#b07a4f', place:'#6f8f3b'};
+
+function drawGraph() {
+  const els = [];
+  graph.nodes.forEach(n => els.push({data:{id:n.id, label:n.label, type:n.type}}));
+  if (layer !== 'dag') graph.relations.forEach((r,i) => els.push({data:{id:'r'+i, source:r.src, target:r.dst, label:r.rel.replace(/_/g,' '), kind:'kg'}}));
+  if (layer !== 'kg') graph.causal_edges.forEach((e,i) => els.push({data:{id:'c'+i, source:e.src, target:e.dst, label:(e.sign>0?'+':'−')+e.strength.toFixed(1), kind:'dag', sign:e.sign, w:1+3*e.strength}}));
+  if (!cy) {
+    cy = cytoscape({ container: $('#cy'), wheelSensitivity: 0.3, style: [
+      {selector:'node', style:{'label':'data(label)','font-size':13,'color':css('--ink'),'text-valign':'bottom','text-margin-y':4,'width':18,'height':18,'background-color':e=>typeColor[e.data('type')]||'#888'}},
+      {selector:'edge', style:{'curve-style':'bezier','target-arrow-shape':'triangle','width':1.2,'line-color':css('--line'),'target-arrow-color':css('--line'),'label':'data(label)','font-size':9,'color':css('--quiet'),'text-rotation':'autorotate'}},
+      {selector:'edge[kind="dag"]', style:{'width':'data(w)','line-color':e=>e.data('sign')>0?css('--pos'):css('--neg'),'target-arrow-color':e=>e.data('sign')>0?css('--pos'):css('--neg')}},
+      {selector:'.hl', style:{'border-width':3,'border-color':css('--accent')}},
+    ]});
+    cy.on('tap','node', e => showNode(e.target.id()));
+    cy.on('tap', e => { if (e.target === cy) $('#detail').style.display='none'; });
+  }
+  cy.elements().remove(); cy.add(els);
+  cy.layout({name:'cose', animate:false, randomize:true, nodeRepulsion:() => 600000, idealEdgeLength:() => 110, nodeOverlap:40, gravity:0.25, numIter:2500, padding:40}).run();
+}
+
+function showNode(id) {
+  const n = graph.nodes.find(x => x.id === id), lbl = i => (graph.nodes.find(x => x.id===i)||{label:i}).label;
+  const rels = graph.relations.filter(r => r.src===id || r.dst===id).map(r => `${lbl(r.src)} <i>${r.rel.replace(/_/g,' ')}</i> ${lbl(r.dst)}`);
+  const cause = graph.causal_edges.filter(e => e.src===id || e.dst===id).map(e => `${lbl(e.src)} <span class="${e.sign>0?'pos':'neg'}">${e.sign>0?'raises':'lowers'}</span> ${lbl(e.dst)} <span class="muted">${e.mechanism||''}</span>`);
+  $('#detail').innerHTML = `<strong>${n.label}</strong> <span class="muted">${n.type}</span><br>${rels.concat(cause).join('<br>') || '<span class="muted">no links yet</span>'}`;
+  $('#detail').style.display = 'block';
+}
+
+async function refresh() {
+  const [s, g] = await Promise.all([api('/api/status'), api('/api/graph')]);
+  graph = g;
+  $('#stat').textContent = `v${s.version} · ${s.nodes} nodes · ${s.proposed} to review · Claude ${s.llm ? 'on' : 'off (no key)'}${s.corpus ? '' : ' · corpus not downloaded'}`;
+  drawGraph();
+  $('#inode').innerHTML = g.nodes.filter(n => g.causal_edges.some(e => e.src===n.id)).map(n => `<option value="${n.id}">${n.label}</option>`).join('');
+  const opts = [...g.nodes].sort((x, y) => x.label.localeCompare(y.label)).map(n => `<option value="${n.id}">${esc(n.label)}</option>`).join('');
+  document.querySelectorAll('.nodesel').forEach(sel => { const v = sel.value; sel.innerHTML = opts; if (v) sel.value = v; });
+  loadPatches(); loadFace();
+}
+
+function opText(o) {
+  switch (o.op) {
+    case 'add_node': return `+ node ${o.label} (${o.type})`;
+    case 'add_relation': return `+ ${o.src} —${o.rel}→ ${o.dst}`;
+    case 'add_causal_edge': return `+ ${o.src} ${o.sign>0?'⇑':'⇓'} ${o.dst}  s=${o.strength} c=${o.confidence}  ${o.mechanism||''}`;
+    case 'remove_relation': return `− ${o.src} —${o.rel}→ ${o.dst}`;
+    case 'remove_causal_edge': return `− ${o.src} → ${o.dst} (causal)`;
+    case 'update_node': return `~ ${o.id} ${o.label||''} ${JSON.stringify(o.attrs)}`;
+    default: return `${o.op} ${o.id||''} ${o.src||''} ${o.dst||''}`;
+  }
+}
+
+async function loadPatches() {
+  const ps = await api('/api/patches?status=proposed');
+  $('#pcount').textContent = ps.length ? `${ps.length} proposed changes` : 'Nothing to review';
+  $('#patches').innerHTML = ps.map(p => `<div class="card">
+    <div><strong>${p.source.locator || ''}</strong> <span class="muted">${p.kind} · by ${p.proposed_by}</span></div>
+    ${p.source.quote ? `<div class="q">“${p.source.quote}”</div>` : ''}
+    <div>${p.rationale}</div>
+    <div class="ops">${p.ops.map(opText).join('\n')}</div>
+    ${p.warnings.map(w => `<div class="warn">${w}</div>`).join('')}
+    <div class="row"><button class="b primary" data-a="approve" data-id="${p.id}">Approve</button><button class="b" data-a="reject" data-id="${p.id}">Reject</button></div>
+  </div>`).join('');
+}
+$('#patches').onclick = async e => {
+  const b = e.target.closest('button[data-a]'); if (!b) return;
+  try { await api(`/api/patches/${b.dataset.id}/${b.dataset.a}`, {approver: approver()}); refresh(); } catch (err) { alert(err.message); }
+};
+$('#approveall').onclick = async () => {
+  const who = approver(), ps = await api('/api/patches?status=proposed'); const errs = [];
+  for (const p of ps) { try { await api(`/api/patches/${p.id}/approve`, {approver: who}); } catch (err) { errs.push(`${p.source.locator}: ${err.message}`); } }
+  if (errs.length) alert(errs.join('\n')); refresh();
+};
+$('#ingest').onclick = async () => {
+  $('#ingestmsg').textContent = 'Claude is reading…';
+  try { const r = await api('/api/ingest', {book:+$('#ibook').value, start:+$('#istart').value, count:+$('#icount').value});
+    $('#ingestmsg').textContent = `Read ${r.chunks.join(', ')}; ${r.queued} changes proposed.`; $('#istart').value = +$('#istart').value + r.chunks.length; refresh();
+  } catch (err) { $('#ingestmsg').textContent = err.message; }
+};
+
+$('#askbtn').onclick = async () => {
+  $('#answer').innerHTML = '<p class="muted">Thinking…</p>';
+  try { const r = await api('/api/query', {question: $('#question').value});
+    cy.nodes().removeClass('hl'); r.nodes.forEach(id => cy.getElementById(id).addClass('hl'));
+    $('#answer').innerHTML = (r.answer ? `<p>${r.answer}</p>` : '<p class="muted">Claude is off, so here are the matching facts.</p>') +
+      `<details ${r.answer ? '' : 'open'}><summary class="muted">${r.facts.length} facts used</summary><ul>${r.facts.map(f => `<li>${f}</li>`).join('')}</ul></details>`;
+  } catch (err) { $('#answer').textContent = err.message; }
+};
+$('#question').onkeydown = e => { if (e.key === 'Enter') $('#askbtn').click(); };
+
+$('#idelta').oninput = e => $('#ideltav').textContent = (+e.target.value >= 0 ? '+' : '') + (+e.target.value).toFixed(1);
+$('#intervene').onclick = async () => {
+  $('#effects').innerHTML = '<p class="muted">Running…</p>';
+  try { const r = await api('/api/intervene', {node: $('#inode').value, delta: +$('#idelta').value, retell: $('#retell').checked});
+    cy.nodes().removeClass('hl'); r.effects.forEach(e => cy.getElementById(e.id).addClass('hl'));
+    $('#effects').innerHTML = (r.story ? `<div class="card q">${r.story}</div>` : '') + (r.effects.length ?
+      `<table><tr><th>Node</th><th>Effect</th></tr>${r.effects.map(e => `<tr><td>${e.label}</td><td class="${e.effect>0?'pos':'neg'}">${e.effect>0?'+':''}${e.effect.toFixed(3)}</td></tr>`).join('')}</table>` : '<p class="muted">Nothing downstream moves.</p>');
+  } catch (err) { $('#effects').textContent = err.message; }
+};
+
+$('#invbtn').onclick = async () => {
+  const r = await api('/api/investigate');
+  const t = (rows, cols) => rows.length ? `<table><tr>${cols.map(c => `<th>${c[0]}</th>`).join('')}</tr>${rows.map(x => `<tr>${cols.map(c => `<td>${c[1](x)}</td>`).join('')}</tr>`).join('')}</table>` : '<p class="muted">None yet.</p>';
+  const lbl = id => (graph.nodes.find(n => n.id===id)||{label:id}).label;
+  $('#inv').innerHTML = `<h3>Important nodes</h3>${t(r.important, [['Node', x=>x.label], ['Centrality', x=>x.centrality], ['Causal reach', x=>x.causal_reach]])}
+    <h3>Breaker: cut points</h3><p class="muted">Remove one of these and the world splits apart.</p>${t(r.breaker.cut_points, [['Node', x=>x.label], ['Fragments', x=>x.fragments]])}
+    <h3>Breaker: load-bearing causes</h3>${t(r.breaker.load_bearing, [['Node', x=>x.label], ['Influence lost', x=>x.influence_lost]])}
+    <h3>Tensions</h3>${t(r.breaker.tensions, [['Target', x=>lbl(x.target)], ['Raised by', x=>lbl(x.pushes_up)], ['Lowered by', x=>lbl(x.pushes_down)]])}
+    <p class="muted">Split and cut suggestions are in the Engines tab.</p>`;
+};
+
+// ---------- Engines: every button here only queues proposals for Review ----------
+const esc = v => String(v ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const nodeLabel = id => esc((graph.nodes.find(n => n.id===id)||{label:id}).label);
+const table = (rows, cols) => rows.length ? `<table><tr>${cols.map(c => `<th>${c[0]}</th>`).join('')}</tr>${rows.map(x => `<tr>${cols.map(c => `<td>${c[1](x)}</td>`).join('')}</tr>`).join('')}</table>` : '<p class="muted">None right now.</p>';
+const qbtn = (attrs, text, done) => done ? '<span class="muted">In Review</span>' : `<button class="b" ${attrs}>${text}</button>`;
+const queued = b => { b.outerHTML = '<span class="muted">Queued for review</span>'; refresh(); };
+const busy = (el, text) => el.innerHTML = `<p class="muted">${text}</p>`;
+const fail = (el, err) => el.innerHTML = `<p class="warn">${esc(err.message)}</p>`;
+
+// Refactorer
+$('#rfind').onclick = async () => {
+  busy($('#rout'), 'Looking…');
+  try {
+    const r = await api('/api/refactor');
+    $('#rall').disabled = !r.patches.some(p => !p.queued);
+    $('#rout').innerHTML = table(r.patches, [['Change', p => esc(p.rationale)], ['Risk', p => esc(p.extra.risk)],
+        ['', p => qbtn(`data-rkey="${esc(p.extra.key)}"`, 'Queue', p.queued)]]) +
+      (r.findings.length ? `<h4>For you to judge</h4><ul>${r.findings.map(f => `<li>${esc(f.summary)}</li>`).join('')}</ul>` : '');
+  } catch (err) { fail($('#rout'), err); }
+};
+$('#rout').onclick = async e => {
+  const b = e.target.closest('button[data-rkey]'); if (!b) return;
+  try { const r = await api('/api/refactor/queue', {keys: [b.dataset.rkey]}); if (!r.queued.length) throw new Error('Already in Review, or no longer suggested. Find suggestions again.'); queued(b); }
+  catch (err) { alert(err.message); }
+};
+$('#rall').onclick = async () => {
+  try { const r = await api('/api/refactor/queue', {}); $('#rall').disabled = true; $('#rfind').click(); refresh(); alert(`${r.queued.length} refactors queued for review.`); }
+  catch (err) { alert(err.message); }
+};
+
+// Breaker
+$('#bfind').onclick = async () => {
+  busy($('#bout'), 'Looking…');
+  try {
+    const b = await api('/api/break/candidates');
+    $('#bout').innerHTML = `<h4>Nodes that may be two things</h4>` +
+      table(b.split, [['Node', x => esc(x.label)], ['Clusters it bridges', x => x.groups.map(g => g.map(n => esc(n.label)).join(', ')).join(' | ')],
+        ['', x => x.groups.length >= 2 ? qbtn(`data-split="${esc(x.id)}"`, 'Propose split') : '']]) +
+      `<h4>Links worth cutting</h4>` +
+      table(b.sever, [['Link', x => `${esc(x.src_label)} – ${esc(x.dst_label)}`],
+        ['Why', x => [x.bridge && 'holds two clusters together', x.tension && 'in tension', !x.causal && 'descriptive only'].filter(Boolean).join(', ')],
+        ['', x => qbtn(`data-sever="${esc(x.src)}|${esc(x.dst)}"`, 'Propose cut')]]);
+  } catch (err) { fail($('#bout'), err); }
+};
+$('#bout').onclick = async e => {
+  const b = e.target.closest('button[data-split],button[data-sever]'); if (!b) return;
+  try {
+    if (b.dataset.split) await api('/api/break/split', {node: b.dataset.split});
+    else { const [src, dst] = b.dataset.sever.split('|'); await api('/api/break/sever', {src, dst}); }
+    queued(b);
+  } catch (err) { alert(err.message); }
+};
+$('#bsplit').onclick = async () => {
+  const parts = $('#bsparts').value.split(',').map(x => x.trim()).filter(Boolean).map(label => ({label}));
+  try { await api('/api/break/split', {node: $('#bsnode').value, parts: parts.length ? parts : null}); $('#bsparts').value = ''; refresh(); alert('Split queued for review.'); }
+  catch (err) { alert(err.message); }
+};
+$('#bsever').onclick = async () => {
+  try { await api('/api/break/sever', {src: $('#bvsrc').value, dst: $('#bvdst').value, causal: !$('#bvkeep').checked}); refresh(); alert('Cut queued for review.'); }
+  catch (err) { alert(err.message); }
+};
+
+// Chainer
+$('#cfind').onclick = async () => {
+  busy($('#cout'), 'Looking…');
+  try {
+    const c = await api('/api/chain/candidates');
+    $('#cout').innerHTML = table(c, [['Fold', x => `${esc(x.absorbed_label)} into ${esc(x.survivor_label)}`], ['Why', x => esc(x.why)],
+      ['', x => qbtn(`data-merge="${esc(x.survivor)}|${esc(x.absorbed)}"`, 'Propose merge')]]);
+  } catch (err) { fail($('#cout'), err); }
+};
+$('#cout').onclick = async e => {
+  const b = e.target.closest('button[data-merge]'); if (!b) return;
+  const [survivor, absorbed] = b.dataset.merge.split('|');
+  try { await api('/api/chain/merge', {survivor, absorbed: [absorbed]}); queued(b); } catch (err) { alert(err.message); }
+};
+$('#cmerge').onclick = async () => {
+  const survivor = $('#cmkeep').value, absorbed = $('#cmabsorb').value;
+  if (survivor === absorbed) return alert('Pick two different nodes.');
+  try { await api('/api/chain/merge', {survivor, absorbed: [absorbed], label: $('#cmlabel').value.trim() || null}); $('#cmlabel').value = ''; refresh(); alert('Merge queued for review.'); }
+  catch (err) { alert(err.message); }
+};
+let other = null;
+$('#cfile').onchange = async e => {
+  other = null; $('#calign').disabled = $('#cchain').disabled = true; $('#chainout').innerHTML = '';
+  const f = e.target.files[0]; if (!f) return;
+  try { other = JSON.parse(await f.text()); if (!$('#cns').value && other.name) $('#cns').value = other.name; $('#calign').disabled = $('#cchain').disabled = false; }
+  catch { fail($('#chainout'), new Error('That file is not an ontology.json.')); }
+};
+$('#calign').onclick = async () => {
+  try {
+    const a = await api('/api/chain/align', {ontology: other});
+    const otherLabel = id => esc((other.nodes || []).find(n => n.id === id)?.label || id);
+    const exact = Object.entries(a.exact);
+    $('#chainout').innerHTML = `<h4>Joined onto existing nodes (${exact.length})</h4>` + table(exact, [['Theirs', x => otherLabel(x[0])], ['Ours', x => nodeLabel(x[1])]]) +
+      `<h4>Near matches, kept separate</h4>` + table(a.possible, [['Theirs', x => otherLabel(x.other)], ['Ours', x => nodeLabel(x.base)], ['Similarity', x => x.score]]);
+  } catch (err) { fail($('#chainout'), err); }
+};
+$('#cchain').onclick = async () => {
+  try { const p = await api('/api/chain/import', {ontology: other, namespace: $('#cns').value.trim() || null}); refresh();
+    $('#chainout').innerHTML = `<p>Chain queued for review: ${p.ops.length} changes.</p>`; }
+  catch (err) { fail($('#chainout'), err); }
+};
+
+// Evolver
+const evolve = async queue => {
+  busy($('#eout'), 'Searching designs…');
+  try {
+    const r = await api('/api/evolve', {generations: +$('#egen').value, beam: +$('#ebeam').value, keep: +$('#ekeep').value, queue});
+    $('#eout').innerHTML = `<p class="muted">Engines: ${esc(r.operators.join(', ') || 'none')}. Tried ${r.explored} designs. Current fitness ${r.base.total.toFixed(3)}.</p>` +
+      (r.designs.length ? r.designs.map(d => `<div class="card"><strong>${d.fitness.total.toFixed(3)}</strong> <span class="muted">${d.fitness.passed.length} probes pass</span>
+        <ol>${d.steps.map(s => `<li><span class="muted">${esc(s.family)}:</span> ${esc(s.rationale)}</li>`).join('')}</ol></div>`).join('') : '<p class="muted">No design beats the current one.</p>') +
+      r.errors.map(x => `<p class="warn">${esc(x)}</p>`).join('') +
+      (queue ? `<p>${r.queued.length} designs queued for review.</p>` : '');
+    if (queue) refresh();
+  } catch (err) { fail($('#eout'), err); }
+};
+$('#epreview').onclick = () => evolve(false);
+$('#equeue').onclick = () => evolve(true);
+
+// ---------- Face: the archetype the Mirror most resembles (read-only) ----------
+const GLYPHS = {  // small line drawings centred on (0,0), about 36px across
+  bindle: 'M-14 14 L12 -12 M12 -12 m-6 -6 a7 7 0 1 0 0.1 0',
+  wand: 'M-12 14 L12 -10 M12 -10 l3 -8 M12 -10 l8 -3 M12 -10 l6 6',
+  veil: 'M-16 16 V-10 Q0 -22 16 -10 V16 M-16 -2 Q0 8 16 -2',
+  wheat: 'M0 16 V-14 M0 -8 l-6 -6 M0 -8 l6 -6 M0 0 l-6 -6 M0 0 l6 -6 M0 8 l-6 -6 M0 8 l6 -6',
+  crown: 'M-16 10 L-16 -8 L-8 2 L0 -12 L8 2 L16 -8 L16 10 Z',
+  keys: 'M-6 -10 a5 5 0 1 0 0.1 0 M-6 -5 V14 M-6 10 h4 M6 -10 a5 5 0 1 0 0.1 0 M6 -5 V14 M6 10 h4',
+  hearts: 'M-6 10 C-22 -2 -14 -16 -6 -6 C2 -16 10 -2 -6 10 M6 12 C-6 2 0 -10 6 -2 C12 -10 18 2 6 12',
+  chariot: 'M-16 4 H16 V-8 H-16 Z M-10 12 a5 5 0 1 0 0.1 0 M10 12 a5 5 0 1 0 0.1 0',
+  lion: 'M0 -14 a14 14 0 1 0 0.1 0 M0 -6 a6 6 0 1 0 0.1 0 M-3 4 Q0 7 3 4',
+  lantern: 'M-7 -8 H7 V12 H-7 Z M-4 -8 V-14 H4 V-8 M0 -2 V6',
+  wheel: 'M0 -15 a15 15 0 1 0 0.1 0 M0 -15 V15 M-15 0 H15 M-10.6 -10.6 L10.6 10.6 M10.6 -10.6 L-10.6 10.6',
+  scales: 'M0 -14 V14 M-10 14 H10 M-16 -8 H16 M-16 -8 L-20 4 H-12 Z M16 -8 L12 4 H20 Z',
+  cross: 'M0 -16 V16 M-12 -8 H12 M-6 16 L0 8 L6 16',
+  scythe: 'M-10 16 L6 -14 M6 -14 Q18 -10 20 2 Q10 -6 2 -6',
+  cups: 'M-16 -8 H-4 L-6 6 H-14 Z M4 -8 H16 L14 6 H6 Z M-6 -2 Q0 8 6 -2',
+  chain: 'M-14 -4 a5 5 0 1 0 0.1 0 M-4 -4 a5 5 0 1 0 0.1 0 M6 -4 a5 5 0 1 0 0.1 0 M16 -4 a5 5 0 1 0 0.1 0',
+  bolt: 'M4 -16 L-8 2 H2 L-4 16 L10 -4 H0 Z',
+  star: 'M0 -16 L4 -5 L16 -5 L6 2 L10 14 L0 6 L-10 14 L-6 2 L-16 -5 L-4 -5 Z',
+  moon: 'M6 -15 A15 15 0 1 0 6 15 A11 11 0 1 1 6 -15 Z',
+  sun: 'M0 -8 a8 8 0 1 0 0.1 0 M0 -17 V-12 M0 12 V17 M-17 0 H-12 M12 0 H17 M-12 -12 L-9 -9 M12 12 L9 9 M12 -12 L9 -9 M-12 12 L-9 9',
+  trumpet: 'M-16 2 H4 L16 -8 V12 L4 2 M-16 -2 V6',
+  wreath: 'M0 -14 a14 16 0 1 0 0.1 0 M-14 -2 l-4 -4 M14 -2 l4 -4 M-12 8 l-5 0 M12 8 l5 0',
+};
+
+function drawFace(card, opacity) {
+  const ink = css('--ink'), f = card ? card.face : null, cx = 120, cy = 170;
+  let body;
+  if (!f) {  // undecided: a plain card back
+    body = `<rect x="40" y="40" width="160" height="230" rx="12" fill="none" stroke="${ink}" stroke-width="2"/>
+      <rect x="52" y="52" width="136" height="206" rx="8" fill="none" stroke="${ink}" stroke-width="1" stroke-dasharray="4 4"/>
+      <text x="120" y="172" text-anchor="middle" font-size="44" fill="${ink}">?</text>`;
+  } else {
+    const look = {up:[0,-3], down:[0,3], left:[-4,0], right:[4,0], ahead:[0,0]}[f.gaze] || [0,0];
+    const eye = (x, raise) => {
+      const ry = 1.5 + 9 * f.eyes;
+      return `<ellipse cx="${x}" cy="${cy-18-raise}" rx="11" ry="${ry}" fill="none" stroke="${ink}" stroke-width="2"/>` +
+        (f.eyes > 0.2 ? `<circle cx="${x+look[0]}" cy="${cy-18-raise+look[1]*Math.min(1, ry/6)}" r="3" fill="${ink}"/>` : '');
+    };
+    const brow = (side, raise) => {  // side -1 left, +1 right; furrowed brows drop at the inner end
+      const base = cy - 40 - 6 * f.brows - raise, inner = base + Math.max(0, -f.brows) * 8, outer = base - Math.max(0, -f.brows) * 4;
+      return `<line x1="${cx+side*14}" y1="${inner}" x2="${cx+side*42}" y2="${outer}" stroke="${ink}" stroke-width="2.5" stroke-linecap="round"/>`;
+    };
+    const my = cy + 40, curve = my + 26 * f.mouth;
+    const mouth = f.open > 0
+      ? `<path d="M${cx-30} ${my} Q${cx} ${curve} ${cx+30} ${my} Q${cx} ${curve + 22*f.open + 4} ${cx-30} ${my} Z" fill="none" stroke="${ink}" stroke-width="2.5" stroke-linejoin="round"/>`
+      : `<path d="M${cx-30} ${my} Q${cx} ${curve} ${cx+30} ${my}" fill="none" stroke="${ink}" stroke-width="2.5" stroke-linecap="round"/>`;
+    const lift = f.uneven ? 6 : 0;
+    body = `<path d="${GLYPHS[card.glyph] || ''}" transform="translate(120 34)" fill="none" stroke="${ink}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <g transform="rotate(${f.tilt} ${cx} ${cy})">
+        <ellipse cx="${cx}" cy="${cy}" rx="72" ry="88" fill="none" stroke="${ink}" stroke-width="2"/>
+        ${eye(cx-28, 0)}${eye(cx+28, lift)}${brow(-1, 0)}${brow(1, lift)}
+        <path d="M${cx-6} ${cy+4} L${cx} ${cy+16} L${cx+6} ${cy+4}" fill="none" stroke="${ink}" stroke-width="2"/>
+        ${mouth}
+      </g>`;
+    if (card.reversed) body = `<g transform="rotate(180 120 150)">${body}</g>`;
+  }
+  $('#aface').innerHTML = `<g opacity="${opacity}">${body}</g>`;
+}
+
+const cardName = c => `${c.numeral} · ${esc(c.name)}${c.reversed ? ' (reversed)' : ''}`;
+async function loadFace() {
+  const sel = $('#ffocus'), keep = sel.value;
+  sel.innerHTML = '<option value="">Whole Mirror</option>' + [...graph.nodes].sort((x, y) => x.label.localeCompare(y.label))
+    .map(n => `<option value="${n.id}">Around ${esc(n.label)}</option>`).join('');
+  sel.value = graph.nodes.some(n => n.id === keep) ? keep : '';
+  $('#fcard').innerHTML = '<p class="muted">Reading…</p>';
+  try {
+    const r = await api('/api/archetype' + (sel.value ? `?focus=${encodeURIComponent(sel.value)}` : ''));
+    const a = r.archetype;
+    drawFace(r.undecided ? null : a, 0.45 + 0.55 * Math.min(1, r.margin / 0.4));
+    let html = !a ? '<p class="muted">Too little here to read yet.</p>'
+      : r.undecided ? `<h3>Undecided</h3><p class="muted">No card stands out clearly. Closest: ${cardName(a)} (${a.score}) and ${cardName(r.runners_up[0])} (${r.runners_up[0].score}).</p>`
+      : `<h3>${cardName(a)}</h3><p>${esc(a.theme)}${a.reversed ? ', with the signs turned around' : ''}. <span class="muted">Score ${a.score}, ahead of the next card by ${r.margin}.</span></p>`;
+    if (a && !r.undecided) {
+      html += '<h4>Why this card</h4>' + (r.evidence.length ? r.evidence.map((e, i) => `<div class="card"><div>${esc(e.text)} <span class="muted">${e.layer}, ${e.count} found</span></div>` +
+        e.examples.map((x, j) => `<div><button class="b" data-ev="${i}:${j}">${x.labels.map(esc).join(' → ') || 'the whole graph'}</button></div>` +
+          x.quotes.map(q => `<div class="q">“${esc(q)}”</div>`).join('')).join('') + '</div>').join('') : '<p class="muted">A whole-graph property; nothing to point at.</p>');
+      html += `<p class="muted">Next closest: ${r.runners_up.map(c => `${cardName(c)} ${c.score}`).join(', ')}</p>`;
+    }
+    if (r.unclassified_relations.length) html += `<p class="muted">Relations the cards don't read yet: ${r.unclassified_relations.map(esc).join(', ')}.</p>`;
+    if (r.scores.length) html += `<details><summary class="muted">All 22 cards</summary><table>${r.scores.map(c => `<tr><td>${cardName(c)}</td><td>${c.score}</td></tr>`).join('')}</table></details>`;
+    $('#fcard').innerHTML = html;
+    $('#fcard').onclick = e => {
+      const b = e.target.closest('button[data-ev]'); if (!b) return;
+      const [i, j] = b.dataset.ev.split(':').map(Number);
+      cy.nodes().removeClass('hl'); r.evidence[i].examples[j].nodes.forEach(id => cy.getElementById(id).addClass('hl'));
+    };
+  } catch (err) { fail($('#fcard'), err); }
+  const m = await api('/api/metrics');
+  $('#mtable').innerHTML = '<tr><th>Reading</th><th>Value</th></tr>' + Object.entries(m).map(([k,v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
+}
+$('#frun').onclick = loadFace;
+$('#ffocus').onchange = loadFace;
+
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button, section').forEach(x => x.classList.remove('on'));
+  b.classList.add('on'); $('#' + b.dataset.tab).classList.add('on');
+});
+document.querySelectorAll('#layers button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#layers button').forEach(x => x.classList.remove('sel')); b.classList.add('sel'); layer = b.dataset.layer; drawGraph();
+});
+refresh().catch(err => $('#stat').textContent = err.message);
+</script>
+</body>
+</html>

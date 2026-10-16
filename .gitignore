@@ -5,6 +5,7 @@
 data/ontology.json
 data/patches.json
 data/corpus/
+data/mirror/
 
 # Python
 __pycache__/

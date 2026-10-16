@@ -166,7 +166,7 @@ def test_works_on_the_seed(tmp_path):
 def test_break_api_only_queues(tmp_path, monkeypatch):
     from fastapi.testclient import TestClient
 
-    from androidmirror.server import create_app
+    from androidmirror.p1_server import create_app
 
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     app = create_app(tmp_path)
@@ -190,7 +190,7 @@ def test_break_api_only_queues(tmp_path, monkeypatch):
 
 
 def test_cli_break_commands(tmp_path, capsys):
-    from androidmirror.cli import main
+    from androidmirror.p1_cli import main
 
     main(["--data", str(tmp_path), "seed", str(SEED)])
     main(["--data", str(tmp_path), "approve", "all", "--as", "test"])

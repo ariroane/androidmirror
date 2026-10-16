@@ -6,399 +6,311 @@
 <title>Android Mirror</title>
 <script src="/vendor/cytoscape.min.js"></script>
 <style>
-  :root { --bg:#f6f5f2; --panel:#fff; --ink:#1d1d1b; --quiet:#6b6a66; --line:#dddbd5; --accent:#3b6fd8; --pos:#2f8f5b; --neg:#c2453b; }
-  @media (prefers-color-scheme: dark) { :root { --bg:#161615; --panel:#20201f; --ink:#ecebe7; --quiet:#a19f99; --line:#3a3936; --accent:#7aa2f0; --pos:#5cc08a; --neg:#ec7a70; } }
+  :root { --bg:#f6f5f2; --panel:#fff; --ink:#1d1d1b; --quiet:#6b6a66; --line:#dddbd5; --accent:#3b6fd8; --pos:#2f8f5b; --neg:#c2453b; --mid:#9a8f6a; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#161615; --panel:#20201f; --ink:#ecebe7; --quiet:#a19f99; --line:#3a3936; --accent:#7aa2f0; --pos:#5cc08a; --neg:#ec7a70; --mid:#c2b68c; } }
   * { box-sizing: border-box; }
   body { margin:0; font:14px/1.45 system-ui, sans-serif; background:var(--bg); color:var(--ink); height:100vh; display:flex; flex-direction:column; }
-  header { display:flex; gap:16px; align-items:center; padding:10px 16px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+  header { display:flex; gap:12px; align-items:center; padding:10px 16px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
   header h1 { font-size:16px; margin:0; }
   header .stat { color:var(--quiet); }
   main { flex:1; display:flex; min-height:0; }
   #graphwrap { flex:1; position:relative; min-width:0; }
   #cy { position:absolute; inset:0; }
-  #layers { position:absolute; top:10px; left:10px; z-index:2; display:flex; gap:4px; }
-  aside { width:420px; max-width:45vw; border-left:1px solid var(--line); background:var(--panel); display:flex; flex-direction:column; min-height:0; }
+  #layers { position:absolute; top:10px; left:10px; z-index:2; display:flex; gap:4px; flex-wrap:wrap; }
+  #legend { position:absolute; bottom:10px; left:10px; z-index:2; font-size:12px; color:var(--quiet); background:var(--panel); border:1px solid var(--line); border-radius:6px; padding:4px 8px; }
+  #empty { position:absolute; inset:0; display:none; align-items:center; justify-content:center; padding:24px; }
+  #empty div { max-width:520px; }
+  aside { width:460px; max-width:48vw; border-left:1px solid var(--line); background:var(--panel); display:flex; flex-direction:column; min-height:0; }
   nav { display:flex; border-bottom:1px solid var(--line); }
   nav button { flex:1; border:0; background:none; padding:10px 4px; color:var(--quiet); cursor:pointer; font:inherit; }
   nav button.on { color:var(--ink); box-shadow: inset 0 -2px var(--accent); }
   section { display:none; padding:14px; overflow:auto; flex:1; }
   section.on { display:block; }
+  h3 { margin:4px 0 6px; } h4 { margin:14px 0 4px; font-size:13px; }
   button.b { border:1px solid var(--line); background:var(--panel); color:var(--ink); border-radius:6px; padding:5px 10px; cursor:pointer; font:inherit; }
   button.b.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
   button.b.sel { border-color:var(--accent); color:var(--accent); }
-  input, select, textarea { font:inherit; color:var(--ink); background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:6px 8px; }
+  button.link { border:0; background:none; color:var(--accent); cursor:pointer; padding:0; font:inherit; text-align:left; }
+  input, select, textarea { font:inherit; color:var(--ink); background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:6px 8px; max-width:100%; }
   .card { border:1px solid var(--line); border-radius:8px; padding:10px; margin-bottom:10px; }
-  .card .q { font-style:italic; color:var(--quiet); margin:6px 0; }
-  .card .ops { font-family: ui-monospace, monospace; font-size:12px; white-space:pre-wrap; }
-  .warn { color:var(--neg); font-size:12px; }
+  .q { font-style:italic; color:var(--quiet); margin:4px 0; }
   .row { display:flex; gap:8px; align-items:center; margin:8px 0; flex-wrap:wrap; }
-  .muted { color:var(--quiet); }
+  .muted { color:var(--quiet); } .small { font-size:12px; }
+  .pill { display:inline-block; border:1px solid var(--line); border-radius:10px; padding:0 7px; font-size:12px; margin-right:4px; }
+  .good { color:var(--pos); border-color:var(--pos); } .bad { color:var(--neg); border-color:var(--neg); } .indifferent { color:var(--mid); border-color:var(--mid); }
   table { border-collapse:collapse; width:100%; font-size:13px; }
-  td, th { text-align:left; padding:4px 6px; border-bottom:1px solid var(--line); }
-  .engine { border-top:1px solid var(--line); padding-top:6px; margin-top:14px; }
-  .engine:first-of-type { border-top:0; margin-top:0; }
-  .engine h3 { margin:6px 0 2px; }
-  .engine h4 { margin:12px 0 4px; font-size:13px; }
-  .out { margin-top:6px; }
+  td, th { text-align:left; padding:4px 6px; border-bottom:1px solid var(--line); vertical-align:top; }
+  tr.click { cursor:pointer; } tr.click:hover td { background:var(--bg); }
   .pos { color:var(--pos); } .neg { color:var(--neg); }
-  #detail { position:absolute; bottom:10px; left:10px; right:10px; z-index:2; background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px; display:none; max-height:40%; overflow:auto; }
-  @media (max-width: 760px) { main { flex-direction:column; } aside { width:auto; max-width:none; height:55vh; border-left:0; border-top:1px solid var(--line); } }
+  .passage { white-space:pre-wrap; border-left:3px solid var(--accent); padding:6px 10px; margin:6px 0; background:var(--bg); }
+  ul.tree { padding-left:16px; margin:4px 0; } ul.tree li { margin:2px 0; }
+  details > summary { cursor:pointer; }
+  @media (max-width: 760px) { main { flex-direction:column; } aside { width:auto; max-width:none; height:58vh; border-left:0; border-top:1px solid var(--line); } }
 </style>
 </head>
 <body>
 <header>
   <h1>Android Mirror</h1>
+  <select id="corpus" title="Which Mirror"></select>
   <span class="stat" id="stat">loading…</span>
-  <span style="flex:1"></span>
-  <label class="muted">Approver <input id="approver" size="12" placeholder="your name"></label>
 </header>
 <main>
   <div id="graphwrap">
     <div id="layers">
-      <button class="b sel" data-layer="both">Both</button>
-      <button class="b" data-layer="kg">Descriptive</button>
-      <button class="b" data-layer="dag">Causal</button>
+      <button class="b sel" data-layer="kg">Knowledge graph</button>
+      <button class="b" data-layer="causal">Causal model</button>
     </div>
     <div id="cy"></div>
-    <div id="detail"></div>
+    <div id="legend"></div>
+    <div id="empty"><div>
+      <h3>No Mirror built yet</h3>
+      <p>Build one from a whole corpus. Claude reads every passage once, so this takes a while and uses your API key:</p>
+      <pre class="passage">python -m androidmirror build --corpus meditations
+python -m androidmirror build --corpus fomc</pre>
+      <p class="muted">Try <code>--limit 30</code> first for a cheap trial run. A build that stops resumes where it left off.</p>
+    </div></div>
   </div>
   <aside>
     <nav>
-      <button data-tab="review" class="on">Review</button>
+      <button data-tab="node" class="on">Node</button>
+      <button data-tab="knowledge">Knowledge</button>
+      <button data-tab="causal">Causal</button>
       <button data-tab="ask">Ask</button>
-      <button data-tab="change">Change</button>
-      <button data-tab="investigate">Investigate</button>
-      <button data-tab="engines">Engines</button>
       <button data-tab="face">Face</button>
     </nav>
-    <section id="review" class="on">
-      <div class="row">
-        <span class="muted">Read sections of Book</span>
-        <input id="ibook" type="number" min="1" max="12" value="1" style="width:56px">
-        <span class="muted">from</span><input id="istart" type="number" min="0" value="0" style="width:56px">
-        <span class="muted">count</span><input id="icount" type="number" min="1" max="10" value="2" style="width:56px">
-        <button class="b" id="ingest">Read</button>
-      </div>
-      <div id="ingestmsg" class="muted"></div>
-      <div class="row"><strong id="pcount"></strong><span style="flex:1"></span><button class="b" id="approveall">Approve all</button></div>
-      <div id="patches"></div>
-    </section>
+    <section id="node" class="on"><p class="muted">Click a node to see what it is, what the Mirror infers about it, and the passages it was built from.</p></section>
+    <section id="knowledge"></section>
+    <section id="causal"></section>
     <section id="ask">
-      <div class="row"><input id="question" style="flex:1" placeholder="What does Marcus believe about anger?"><button class="b primary" id="askbtn">Ask</button></div>
+      <div class="row"><input id="question" style="flex:1" placeholder="Ask the Mirror a question"><button class="b primary" id="askbtn">Ask</button></div>
       <div id="answer"></div>
     </section>
-    <section id="change">
-      <p class="muted">Intervene on the causal model: set a node higher or lower and see what moves.</p>
-      <div class="row"><select id="inode" style="flex:1"></select></div>
-      <div class="row"><span class="muted">Change</span><input id="idelta" type="range" min="-1" max="1" step="0.1" value="1" style="flex:1"><span id="ideltav">+1.0</span></div>
-      <div class="row"><button class="b primary" id="intervene">Run</button><label class="muted"><input type="checkbox" id="retell"> Retell as a story (uses Claude)</label></div>
-      <div id="effects"></div>
-    </section>
-    <section id="investigate">
-      <button class="b" id="invbtn">Run investigation</button>
-      <div id="inv"></div>
-    </section>
-    <section id="engines">
-      <p class="muted">Each engine suggests changes to the shape of the ontology. Its buttons only add proposals to Review; nothing changes until you approve there.</p>
-      <div class="engine">
-        <h3>Tidy up <span class="muted">Refactorer</span></h3>
-        <p class="muted">Merge duplicates, normalize relation names, drop causal edges a longer path already explains, archive orphans.</p>
-        <div class="row"><button class="b" id="rfind">Find suggestions</button><button class="b" id="rall" disabled>Queue all</button></div>
-        <div id="rout" class="out"></div>
-      </div>
-      <div class="engine">
-        <h3>Take apart <span class="muted">Breaker</span></h3>
-        <p class="muted">Split a node that is really two things, or cut every link between two nodes, in both graphs.</p>
-        <div class="row"><button class="b" id="bfind">Find suggestions</button></div>
-        <div id="bout" class="out"></div>
-        <h4>Split a node</h4>
-        <div class="row"><select id="bsnode" class="nodesel" style="flex:1"></select></div>
-        <div class="row"><input id="bsparts" style="flex:1" placeholder="Part names, comma separated (blank: one per cluster)"><button class="b" id="bsplit">Propose split</button></div>
-        <h4>Cut the links between two nodes</h4>
-        <div class="row"><select id="bvsrc" class="nodesel" style="flex:1"></select><select id="bvdst" class="nodesel" style="flex:1"></select></div>
-        <div class="row"><label class="muted"><input type="checkbox" id="bvkeep"> Keep the causal edge</label><span style="flex:1"></span><button class="b" id="bsever">Propose cut</button></div>
-      </div>
-      <div class="engine">
-        <h3>Join together <span class="muted">Chainer</span></h3>
-        <p class="muted">Fold nodes that mean the same thing into one, or chain another mirror's ontology into this one.</p>
-        <div class="row"><button class="b" id="cfind">Find merge suggestions</button></div>
-        <div id="cout" class="out"></div>
-        <h4>Merge nodes</h4>
-        <div class="row"><span class="muted">Keep</span><select id="cmkeep" class="nodesel" style="flex:1"></select></div>
-        <div class="row"><span class="muted">Fold in</span><select id="cmabsorb" class="nodesel" style="flex:1"></select></div>
-        <div class="row"><input id="cmlabel" style="flex:1" placeholder="New label (optional)"><button class="b" id="cmerge">Propose merge</button></div>
-        <h4>Chain another mirror</h4>
-        <div class="row"><input type="file" id="cfile" accept=".json,application/json" style="flex:1"><input id="cns" size="12" placeholder="Name, e.g. Epictetus"></div>
-        <div class="row"><button class="b" id="calign" disabled>Preview matches</button><button class="b" id="cchain" disabled>Propose chain</button></div>
-        <div id="chainout" class="out"></div>
-      </div>
-      <div class="engine">
-        <h3>Search for a better design <span class="muted">Evolver</span></h3>
-        <p class="muted">Tries sequences of the engines above on private copies and scores each design on how well it mirrors the subject.</p>
-        <div class="row"><span class="muted">Rounds</span><input id="egen" type="number" min="1" max="10" value="3" style="width:56px">
-          <span class="muted">Beam</span><input id="ebeam" type="number" min="1" max="12" value="4" style="width:56px">
-          <span class="muted">Keep</span><input id="ekeep" type="number" min="1" max="10" value="3" style="width:56px"></div>
-        <div class="row"><button class="b" id="epreview">Preview designs</button><button class="b" id="equeue">Queue best designs</button></div>
-        <div id="eout" class="out"></div>
-      </div>
-    </section>
     <section id="face">
-      <p class="muted">The Major Arcana card whose patterns the Mirror shows most strongly. The card is a vocabulary, not a validated psychological test: it means these patterns occur more often in the Mirror than in shuffled copies of it.</p>
+      <p class="muted">The Major Arcana card the Mirror's two graphs most resemble, read from both its knowledge graph and its causal model.</p>
       <div class="row"><select id="ffocus"></select><button class="b" id="frun">Read</button></div>
       <svg id="aface" viewBox="0 0 240 290" width="100%" style="max-width:300px"></svg>
       <div id="fcard"></div>
-      <h4>Diagnostics</h4>
-      <table id="mtable"></table>
     </section>
   </aside>
 </main>
 <script>
 const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const store = { get(k){ try { return localStorage.getItem(k); } catch { return null; } }, set(k,v){ try { localStorage.setItem(k,v); } catch {} } };
+let corpus = null, cy = null, layer = 'kg', labels = {}, causalData = null;
+const q = () => corpus ? `corpus=${encodeURIComponent(corpus)}` : '';
 const api = async (path, body) => {
-  const r = await fetch(path, body ? {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)} : {});
+  const url = path + (path.includes('?') ? '&' : '?') + q();
+  const r = await fetch(url, body ? {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({...body, corpus})} : {});
   const j = await r.json();
   if (!r.ok) throw new Error(j.detail || r.statusText);
   return j;
 };
-const store = { get(k){ try { return localStorage.getItem(k); } catch { return null; } }, set(k,v){ try { localStorage.setItem(k,v); } catch {} } };
-$('#approver').value = store.get('approver') || '';
-$('#approver').onchange = e => store.set('approver', e.target.value);
-const approver = () => { const a = $('#approver').value.trim(); if (!a) { alert('Enter your name as approver first.'); throw new Error('no approver'); } return a; };
+const fail = (el, err) => el.innerHTML = `<p class="neg">${esc(err.message)}</p>`;
+const lbl = id => esc(labels[id] || id);
+const rel = r => esc(String(r).replace(/_/g, ' '));
+const evalPill = e => e ? `<span class="pill ${e}">${e}</span>` : '';
+const tab = name => { document.querySelectorAll('nav button, section').forEach(x => x.classList.remove('on'));
+  document.querySelector(`nav button[data-tab="${name}"]`).classList.add('on'); $('#' + name).classList.add('on'); };
+const loc = (pid, text) => `<button class="link" data-passage="${esc(pid)}">${esc(text)}</button>`;
+const quote = e => `<div class="small">${loc(e.passage, e.locator)} <span class="q">“${esc(e.quote)}”</span></div>`;
 
-let cy, graph = null, layer = 'both';
-const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
-const typeColor = {person:'#8a6bd1', virtue:'#2f8f5b', value:'#2f8f5b', practice:'#3b9c9c', vice:'#c2453b', emotion:'#d98a2b', belief:'#3b6fd8', concept:'#888', event:'#b07a4f', place:'#6f8f3b'};
-
-function drawGraph() {
-  const els = [];
-  graph.nodes.forEach(n => els.push({data:{id:n.id, label:n.label, type:n.type}}));
-  if (layer !== 'dag') graph.relations.forEach((r,i) => els.push({data:{id:'r'+i, source:r.src, target:r.dst, label:r.rel.replace(/_/g,' '), kind:'kg'}}));
-  if (layer !== 'kg') graph.causal_edges.forEach((e,i) => els.push({data:{id:'c'+i, source:e.src, target:e.dst, label:(e.sign>0?'+':'−')+e.strength.toFixed(1), kind:'dag', sign:e.sign, w:1+3*e.strength}}));
+// ---------- canvas ----------
+async function drawGraph() {
+  let g;
+  try { g = await api(`/api/graph?layer=${layer}`); } catch (err) { return; }
+  g.nodes.forEach(n => labels[n.id] = n.label);
+  const els = g.nodes.map(n => ({data:{id:n.id, label:n.label, ev:n.evaluation||'none', size:12 + Math.min(26, Math.sqrt(n.support||1) * 3), variable:n.variable ? 1 : 0}}));
+  g.edges.forEach(e => els.push({data:{id:e.id, source:e.source, target:e.target, label: layer === 'kg' ? String(e.rel).replace(/_/g,' ') : (e.effect == null ? '' : (e.effect > 0 ? '+' : '') + e.effect.toFixed(2)),
+    status:e.status || 'kg', directed:e.directed ? 1 : 0, w: layer === 'kg' ? 1 + Math.min(4, Math.log2(1 + (e.support||1))) : 1 + 4 * (e.stability ?? 0.5), sign: (e.effect||0) >= 0 ? 1 : -1}}));
+  const evColor = {good:css('--pos'), bad:css('--neg'), indifferent:css('--mid'), conflicted:'#b05fd8', none:'#8a8a86'};
   if (!cy) {
     cy = cytoscape({ container: $('#cy'), wheelSensitivity: 0.3, style: [
-      {selector:'node', style:{'label':'data(label)','font-size':13,'color':css('--ink'),'text-valign':'bottom','text-margin-y':4,'width':18,'height':18,'background-color':e=>typeColor[e.data('type')]||'#888'}},
-      {selector:'edge', style:{'curve-style':'bezier','target-arrow-shape':'triangle','width':1.2,'line-color':css('--line'),'target-arrow-color':css('--line'),'label':'data(label)','font-size':9,'color':css('--quiet'),'text-rotation':'autorotate'}},
-      {selector:'edge[kind="dag"]', style:{'width':'data(w)','line-color':e=>e.data('sign')>0?css('--pos'):css('--neg'),'target-arrow-color':e=>e.data('sign')>0?css('--pos'):css('--neg')}},
-      {selector:'.hl', style:{'border-width':3,'border-color':css('--accent')}},
+      {selector:'node', style:{'label':'data(label)','font-size':12,'color':css('--ink'),'text-valign':'bottom','text-margin-y':4,'width':'data(size)','height':'data(size)','background-color':e => evColor[e.data('ev')]}},
+      {selector:'node[variable = 1]', style:{'border-width':2,'border-color':css('--accent')}},
+      {selector:'edge', style:{'curve-style':'bezier','target-arrow-shape':'triangle','width':'data(w)','line-color':css('--line'),'target-arrow-color':css('--line'),'label':'data(label)','font-size':9,'color':css('--quiet'),'text-rotation':'autorotate'}},
+      {selector:'edge[directed = 0]', style:{'target-arrow-shape':'none','line-style':'dashed'}},
+      {selector:'edge[status = "compelled"]', style:{'line-color':css('--ink'),'target-arrow-color':css('--ink')}},
+      {selector:'edge[status = "pinned"]', style:{'line-color':css('--accent'),'target-arrow-color':css('--accent')}},
+      {selector:'edge[status = "implied by pins"]', style:{'line-color':css('--accent'),'target-arrow-color':css('--accent'),'line-style':'dotted'}},
+      {selector:'.hl', style:{'border-width':4,'border-color':'#e0a800'}},
     ]});
-    cy.on('tap','node', e => showNode(e.target.id()));
-    cy.on('tap', e => { if (e.target === cy) $('#detail').style.display='none'; });
+    cy.on('tap', 'node', e => showNode(e.target.id()));
+    cy.on('tap', 'edge', e => { if (layer === 'causal') { const [a, b] = [e.target.data('source'), e.target.data('target')]; tab('causal'); showEdge(a, b); } });
   }
   cy.elements().remove(); cy.add(els);
-  cy.layout({name:'cose', animate:false, randomize:true, nodeRepulsion:() => 600000, idealEdgeLength:() => 110, nodeOverlap:40, gravity:0.25, numIter:2500, padding:40}).run();
+  cy.layout({name:'cose', animate:false, randomize:true, nodeRepulsion:() => 500000, idealEdgeLength:() => 100, nodeOverlap:40, gravity:0.3, numIter:2500, padding:40}).run();
+  $('#legend').innerHTML = layer === 'kg'
+    ? `Node colour: the subject's evaluation (<span class="pos">good</span>, <span class="neg">bad</span>, indifferent, none). Stated facts the subject holds${g.hidden ? `; ${g.hidden} less-connected concepts hidden` : ''}.`
+    : 'Black arrow: compelled by the data. Blue: oriented by the subject\'s stated claims. Dashed, no arrow: reversible. Thickness: stability across resamples.';
 }
 
-function showNode(id) {
-  const n = graph.nodes.find(x => x.id === id), lbl = i => (graph.nodes.find(x => x.id===i)||{label:i}).label;
-  const rels = graph.relations.filter(r => r.src===id || r.dst===id).map(r => `${lbl(r.src)} <i>${r.rel.replace(/_/g,' ')}</i> ${lbl(r.dst)}`);
-  const cause = graph.causal_edges.filter(e => e.src===id || e.dst===id).map(e => `${lbl(e.src)} <span class="${e.sign>0?'pos':'neg'}">${e.sign>0?'raises':'lowers'}</span> ${lbl(e.dst)} <span class="muted">${e.mechanism||''}</span>`);
-  $('#detail').innerHTML = `<strong>${n.label}</strong> <span class="muted">${n.type}</span><br>${rels.concat(cause).join('<br>') || '<span class="muted">no links yet</span>'}`;
-  $('#detail').style.display = 'block';
+// ---------- node ----------
+async function showNode(id) {
+  tab('node');
+  cy && (cy.nodes().removeClass('hl'), cy.getElementById(id).addClass('hl'));
+  const el = $('#node'); el.innerHTML = '<p class="muted">Loading…</p>';
+  try {
+    const n = await api(`/api/node/${encodeURIComponent(id)}`);
+    labels[n.id] = n.label;
+    n.facts.forEach(f => { labels[f.s] = f.s_label; labels[f.o] = f.o_label; });
+    const sel = n.causal.selection;
+    let h = `<h3>${esc(n.label)} ${evalPill(n.evaluation)}</h3><div class="muted">${esc(n.kind)}${n.gloss ? ' · ' + esc(n.gloss) : ''}</div>`;
+    if (n.pole_of) h += `<p class="small">The opposite pole of <button class="link" data-node="${esc(n.pole_of)}">${lbl(n.pole_of)}</button>.</p>`;
+    if (n.aliases.length) h += `<div class="small muted">Also: ${n.aliases.map(esc).join(', ')}</div>`;
+    if (n.classes.length) h += `<div class="small">Kind of: ${n.classes.map(c => `<button class="link" data-node="${esc(c)}">${lbl(c)}</button>`).join(', ')}</div>`;
+    if (sel) h += `<div class="small">Causal variable: <b>${esc(sel.status)}</b>, ${esc(sel.reason)}</div>`;
+    h += `<h4>Stated (${n.facts.length})</h4>` + (n.facts.length ? n.facts.slice(0, 40).map(f => `<div class="card">
+        <div><button class="link" data-node="${esc(f.s)}">${esc(f.s_label)}</button> ${f.neg ? '<b>not</b> ' : ''}<i>${rel(f.r)}</i> <button class="link" data-node="${esc(f.o)}">${esc(f.o_label)}</button>
+        <span class="muted small">${f.support} passage${f.support === 1 ? '' : 's'}${f.held ? '' : ' · reported, not held'}${f.qualifiers.length ? ' · ' + f.qualifiers.map(esc).join('; ') : ''}</span></div>
+        ${f.evidence.slice(0, 3).map(e => e.passage === 'codebook' ? '<div class="small muted">by construction in the codebook</div>' : quote(e) + (e.modality && e.modality !== 'asserts' ? `<span class="small muted">${esc(e.modality)}${e.attribution && e.attribution !== 'self' ? ', ' + esc(e.attribution) : ''}</span>` : '')).join('')}</div>`).join('') : '<p class="muted">None.</p>');
+    if (n.inferred.length) h += `<h4>Inferred (${n.inferred.length})</h4><table>${n.inferred.map(x => `<tr class="click" data-holds="${esc(x.s)}|${esc(x.r)}|${esc(x.o)}"><td>${esc(x.s_label)} <i>${rel(x.r)}</i> ${esc(x.o_label)}</td><td class="muted small">${esc(x.rule)}</td></tr>`).join('')}</table>`;
+    if (n.causal.claims.length) h += `<h4>Causal claims in the text (${n.causal.claims.length})</h4>` + n.causal.claims.slice(0, 20).map(c => `<div class="card">
+        ${esc(c.cause_label)} <span class="${c.sign > 0 ? 'pos' : 'neg'}">${c.sign > 0 ? 'raises' : 'lowers'}</span> ${esc(c.effect_label)} <span class="muted small">${c.support} passage${c.support === 1 ? '' : 's'}${c.sign_conflict ? ' · signs disagree' : ''}</span>
+        ${c.evidence.slice(0, 2).map(quote).join('')}</div>`).join('');
+    if (n.causal.edges.length) h += `<h4>In the causal model</h4><table>${n.causal.edges.map(e => `<tr class="click" data-edge="${esc(e.a)}|${esc(e.b)}"><td>${lbl(e.a)} ${e.directed ? '→' : '—'} ${lbl(e.b)}</td><td>${esc(e.status)}</td></tr>`).join('')}</table>`;
+    if (n.violations.length) h += `<h4>Inconsistencies</h4>` + n.violations.map(v => `<div class="small neg">${esc(v.type.replace(/_/g, ' '))}: ${esc(v.why || (v.facts || []).join(', '))}</div>`).join('');
+    h += `<h4>Passages (${n.mentions.length})</h4>` + (n.mentions.slice(0, 60).map(m => `<div class="small">${loc(m.passage, m.locator)} <span class="${m.level > 0 ? 'pos' : 'neg'}">${m.level > 0 ? '+' : '−'}</span> <span class="q">“${esc(m.quote)}”</span></div>`).join('') || '<p class="muted">None.</p>');
+    h += '<div id="ptext"></div>';
+    el.innerHTML = h;
+  } catch (err) { fail(el, err); }
 }
 
-async function refresh() {
-  const [s, g] = await Promise.all([api('/api/status'), api('/api/graph')]);
-  graph = g;
-  $('#stat').textContent = `v${s.version} · ${s.nodes} nodes · ${s.proposed} to review · Claude ${s.llm ? 'on' : 'off (no key)'}${s.corpus ? '' : ' · corpus not downloaded'}`;
-  drawGraph();
-  $('#inode').innerHTML = g.nodes.filter(n => g.causal_edges.some(e => e.src===n.id)).map(n => `<option value="${n.id}">${n.label}</option>`).join('');
-  const opts = [...g.nodes].sort((x, y) => x.label.localeCompare(y.label)).map(n => `<option value="${n.id}">${esc(n.label)}</option>`).join('');
-  document.querySelectorAll('.nodesel').forEach(sel => { const v = sel.value; sel.innerHTML = opts; if (v) sel.value = v; });
-  loadPatches(); loadFace();
+async function showPassage(pid, target) {
+  const el = target || $('#ptext') || $('#node');
+  try {
+    const p = await api(`/api/passage/${encodeURIComponent(pid)}`);
+    el.innerHTML = `<h4>${esc(p.locator)}</h4><div class="passage">${esc(p.text)}</div>` +
+      (p.levels.length ? `<div class="small">Measured here: ${p.levels.map(l => `<button class="link" data-node="${esc(l.id)}">${esc(l.label)}</button> <span class="${l.level > 0 ? 'pos' : 'neg'}">${l.level > 0 ? '+' : '−'}</span>`).join(', ')}</div>` : '') +
+      (p.facts.length ? `<div class="small">Facts coded: ${p.facts.map(f => `${esc(f.s_label)} ${f.neg ? 'not ' : ''}<i>${rel(f.r)}</i> ${esc(f.o_label)}`).join('; ')}</div>` : '') +
+      (p.claims.length ? `<div class="small">Claims coded: ${p.claims.map(c => `${esc(c.cause_label)} ${c.sign > 0 ? 'raises' : 'lowers'} ${esc(c.effect_label)}`).join('; ')}</div>` : '');
+    el.scrollIntoView({behavior:'smooth', block:'start'});
+  } catch (err) { fail(el, err); }
 }
 
-function opText(o) {
-  switch (o.op) {
-    case 'add_node': return `+ node ${o.label} (${o.type})`;
-    case 'add_relation': return `+ ${o.src} —${o.rel}→ ${o.dst}`;
-    case 'add_causal_edge': return `+ ${o.src} ${o.sign>0?'⇑':'⇓'} ${o.dst}  s=${o.strength} c=${o.confidence}  ${o.mechanism||''}`;
-    case 'remove_relation': return `− ${o.src} —${o.rel}→ ${o.dst}`;
-    case 'remove_causal_edge': return `− ${o.src} → ${o.dst} (causal)`;
-    case 'update_node': return `~ ${o.id} ${o.label||''} ${JSON.stringify(o.attrs)}`;
-    default: return `${o.op} ${o.id||''} ${o.src||''} ${o.dst||''}`;
-  }
+// ---------- knowledge ----------
+function proofTree(p) {
+  if (!p) return '';
+  const head = `${lbl(p.s)} <i>${rel(p.r)}</i> ${lbl(p.o)}`;
+  if (p.rule === 'stated') return `<li>${head} <span class="muted small">stated, ${p.support} passage(s)</span>${(p.evidence || []).slice(0, 2).map(quote).join('')}</li>`;
+  if (p.rule === 'denied') return `<li><b>not</b> ${head} <span class="muted small">denied</span>${(p.evidence || []).slice(0, 2).map(quote).join('')}</li>`;
+  return `<li>${head} <span class="muted small">because ${esc(p.rule)}</span><ul class="tree">${(p.from || []).map(proofTree).join('')}</ul></li>`;
+}
+async function loadKnowledge() {
+  const el = $('#knowledge');
+  try {
+    const [k, cs] = await Promise.all([api('/api/knowledge'), api('/api/concepts')]);
+    cs.forEach(c => labels[c.id] = c.label);
+    const opts = cs.map(c => `<option value="${esc(c.id)}">${esc(c.label)}</option>`).join('');
+    const rels = ['is_a', 'part_of', 'same_as', 'opposes', 'requires', 'accords_with', 'expresses', 'exemplifies', 'practices', 'learned_from', 'values', 'rejects', 'related_to'];
+    el.innerHTML = `<p>${k.stats.held} facts the subject holds, ${k.stats.inferred} more that follow from them by the ontology's rules, ${k.stats.reported_not_held} reported views it does not hold, ${k.stats.violations} inconsistencies.</p>
+      <h4>Does it follow?</h4>
+      <div class="row"><select id="hs">${opts}</select><select id="hr">${rels.map(r => `<option>${r}</option>`).join('')}</select><select id="ho">${opts}</select><button class="b primary" id="hbtn">Check</button></div>
+      <div id="hout"></div>
+      <h4>Inconsistencies</h4>
+      ${k.violations.length ? k.violations.map(v => `<div class="card"><b>${esc(v.type.replace(/_/g, ' '))}</b> <span class="muted small">${esc(v.why || '')}</span><ul class="tree">${(v.proofs || []).map(proofTree).join('')}</ul></div>`).join('') : '<p class="muted">None found.</p>'}
+      <p class="muted small">Rules: is_a, part_of, requires and same_as are transitive; opposes and same_as are symmetric; opposes, requires and accords_with pass from a class to its members; values and rejects pass from a class to its members. good, bad and indifferent are disjoint. Only the subject's own assertions and self-prescriptions are reasoned over. Missing means not found, not false.</p>`;
+    const hs = $('#hs'); hs.value = cs.find(c => c.id === 'self') ? 'self' : hs.value; $('#ho').value = cs.find(c => c.id === 'good') ? 'good' : $('#ho').value;
+    $('#hbtn').onclick = async () => {
+      try { await checkHolds($('#hs').value, $('#hr').value, $('#ho').value); } catch (err) { fail($('#hout'), err); }
+    };
+  } catch (err) { fail(el, err); }
+}
+async function checkHolds(s, r, o) {
+  const h = await api(`/api/holds?s=${encodeURIComponent(s)}&r=${encodeURIComponent(r)}&o=${encodeURIComponent(o)}`);
+  const out = $('#hout');
+  out.innerHTML = `<p><b>${esc(h.status)}</b>${h.conflict ? ' <span class="neg">(and also denied)</span>' : ''}</p>` +
+    (h.proof ? `<ul class="tree">${proofTree(h.proof)}</ul>` : '') + (h.evidence ? h.evidence.slice(0, 3).map(quote).join('') : '') +
+    (h.status === 'not found' ? '<p class="muted small">Neither stated nor derivable. The graph is open-world, so this is not a denial.</p>' : '');
 }
 
-async function loadPatches() {
-  const ps = await api('/api/patches?status=proposed');
-  $('#pcount').textContent = ps.length ? `${ps.length} proposed changes` : 'Nothing to review';
-  $('#patches').innerHTML = ps.map(p => `<div class="card">
-    <div><strong>${p.source.locator || ''}</strong> <span class="muted">${p.kind} · by ${p.proposed_by}</span></div>
-    ${p.source.quote ? `<div class="q">“${p.source.quote}”</div>` : ''}
-    <div>${p.rationale}</div>
-    <div class="ops">${p.ops.map(opText).join('\n')}</div>
-    ${p.warnings.map(w => `<div class="warn">${w}</div>`).join('')}
-    <div class="row"><button class="b primary" data-a="approve" data-id="${p.id}">Approve</button><button class="b" data-a="reject" data-id="${p.id}">Reject</button></div>
-  </div>`).join('');
+// ---------- causal ----------
+async function loadCausal() {
+  const el = $('#causal');
+  try {
+    const c = causalData = await api('/api/causal');
+    Object.assign(labels, c.labels);
+    if (c.empty || !c.edges) { el.innerHTML = '<p class="muted">Too few variables passed selection to run discovery.</p>'; return; }
+    const size = s => s ? (s.count != null ? s.count.toLocaleString() : s.log10 != null ? `about 10^${s.log10}` : 'too large to count here') : '?';
+    const sel = c.selection.filter(r => r.status === 'selected'), ex = c.selection.filter(r => r.status !== 'selected');
+    const st = c.settings;
+    const statusOrder = {compelled:0, pinned:1, 'implied by pins':2, reversible:3};
+    const edges = [...c.edges].sort((a, b) => statusOrder[a.status] - statusOrder[b.status] || Math.abs(b.effect || 0) - Math.abs(a.effect || 0));
+    const vopts = sel.map(r => `<option value="${esc(r.id)}">${esc(r.label)}</option>`).join('');
+    el.innerHTML = `<p>${c.variables.length} variables measured across ${c.n_rows} passages. PC at α = ${st.alpha}, conditioning on up to ${st.max_depth} variables (${c.n_tests.toLocaleString()} tests).</p>
+      <table><tr><th></th><th>DAGs in the class</th><th>Reversible edges</th></tr>
+      <tr><td>Data alone</td><td>${size(c.class_size.data)}</td><td>${c.class_size.data.undirected_edges}</td></tr>
+      <tr><td>With the subject's claims</td><td>${size(c.class_size.with_pins)}</td><td>${c.class_size.with_pins.undirected_edges}</td></tr></table>
+      <div id="edgeout"></div>
+      <h4>Edges</h4>
+      <table><tr><th>Edge</th><th>Status</th><th>Effect</th><th>Stable</th></tr>${edges.map(e => `<tr class="click" data-edge="${esc(e.a)}|${esc(e.b)}">
+        <td>${esc(e.a_label)} ${e.directed ? '→' : '—'} ${esc(e.b_label)}</td><td>${esc(e.status)}</td>
+        <td class="${(e.effect || 0) >= 0 ? 'pos' : 'neg'}">${e.effect == null ? '' : (e.effect > 0 ? '+' : '') + e.effect.toFixed(2)}</td>
+        <td>${e.stability.adjacent != null ? Math.round(100 * e.stability.adjacent) + '%' : ''}</td></tr>`).join('')}</table>
+      <h4>What does changing one variable do to another?</h4>
+      <p class="muted small">Possible effects across every DAG in the class (IDA), without listing the class.</p>
+      <div class="row"><select id="ex">${vopts}</select> on <select id="ey">${vopts}</select><button class="b primary" id="ebtn">Estimate</button></div>
+      <div id="eout"></div>
+      <h4>The subject's causal claims, tested against the data (${c.pins.length})</h4>
+      ${c.pins.length ? `<table>${c.pins.map(p => `<tr class="click" data-edge="${esc(p.src)}|${esc(p.dst)}"><td>${lbl(p.src)} → ${lbl(p.dst)}</td><td>${esc(p.status)}</td><td class="muted small">${esc(p.source)}${p.support && p.support < 1e6 ? ', ' + p.support : ''}</td></tr>`).join('')}</table>` : '<p class="muted">No grounded claims between two selected variables.</p>'}
+      ${c.feedback_claims.length ? `<p class="small">Claimed in both directions (feedback): ${c.feedback_claims.map(f => `${lbl(f.pair[0])} ⇄ ${lbl(f.pair[1])}`).join(', ')}</p>` : ''}
+      ${(c.ambiguous || []).length ? `<p class="small muted">Undecided colliders (separating sets split evenly): ${c.ambiguous.map(a => a.triple.map(lbl).join(' – ')).join('; ')}</p>` : ''}
+      ${c.conflicts.length ? `<p class="small neg">${c.conflicts.map(x => x.note || `conflicting colliders on ${x.edge.map(lbl).join(' – ')}`).map(esc).join('; ')}</p>` : ''}
+      <h4>Variables (${sel.length} chosen of ${c.selection.length} candidates)</h4>
+      <table>${sel.map(r => `<tr class="click" data-node="${esc(r.id)}"><td>${esc(r.label)}</td><td class="small muted">${esc(r.reason)}</td></tr>`).join('')}</table>
+      <details><summary class="muted">Left out (${ex.length})</summary><table>${ex.map(r => `<tr class="click" data-node="${esc(r.id)}"><td>${esc(r.label)}</td><td class="small muted">${esc(r.reason)}</td></tr>`).join('')}</table></details>
+      <p class="muted small">Assumptions: passages are the units; each variable is −1, 0 (not engaged) or +1 in a passage; no hidden common causes; faithfulness. Neighbouring passages are not independent, so resampling is done in blocks. The model describes the corpus, not the subject's life.</p>`;
+    if ($('#ey').options.length > 1) $('#ey').selectedIndex = 1;
+    $('#ebtn').onclick = runEffect;
+  } catch (err) { fail(el, err); }
 }
-$('#patches').onclick = async e => {
-  const b = e.target.closest('button[data-a]'); if (!b) return;
-  try { await api(`/api/patches/${b.dataset.id}/${b.dataset.a}`, {approver: approver()}); refresh(); } catch (err) { alert(err.message); }
-};
-$('#approveall').onclick = async () => {
-  const who = approver(), ps = await api('/api/patches?status=proposed'); const errs = [];
-  for (const p of ps) { try { await api(`/api/patches/${p.id}/approve`, {approver: who}); } catch (err) { errs.push(`${p.source.locator}: ${err.message}`); } }
-  if (errs.length) alert(errs.join('\n')); refresh();
-};
-$('#ingest').onclick = async () => {
-  $('#ingestmsg').textContent = 'Claude is reading…';
-  try { const r = await api('/api/ingest', {book:+$('#ibook').value, start:+$('#istart').value, count:+$('#icount').value});
-    $('#ingestmsg').textContent = `Read ${r.chunks.join(', ')}; ${r.queued} changes proposed.`; $('#istart').value = +$('#istart').value + r.chunks.length; refresh();
-  } catch (err) { $('#ingestmsg').textContent = err.message; }
-};
+async function showEdge(a, b) {
+  if (!causalData) await loadCausal();
+  const out = $('#edgeout'); if (!out) return;
+  try {
+    const e = await api(`/api/edge?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`);
+    const st = e.stability, t = e.weakest_test;
+    const dirs = Object.entries(st).filter(([k]) => k.includes('>')).map(([k, v]) => `${k.split('>').map(lbl).join(' → ')} ${Math.round(100 * v)}%`);
+    out.innerHTML = `<div class="card"><h3>${esc(e.a_label)} ${e.directed ? '→' : '—'} ${esc(e.b_label)} <span class="pill">${esc(e.status)}</span></h3>
+      ${e.chain.length ? `<div><b>Why this direction</b><ul class="tree">${e.chain.map(w => `<li>${w.edge.map(lbl).join(' → ')}: ${esc(w.text || w.rule)}</li>`).join('')}</ul></div>` : '<p class="small muted">The data alone cannot orient this edge: both directions fit equally.</p>'}
+      ${t ? `<p class="small">Weakest test of the link: ${lbl(t.x)} and ${lbl(t.y)} given ${t.given.length ? t.given.map(lbl).join(', ') : 'nothing'}, p ${t.p < 0.0001 ? '< 0.0001' : '= ' + t.p}${t.enough_data ? '' : ' (too little data to test)'}.</p>` : ''}
+      ${st.runs ? `<p class="small">In ${st.runs} resamples of the passages: linked ${Math.round(100 * (st.adjacent || 0))}%, undirected ${Math.round(100 * (st.undirected || 0))}%${dirs.length ? ', ' + dirs.join(', ') : ''}.</p>` : ''}
+      <p class="small">Adjusted effect in the drawn member (${lbl(e.member_direction[0])} → ${lbl(e.member_direction[1])}): ${e.effect ?? 'n/a'}${e.coverage != null ? `, using ${Math.round(100 * e.coverage)}% of passages` : ''}.</p>
+      ${e.stated.length ? `<div><b>What the text claims</b>${e.stated.map(c => `<div class="small">${esc(c.cause_label)} ${c.sign > 0 ? 'raises' : 'lowers'} ${esc(c.effect_label)} (${c.support})</div>${c.evidence.slice(0, 3).map(quote).join('')}`).join('')}</div>` : ''}
+      <details><summary class="small">Passages engaging both (${e.n_together})</summary>${e.together.map(p => `<div class="small">${loc(p.passage, p.locator)} ${p.levels.map(l => l > 0 ? '+' : '−').join(' ')}</div>`).join('')}</details>
+      <div id="edgeptext"></div></div>`;
+    out.scrollIntoView({behavior:'smooth', block:'start'});
+  } catch (err) { fail(out, err); }
+}
+async function runEffect() {
+  const x = $('#ex').value, y = $('#ey').value, out = $('#eout');
+  if (x === y) { out.innerHTML = '<p class="muted">Pick two different variables.</p>'; return; }
+  try {
+    const r = await api(`/api/effect?x=${encodeURIComponent(x)}&y=${encodeURIComponent(y)}`);
+    const show = (name, s) => s.min == null ? `<tr><td>${name}</td><td colspan="2" class="muted">not estimable</td></tr>` :
+      `<tr><td>${name}</td><td>${s.min === s.max ? s.min : `${s.min} to ${s.max}`}</td><td>${s.sign === 'mixed' ? 'depends on the member' : (s.sign === '+' ? 'raises' : 'lowers') + (s.identified ? ', identified' : `, at least ${s.min_abs}`)}</td></tr>`;
+    out.innerHTML = `<p>Effect of more ${esc(r.x_label)} on ${esc(r.y_label)}:</p><table><tr><th></th><th>Possible effects</th><th>Reading</th></tr>${show('Data alone', r.data_only)}${show('With claims', r.with_pins)}</table>
+      <p class="muted small">${r.with_pins.n_parent_sets} possible parent set(s) of ${esc(r.x_label)}. Effect: E[${esc(r.y_label)} | do(${esc(r.x_label)} present)] − E[… | not engaged], on the −1..1 scale.</p>`;
+  } catch (err) { fail(out, err); }
+}
 
+// ---------- ask ----------
 $('#askbtn').onclick = async () => {
-  $('#answer').innerHTML = '<p class="muted">Thinking…</p>';
-  try { const r = await api('/api/query', {question: $('#question').value});
-    cy.nodes().removeClass('hl'); r.nodes.forEach(id => cy.getElementById(id).addClass('hl'));
-    $('#answer').innerHTML = (r.answer ? `<p>${r.answer}</p>` : '<p class="muted">Claude is off, so here are the matching facts.</p>') +
-      `<details ${r.answer ? '' : 'open'}><summary class="muted">${r.facts.length} facts used</summary><ul>${r.facts.map(f => `<li>${f}</li>`).join('')}</ul></details>`;
-  } catch (err) { $('#answer').textContent = err.message; }
+  const out = $('#answer'); out.innerHTML = '<p class="muted">Thinking…</p>';
+  try {
+    const r = await api('/api/ask', {question: $('#question').value});
+    cy && (cy.nodes().removeClass('hl'), r.nodes.forEach(id => cy.getElementById(id).addClass('hl')));
+    let ans = r.answer ? esc(r.answer) : '';
+    (r.passages || []).forEach(p => { ans = ans.split(`[${esc(p.locator)}]`).join(`[${loc(p.id, p.locator)}]`); });
+    out.innerHTML = (r.answer ? `<p style="white-space:pre-wrap">${ans}</p>` : '<p class="muted">Claude is off, so here is what the Mirror found.</p>') +
+      `<details ${r.answer ? '' : 'open'}><summary class="muted">${r.facts.length} facts and ${r.passages.length} passages used</summary><ul>${r.facts.map(f => `<li class="small">${esc(f)}</li>`).join('')}</ul>
+      ${r.passages.map(p => `<div class="small">${loc(p.id, p.locator)}</div>`).join('')}</details><div id="askp"></div>`;
+  } catch (err) { fail(out, err); }
 };
 $('#question').onkeydown = e => { if (e.key === 'Enter') $('#askbtn').click(); };
 
-$('#idelta').oninput = e => $('#ideltav').textContent = (+e.target.value >= 0 ? '+' : '') + (+e.target.value).toFixed(1);
-$('#intervene').onclick = async () => {
-  $('#effects').innerHTML = '<p class="muted">Running…</p>';
-  try { const r = await api('/api/intervene', {node: $('#inode').value, delta: +$('#idelta').value, retell: $('#retell').checked});
-    cy.nodes().removeClass('hl'); r.effects.forEach(e => cy.getElementById(e.id).addClass('hl'));
-    $('#effects').innerHTML = (r.story ? `<div class="card q">${r.story}</div>` : '') + (r.effects.length ?
-      `<table><tr><th>Node</th><th>Effect</th></tr>${r.effects.map(e => `<tr><td>${e.label}</td><td class="${e.effect>0?'pos':'neg'}">${e.effect>0?'+':''}${e.effect.toFixed(3)}</td></tr>`).join('')}</table>` : '<p class="muted">Nothing downstream moves.</p>');
-  } catch (err) { $('#effects').textContent = err.message; }
-};
-
-$('#invbtn').onclick = async () => {
-  const r = await api('/api/investigate');
-  const t = (rows, cols) => rows.length ? `<table><tr>${cols.map(c => `<th>${c[0]}</th>`).join('')}</tr>${rows.map(x => `<tr>${cols.map(c => `<td>${c[1](x)}</td>`).join('')}</tr>`).join('')}</table>` : '<p class="muted">None yet.</p>';
-  const lbl = id => (graph.nodes.find(n => n.id===id)||{label:id}).label;
-  $('#inv').innerHTML = `<h3>Important nodes</h3>${t(r.important, [['Node', x=>x.label], ['Centrality', x=>x.centrality], ['Causal reach', x=>x.causal_reach]])}
-    <h3>Breaker: cut points</h3><p class="muted">Remove one of these and the world splits apart.</p>${t(r.breaker.cut_points, [['Node', x=>x.label], ['Fragments', x=>x.fragments]])}
-    <h3>Breaker: load-bearing causes</h3>${t(r.breaker.load_bearing, [['Node', x=>x.label], ['Influence lost', x=>x.influence_lost]])}
-    <h3>Tensions</h3>${t(r.breaker.tensions, [['Target', x=>lbl(x.target)], ['Raised by', x=>lbl(x.pushes_up)], ['Lowered by', x=>lbl(x.pushes_down)]])}
-    <p class="muted">Split and cut suggestions are in the Engines tab.</p>`;
-};
-
-// ---------- Engines: every button here only queues proposals for Review ----------
-const esc = v => String(v ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-const nodeLabel = id => esc((graph.nodes.find(n => n.id===id)||{label:id}).label);
-const table = (rows, cols) => rows.length ? `<table><tr>${cols.map(c => `<th>${c[0]}</th>`).join('')}</tr>${rows.map(x => `<tr>${cols.map(c => `<td>${c[1](x)}</td>`).join('')}</tr>`).join('')}</table>` : '<p class="muted">None right now.</p>';
-const qbtn = (attrs, text, done) => done ? '<span class="muted">In Review</span>' : `<button class="b" ${attrs}>${text}</button>`;
-const queued = b => { b.outerHTML = '<span class="muted">Queued for review</span>'; refresh(); };
-const busy = (el, text) => el.innerHTML = `<p class="muted">${text}</p>`;
-const fail = (el, err) => el.innerHTML = `<p class="warn">${esc(err.message)}</p>`;
-
-// Refactorer
-$('#rfind').onclick = async () => {
-  busy($('#rout'), 'Looking…');
-  try {
-    const r = await api('/api/refactor');
-    $('#rall').disabled = !r.patches.some(p => !p.queued);
-    $('#rout').innerHTML = table(r.patches, [['Change', p => esc(p.rationale)], ['Risk', p => esc(p.extra.risk)],
-        ['', p => qbtn(`data-rkey="${esc(p.extra.key)}"`, 'Queue', p.queued)]]) +
-      (r.findings.length ? `<h4>For you to judge</h4><ul>${r.findings.map(f => `<li>${esc(f.summary)}</li>`).join('')}</ul>` : '');
-  } catch (err) { fail($('#rout'), err); }
-};
-$('#rout').onclick = async e => {
-  const b = e.target.closest('button[data-rkey]'); if (!b) return;
-  try { const r = await api('/api/refactor/queue', {keys: [b.dataset.rkey]}); if (!r.queued.length) throw new Error('Already in Review, or no longer suggested. Find suggestions again.'); queued(b); }
-  catch (err) { alert(err.message); }
-};
-$('#rall').onclick = async () => {
-  try { const r = await api('/api/refactor/queue', {}); $('#rall').disabled = true; $('#rfind').click(); refresh(); alert(`${r.queued.length} refactors queued for review.`); }
-  catch (err) { alert(err.message); }
-};
-
-// Breaker
-$('#bfind').onclick = async () => {
-  busy($('#bout'), 'Looking…');
-  try {
-    const b = await api('/api/break/candidates');
-    $('#bout').innerHTML = `<h4>Nodes that may be two things</h4>` +
-      table(b.split, [['Node', x => esc(x.label)], ['Clusters it bridges', x => x.groups.map(g => g.map(n => esc(n.label)).join(', ')).join(' | ')],
-        ['', x => x.groups.length >= 2 ? qbtn(`data-split="${esc(x.id)}"`, 'Propose split') : '']]) +
-      `<h4>Links worth cutting</h4>` +
-      table(b.sever, [['Link', x => `${esc(x.src_label)} – ${esc(x.dst_label)}`],
-        ['Why', x => [x.bridge && 'holds two clusters together', x.tension && 'in tension', !x.causal && 'descriptive only'].filter(Boolean).join(', ')],
-        ['', x => qbtn(`data-sever="${esc(x.src)}|${esc(x.dst)}"`, 'Propose cut')]]);
-  } catch (err) { fail($('#bout'), err); }
-};
-$('#bout').onclick = async e => {
-  const b = e.target.closest('button[data-split],button[data-sever]'); if (!b) return;
-  try {
-    if (b.dataset.split) await api('/api/break/split', {node: b.dataset.split});
-    else { const [src, dst] = b.dataset.sever.split('|'); await api('/api/break/sever', {src, dst}); }
-    queued(b);
-  } catch (err) { alert(err.message); }
-};
-$('#bsplit').onclick = async () => {
-  const parts = $('#bsparts').value.split(',').map(x => x.trim()).filter(Boolean).map(label => ({label}));
-  try { await api('/api/break/split', {node: $('#bsnode').value, parts: parts.length ? parts : null}); $('#bsparts').value = ''; refresh(); alert('Split queued for review.'); }
-  catch (err) { alert(err.message); }
-};
-$('#bsever').onclick = async () => {
-  try { await api('/api/break/sever', {src: $('#bvsrc').value, dst: $('#bvdst').value, causal: !$('#bvkeep').checked}); refresh(); alert('Cut queued for review.'); }
-  catch (err) { alert(err.message); }
-};
-
-// Chainer
-$('#cfind').onclick = async () => {
-  busy($('#cout'), 'Looking…');
-  try {
-    const c = await api('/api/chain/candidates');
-    $('#cout').innerHTML = table(c, [['Fold', x => `${esc(x.absorbed_label)} into ${esc(x.survivor_label)}`], ['Why', x => esc(x.why)],
-      ['', x => qbtn(`data-merge="${esc(x.survivor)}|${esc(x.absorbed)}"`, 'Propose merge')]]);
-  } catch (err) { fail($('#cout'), err); }
-};
-$('#cout').onclick = async e => {
-  const b = e.target.closest('button[data-merge]'); if (!b) return;
-  const [survivor, absorbed] = b.dataset.merge.split('|');
-  try { await api('/api/chain/merge', {survivor, absorbed: [absorbed]}); queued(b); } catch (err) { alert(err.message); }
-};
-$('#cmerge').onclick = async () => {
-  const survivor = $('#cmkeep').value, absorbed = $('#cmabsorb').value;
-  if (survivor === absorbed) return alert('Pick two different nodes.');
-  try { await api('/api/chain/merge', {survivor, absorbed: [absorbed], label: $('#cmlabel').value.trim() || null}); $('#cmlabel').value = ''; refresh(); alert('Merge queued for review.'); }
-  catch (err) { alert(err.message); }
-};
-let other = null;
-$('#cfile').onchange = async e => {
-  other = null; $('#calign').disabled = $('#cchain').disabled = true; $('#chainout').innerHTML = '';
-  const f = e.target.files[0]; if (!f) return;
-  try { other = JSON.parse(await f.text()); if (!$('#cns').value && other.name) $('#cns').value = other.name; $('#calign').disabled = $('#cchain').disabled = false; }
-  catch { fail($('#chainout'), new Error('That file is not an ontology.json.')); }
-};
-$('#calign').onclick = async () => {
-  try {
-    const a = await api('/api/chain/align', {ontology: other});
-    const otherLabel = id => esc((other.nodes || []).find(n => n.id === id)?.label || id);
-    const exact = Object.entries(a.exact);
-    $('#chainout').innerHTML = `<h4>Joined onto existing nodes (${exact.length})</h4>` + table(exact, [['Theirs', x => otherLabel(x[0])], ['Ours', x => nodeLabel(x[1])]]) +
-      `<h4>Near matches, kept separate</h4>` + table(a.possible, [['Theirs', x => otherLabel(x.other)], ['Ours', x => nodeLabel(x.base)], ['Similarity', x => x.score]]);
-  } catch (err) { fail($('#chainout'), err); }
-};
-$('#cchain').onclick = async () => {
-  try { const p = await api('/api/chain/import', {ontology: other, namespace: $('#cns').value.trim() || null}); refresh();
-    $('#chainout').innerHTML = `<p>Chain queued for review: ${p.ops.length} changes.</p>`; }
-  catch (err) { fail($('#chainout'), err); }
-};
-
-// Evolver
-const evolve = async queue => {
-  busy($('#eout'), 'Searching designs…');
-  try {
-    const r = await api('/api/evolve', {generations: +$('#egen').value, beam: +$('#ebeam').value, keep: +$('#ekeep').value, queue});
-    $('#eout').innerHTML = `<p class="muted">Engines: ${esc(r.operators.join(', ') || 'none')}. Tried ${r.explored} designs. Current fitness ${r.base.total.toFixed(3)}.</p>` +
-      (r.designs.length ? r.designs.map(d => `<div class="card"><strong>${d.fitness.total.toFixed(3)}</strong> <span class="muted">${d.fitness.passed.length} probes pass</span>
-        <ol>${d.steps.map(s => `<li><span class="muted">${esc(s.family)}:</span> ${esc(s.rationale)}</li>`).join('')}</ol></div>`).join('') : '<p class="muted">No design beats the current one.</p>') +
-      r.errors.map(x => `<p class="warn">${esc(x)}</p>`).join('') +
-      (queue ? `<p>${r.queued.length} designs queued for review.</p>` : '');
-    if (queue) refresh();
-  } catch (err) { fail($('#eout'), err); }
-};
-$('#epreview').onclick = () => evolve(false);
-$('#equeue').onclick = () => evolve(true);
-
-// ---------- Face: the archetype the Mirror most resembles (read-only) ----------
+// ---------- face ----------
 const GLYPHS = {  // small line drawings centred on (0,0), about 36px across
   bindle: 'M-14 14 L12 -12 M12 -12 m-6 -6 a7 7 0 1 0 0.1 0',
   wand: 'M-12 14 L12 -10 M12 -10 l3 -8 M12 -10 l8 -3 M12 -10 l6 6',
@@ -458,13 +370,12 @@ function drawFace(card, opacity) {
   }
   $('#aface').innerHTML = `<g opacity="${opacity}">${body}</g>`;
 }
-
 const cardName = c => `${c.numeral} · ${esc(c.name)}${c.reversed ? ' (reversed)' : ''}`;
 async function loadFace() {
   const sel = $('#ffocus'), keep = sel.value;
-  sel.innerHTML = '<option value="">Whole Mirror</option>' + [...graph.nodes].sort((x, y) => x.label.localeCompare(y.label))
-    .map(n => `<option value="${n.id}">Around ${esc(n.label)}</option>`).join('');
-  sel.value = graph.nodes.some(n => n.id === keep) ? keep : '';
+  const nodes = Object.entries(labels).sort((a, b) => a[1].localeCompare(b[1]));
+  sel.innerHTML = '<option value="">Whole Mirror</option>' + nodes.map(([id, l]) => `<option value="${esc(id)}">Around ${esc(l)}</option>`).join('');
+  sel.value = labels[keep] ? keep : '';
   $('#fcard').innerHTML = '<p class="muted">Reading…</p>';
   try {
     const r = await api('/api/archetype' + (sel.value ? `?focus=${encodeURIComponent(sel.value)}` : ''));
@@ -476,31 +387,54 @@ async function loadFace() {
     if (a && !r.undecided) {
       html += '<h4>Why this card</h4>' + (r.evidence.length ? r.evidence.map((e, i) => `<div class="card"><div>${esc(e.text)} <span class="muted">${e.layer}, ${e.count} found</span></div>` +
         e.examples.map((x, j) => `<div><button class="b" data-ev="${i}:${j}">${x.labels.map(esc).join(' → ') || 'the whole graph'}</button></div>` +
-          x.quotes.map(q => `<div class="q">“${esc(q)}”</div>`).join('')).join('') + '</div>').join('') : '<p class="muted">A whole-graph property; nothing to point at.</p>');
+          x.quotes.map(qq => `<div class="q">“${esc(qq)}”</div>`).join('')).join('') + '</div>').join('') : '<p class="muted">A whole-graph property; nothing to point at.</p>');
       html += `<p class="muted">Next closest: ${r.runners_up.map(c => `${cardName(c)} ${c.score}`).join(', ')}</p>`;
     }
     if (r.unclassified_relations.length) html += `<p class="muted">Relations the cards don't read yet: ${r.unclassified_relations.map(esc).join(', ')}.</p>`;
     if (r.scores.length) html += `<details><summary class="muted">All 22 cards</summary><table>${r.scores.map(c => `<tr><td>${cardName(c)}</td><td>${c.score}</td></tr>`).join('')}</table></details>`;
     $('#fcard').innerHTML = html;
     $('#fcard').onclick = e => {
-      const b = e.target.closest('button[data-ev]'); if (!b) return;
+      const b = e.target.closest('button[data-ev]'); if (!b || !cy) return;
       const [i, j] = b.dataset.ev.split(':').map(Number);
       cy.nodes().removeClass('hl'); r.evidence[i].examples[j].nodes.forEach(id => cy.getElementById(id).addClass('hl'));
     };
   } catch (err) { fail($('#fcard'), err); }
-  const m = await api('/api/metrics');
-  $('#mtable').innerHTML = '<tr><th>Reading</th><th>Value</th></tr>' + Object.entries(m).map(([k,v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('');
 }
 $('#frun').onclick = loadFace;
 $('#ffocus').onchange = loadFace;
 
-document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
-  document.querySelectorAll('nav button, section').forEach(x => x.classList.remove('on'));
-  b.classList.add('on'); $('#' + b.dataset.tab).classList.add('on');
+// ---------- wiring ----------
+document.addEventListener('click', e => {
+  const t = e.target.closest('[data-passage],[data-node],[data-edge],[data-holds]'); if (!t) return;
+  if (t.dataset.passage) {
+    const box = t.closest('#causal') ? $('#edgeptext') : t.closest('#ask') ? $('#askp') : t.closest('#knowledge') ? $('#hout') : $('#ptext');
+    showPassage(t.dataset.passage, box);
+  } else if (t.dataset.node) showNode(t.dataset.node);
+  else if (t.dataset.edge) { const [a, b] = t.dataset.edge.split('|'); tab('causal'); showEdge(a, b); }
+  else if (t.dataset.holds) { const [s, r, o] = t.dataset.holds.split('|'); tab('knowledge'); setTimeout(() => checkHolds(s, r, o).catch(err => fail($('#hout'), err)), 0); }
 });
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => tab(b.dataset.tab));
 document.querySelectorAll('#layers button').forEach(b => b.onclick = () => {
   document.querySelectorAll('#layers button').forEach(x => x.classList.remove('sel')); b.classList.add('sel'); layer = b.dataset.layer; drawGraph();
 });
+$('#corpus').onchange = () => { corpus = $('#corpus').value; store.set('corpus', corpus); refresh(); };
+
+async function refresh() {
+  const s = await api('/api/status');
+  if (!s.built.length) {
+    $('#empty').style.display = 'flex'; $('#legend').style.display = 'none';
+    $('#stat').textContent = `Claude ${s.llm ? 'on' : 'off (no key in .env)'}`; return;
+  }
+  const saved = store.get('corpus');
+  corpus = corpus && s.built.includes(corpus) ? corpus : (saved && s.built.includes(saved) ? saved : s.built[0]);
+  $('#corpus').innerHTML = s.built.map(b => `<option ${b === corpus ? 'selected' : ''}>${esc(b)}</option>`).join('');
+  const m = await api('/api/meta');
+  labels = {};
+  $('#stat').textContent = `${m.corpus.title} · ${m.passages} passages · ${m.concepts} concepts · ${m.stats.held} facts held, ${m.stats.inferred} inferred · ${m.variables} causal variables · Claude ${s.llm ? 'on' : 'off'}`;
+  await drawGraph();
+  causalData = null;
+  loadKnowledge(); loadCausal(); loadFace();
+}
 refresh().catch(err => $('#stat').textContent = err.message);
 </script>
 </body>
