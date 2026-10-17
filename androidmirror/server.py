@@ -16,6 +16,7 @@ from pydantic import BaseModel
 
 from . import archetypes, llm, mutate_api
 from .mirror import ask as oracle
+from .mirror import question
 from .mirror.build import mirror_dir
 from .mirror.corpus import SPECS
 from .mirror.store import Mirror
@@ -123,12 +124,9 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
             raise HTTPException(400, str(e)) from None
 
     @app.get("/api/archetype")
-    def archetype(focus: str | None = None, corpus: str | None = None) -> dict:
-        snap = get(corpus).snapshot()
-        try:
-            return archetypes.match(snap, focus=focus)
-        except KeyError:
-            raise HTTPException(404, f"no such node: {focus}") from None
+    def archetype(corpus: str | None = None) -> dict:
+        """The archetype the whole Mirror most resembles. Read-only."""
+        return archetypes.match(get(corpus).snapshot())
 
     @app.get("/api/concepts")
     def concepts(corpus: str | None = None) -> list[dict]:
@@ -137,5 +135,6 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
                        for k, v in m.nodes.items()), key=lambda r: -r["support"])
 
     mutate_api.register(app, lambda c: mirror_dir(data_dir, get(c).meta["corpus"]["id"]))
+    app.include_router(question.routes(get))  # the Question engine: questions, answers, proposals to approve
 
     return app

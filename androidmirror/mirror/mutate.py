@@ -38,6 +38,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .. import llm
+from . import answers
 from . import codebook as cb
 from . import judgments as jd
 from .causal import fit, holdout, public
@@ -271,10 +272,12 @@ def transform(data: dict[str, Any], m: dict[str, Any]) -> tuple[dict[str, Any], 
     return out, lineage
 
 
-def refit(data: dict[str, Any], check: bool = True) -> dict[str, Any]:
-    """Re-fit the causal model and (check=True) its held-out check, with the Mirror's own settings (no Claude calls)."""
+def refit(data: dict[str, Any], check: bool = True, book: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Re-fit the causal model and (check=True) its held-out check, with the Mirror's own settings (no Claude calls).
+
+    As in build.finalize, the fit includes the user's approved answers (`book`); the held-out check is on the corpus."""
     cfg = (data.get("causal") or {}).get("settings", {})
-    model = fit(data["judgments"], cfg)
+    model = fit(answers.overlay(data, book or {})["judgments"], cfg)
     data["causal"] = {**public(model), "holdout": holdout(data["judgments"], cfg) if check else None}
     return data
 
@@ -297,13 +300,23 @@ def _agreement(h: dict[str, Any] | None) -> dict[str, float | int] | None:
             "contradicted": round(bad / (pos + neg), 3) if pos + neg else 0.0, "claims": pos + neg}
 
 
-def evaluate(data: dict[str, Any], m: dict[str, Any], check: bool = True) -> tuple[dict[str, Any], dict[str, Any]]:
+def evaluate(data: dict[str, Any], m: dict[str, Any], check: bool = True,
+             book: dict[str, Any] | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
     """The mutated, re-fitted Mirror and a preview of everything it changes in both graphs.
 
-    check=False skips the held-out check (five more fits), which is what takes time on a large Mirror."""
+    check=False skips the held-out check (five more fits), which is what takes time on a large Mirror.
+    `book` is the Question engine's answers (answers.json), fitted with the corpus as build does."""
     after, lineage = transform(data, m)
-    refit(after, check)
-    return after, compare(data, after, m, lineage)
+    refit(after, check, book)
+    prev = compare(data, after, m, lineage)
+    gone = removed(m)
+    stale = [p for p in answers.approved(book or {}) if any(
+        {ch.get("x"), ch.get("y"), ch.get("z"), ch.get("s"), ch.get("o"), ch.get("concept"),
+         *answers.parts(ch.get("target", "r||"))} & gone for ch in p["changes"])]
+    if stale:
+        prev["warnings"].append(f"{len(stale)} approved answer(s) name a concept this removes and will no longer "
+                                f"attach to it, e.g. “{stale[0]['question']}”; revoke and answer again after")
+    return after, prev
 
 
 def compare(before: dict[str, Any], after: dict[str, Any], m: dict[str, Any], lineage: dict[str, Any]) -> dict[str, Any]:
@@ -797,7 +810,7 @@ class Engine:
     # proposing (read-only on the Mirror)
     def _record(self, data: dict[str, Any], base: str, mut: dict[str, Any], source: str, reason: str,
                 score: float, check: bool = True) -> dict[str, Any]:
-        _, preview = evaluate(data, mut, check)
+        _, preview = evaluate(data, mut, check, answers.load(self.root))
         return {"id": _mid(mut), "mutation": mut, "source": source, "reason": reason, "score": score, "base": base,
                 "preview": preview, "status": "pending", "created": time.strftime("%Y-%m-%dT%H:%M:%S")}
 
@@ -891,7 +904,7 @@ class Engine:
             allp[pid] = {**fresh, "created": p["created"], "note": "the Mirror changed since this was proposed; recomputed"}
             self._write("proposals.json", allp)
             return {"status": "stale", "proposal": allp[pid]}
-        after, _ = evaluate(data, p["mutation"])
+        after, _ = evaluate(data, p["mutation"], book=answers.load(self.root))
         backup = self.dir / "backups" / f"{pid}.json"
         backup.parent.mkdir(parents=True, exist_ok=True)
         backup.write_bytes((self.root / "mirror.json").read_bytes())

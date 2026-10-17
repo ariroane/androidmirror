@@ -251,3 +251,20 @@ def test_api(tmp_path):
     s = client.post("/api/mutate/split", json={"node": "pleasure"}).json()
     assert s["mutation"]["type"] == "split"
     assert client.post("/api/mutate/split", json={"node": "nothing"}).status_code == 400
+
+
+def test_previews_fit_the_approved_answers_too(tmp_path):
+    from androidmirror.mirror import answers
+
+    _, root = make(tmp_path)
+    answers.save(root, {"proposals": [{"id": "a1", "status": "approved", "question": "Does wrath breed opinion?",
+                                       "answer": "yes", "approved_by": "Android K", "changes": [
+                                           {"type": "judgment", "kind": "causes", "x": "wrath", "y": "virtue",
+                                            "sign": -1, "scope": "direct"}]}]})
+    eng = mutate.Engine(root)
+    p = eng.propose_merge(["anger", "wrath"])
+    # the preview is fitted as the Mirror will load: the answer stays on wrath, so it is flagged
+    assert any("approved answer" in w for w in p["preview"]["warnings"])
+    eng.approve(p["id"], "Android K")
+    edges = {(e["src"], e["dst"]) for e in mirror(root)["causal"]["edges"]}
+    assert ("wrath", "virtue") in edges

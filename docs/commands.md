@@ -21,6 +21,7 @@ Commands that call Claude need `ANTHROPIC_API_KEY` in the local `.env` file. Eve
 | `serve` | Open the web app | No (the Ask tab makes 1 call per question) |
 | `ask` | Ask the Mirror a question from the command line | 1 call per question |
 | `mutate` | Merge or split concepts, preview what changes in both graphs, apply what you approve | No (`split --claude`: 1 call per 50 passages) |
+| `question` | Answer the Mirror's questions about what its graphs leave open | No (1 call per answer written in words) |
 | `p1` | The paused Prototype 1 app | Some subcommands |
 
 ## The usual order
@@ -159,6 +160,21 @@ python -m androidmirror mutate undo
 What a preview shows: facts combined, divided between senses, or that say nothing once merged ("wrath is the same as anger"); causal judgments between merged concepts, which say nothing once merged and are listed with their passages; the arrows at those concepts before and after; each judgment re-weighed with the ones it came from; changes elsewhere in the causal model; inconsistencies; and how many held-out claims the rest of the corpus restates or implies, and how many it contradicts, before and after. Warnings flag a merge the subject's own words argue against (they call one the contrary of the other, or a kind of the other).
 
 Approved mutations are kept in `data/mirror/<corpus>/mutations/` with who approved them and a copy of the Mirror from before, and `build` makes them again on every rebuild. Passages read for the first time after a split go to the first sense. The web app's Mutate tab does the same.
+
+## question
+
+The Question engine asks about what the Mirror's graphs leave open (judgments in tension, signs the passages disagree on, arrows that may be shortcuts, unconnected concepts, inconsistencies, unevaluated concepts, values urged both ways), most important first. Answer with an option's number, or in your own words if your key is set. Each answer becomes a proposal and shows what approving it would change; type your name to approve it, `n` to reject it, or Enter to leave it waiting. Nothing changes without an approval, and approving re-fits the causal model (free).
+
+```powershell
+python -m androidmirror question                          # 10 questions, one at a time
+python -m androidmirror question --kind tension --limit 5 # only judgments in tension
+python -m androidmirror question --list                   # only list them
+python -m androidmirror question --pending                # proposals waiting for approval
+python -m androidmirror question --approve 3fa9c1d2e0 --by "Android K"
+python -m androidmirror question --revoke 3fa9c1d2e0      # take an approved answer back out
+```
+
+Kinds: `tension`, `sign`, `open`, `weak`, `link`, `conflict`, `evaluate`, `want`, and `basis` (the weak bases in a current Derange report, `derange.json`, if there is one). Answers are kept in `data/mirror/<corpus>/answers.json` and survive a rebuild. The Questions tab of the web app does the same.
 
 ## p1
 

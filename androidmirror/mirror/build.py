@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .. import llm
+from . import answers
 from . import codebook as cb
 from . import coding, mutate
 from . import judgments as jd
@@ -169,10 +170,12 @@ def build(spec: CorpusSpec, data_dir: Path, coder: Any = None, limit: int | None
 
 def finalize(mirror: dict[str, Any], root: Path, settings: dict[str, Any] | None = None,
              log: Callable[[str], None] = print) -> dict[str, Any]:
-    """Fit the causal model to the judgments and check it on held-out passages (no Claude calls)."""
+    """Fit the causal model to the judgments and check it on held-out passages (no Claude calls).
+
+    The fit includes the answers the user approved (answers.py); the held-out check is on the corpus alone."""
     old = (mirror.get("causal") or {}).get("settings", {})
     cfg = {**old, **(settings or {})}
-    model = fit(mirror["judgments"], cfg)
+    model = fit(answers.overlay(mirror, answers.load(root))["judgments"], cfg)
     mirror["causal"] = {**public(model), "holdout": holdout(mirror["judgments"], cfg)}
     _write(root / "mirror.json", mirror)
     return mirror

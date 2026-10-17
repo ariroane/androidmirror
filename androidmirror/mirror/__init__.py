@@ -13,6 +13,10 @@ The Mirror is built from a whole corpus in one pass, with no per-patch review:
 6. `judgments` and `causal`: the judgments become constraints, weighted by the
    passages that make them, and the subject's causal model is fitted to them.
 
+7. `question` (on request, after building): the Question engine asks the user
+   what the structures leave open; answers become proposals, and only the
+   approved ones are laid over the Mirror (`answers`).
+
 Every node and edge keeps the passages it came from, so the source text is one
 click away. The Prototype 1 engines (refactor, breaker, chainer, evolver) are
 paused and not wired into this app.
