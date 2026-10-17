@@ -110,7 +110,15 @@ python -m androidmirror build --corpus fomc</pre>
       <div class="row"><button class="b" id="mfind">Find candidates</button><input id="mby" placeholder="Your name, to approve" style="flex:1"></div>
       <div class="row"><input id="ma" list="mconcepts" placeholder="concept" size="12"><span>+</span><input id="mb" list="mconcepts" placeholder="concept" size="12">
         <label class="small"><input type="checkbox" id="mopp"> opposites</label><button class="b" id="mmerge">Preview merge</button></div>
-      <div class="row"><input id="ms" list="mconcepts" placeholder="concept" size="12"><label class="small"><input type="checkbox" id="mclaude"> Claude reads the senses</label><button class="b" id="msplit">Preview split</button></div>
+      <div class="row"><input id="ms" list="mconcepts" placeholder="concept to split" size="16"><button class="b" id="msplit">Preview split</button></div>
+      <div id="mwords" class="small muted"></div>
+      <div id="msenses">
+        <div class="row"><input class="msl" placeholder="sense 1, e.g. joy" size="14"><input class="msw" placeholder="its words, comma-separated" style="flex:1"></div>
+        <div class="row"><input class="msl" placeholder="sense 2, e.g. passion" size="14"><input class="msw" placeholder="its words, comma-separated" style="flex:1"></div>
+        <div class="row"><input class="msl" placeholder="sense 3 (optional)" size="14"><input class="msw" placeholder="its words, comma-separated" style="flex:1"></div>
+      </div>
+      <div class="row"><label class="small"><input type="checkbox" id="mclaude"> Or let Claude read the senses in the passages (uses your key; ignores the senses above)</label></div>
+      <p class="small muted">Leave the senses empty to split along what the Mirror itself shows (a concept called both good and bad, or said both to raise and to lower one thing).</p>
       <div id="mout"></div>
       <div id="mlist"></div>
     </section>
@@ -591,7 +599,23 @@ $('#mby').onchange = () => store.set('approver', $('#mby').value.trim());
 $('#mfind').onclick = () => mutateDo(async () => { const r = await api('/api/mutate/propose', {}); return `${r.proposals.length} proposals.`; });
 $('#mmerge').onclick = () => mutateDo(async () => { const a = $('#ma').value.trim(), b = $('#mb').value.trim();
   await api('/api/mutate/merge', {ids: [a, b], opposite: $('#mopp').checked ? [b] : []}); });
-$('#msplit').onclick = () => mutateDo(async () => { await api('/api/mutate/split', {node: $('#ms').value.trim(), claude: $('#mclaude').checked}); });
+$('#msplit').onclick = () => mutateDo(async () => {
+  const senses = [...document.querySelectorAll('#msenses .row')].map(r => ({label: r.querySelector('.msl').value.trim(),
+    aliases: r.querySelector('.msw').value.split(',').map(w => w.trim()).filter(Boolean)})).filter(s => s.label);
+  if (senses.length === 1) throw new Error('Name at least two senses, or leave them all empty.');
+  const claude = $('#mclaude').checked;
+  await api('/api/mutate/split', {node: $('#ms').value.trim(), claude, senses: claude || !senses.length ? null : senses});
+});
+$('#ms').onchange = async () => {  // the words the corpus uses for the concept: what the senses can be told apart by
+  const id = $('#ms').value.trim(); $('#mwords').textContent = '';
+  if (!id) return;
+  try {
+    const r = await api(`/api/mutate/words/${encodeURIComponent(id)}`);
+    $('#mwords').textContent = `${r.label} is read from ${r.passages} passages. Words used for it: ` +
+      (r.words.map(w => `${w.word} (${w.passages})`).join(', ') || 'none recorded') +
+      (r.words.length < 2 ? '. With one word, words cannot tell the senses apart; let Claude read them.' : '.');
+  } catch (err) { $('#mwords').textContent = err.message; }
+};
 $('#mutate').addEventListener('click', e => {
   if (e.target.id === 'mundo') return mutateDo(async () => { const r = await api('/api/mutate/undo', {approver: $('#mby').value.trim()});
     await refresh(); return r.how === 'restored' ? `Undid ${r.id}.` : `Undid ${r.id}; run build again (cached, free) to take it out of the Mirror.`; });
