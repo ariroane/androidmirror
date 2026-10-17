@@ -14,7 +14,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import archetypes, llm
+from . import archetypes, llm, mutate_api
 from .mirror import ask as oracle
 from .mirror import question
 from .mirror.build import mirror_dir
@@ -134,6 +134,7 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
         return sorted(({"id": k, "label": v["label"], "kind": v["kind"], "support": v.get("support", 0)}
                        for k, v in m.nodes.items()), key=lambda r: -r["support"])
 
+    mutate_api.register(app, lambda c: mirror_dir(data_dir, get(c).meta["corpus"]["id"]))
     app.include_router(question.routes(get))  # the Question engine: questions, answers, proposals to approve
 
     return app
