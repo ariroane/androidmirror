@@ -1,6 +1,6 @@
 # Android Mirror
 
-A reflective model of a subjective system (a person, a group, an institution) built only from its own words. Prototype 3 reads a whole corpus once and builds two linked structures over the same concepts:
+A reflective model of a subjective system (a person, a group, an institution) built from its own words (other data generating mechanisms in progress). Prototype 3 reads a whole corpus once and builds two linked structures over the same concepts:
 
 - **Descriptive ontology:** a knowledge graph with a schema and rules, so it can be reasoned over, not only browsed. Every answer it gives has a proof that bottoms out in quotes.
 - **Causal model:** the subject's *own* model of how things work, built only from the causal judgments the subject makes ("anger comes from opinion", "take away the opinion and the hurt is gone", "not the thing but your judgment of it disturbs you", "this makes no difference to that"). Each judgment becomes a constraint on a graph, and the graph is fitted to them. Nothing is inferred from how often ideas appear together, and Claude never answers as the subject.
