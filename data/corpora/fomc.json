@@ -1,0 +1,9 @@
+{
+  "id": "fomc",
+  "title": "Federal Open Market Committee policy statements, 1994 to today",
+  "subject": "the FOMC",
+  "splitter": "documents",
+  "fetcher": "fomc",
+  "unit": "document",
+  "options": {"start": 1994, "kinds": ["statement"]}
+}

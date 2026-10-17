@@ -15,6 +15,7 @@ dependencies = [
     "pydantic>=2.6",
     "python-dotenv>=1.0",
     "httpx>=0.27",
+    "numpy>=1.24",
 ]
 
 [project.optional-dependencies]
@@ -24,7 +25,7 @@ dev = ["pytest>=8"]
 androidmirror = "androidmirror.cli:main"
 
 [tool.setuptools]
-packages = ["androidmirror"]
+packages = {find = {include = ["androidmirror*"]}}
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -8,7 +8,7 @@ from androidmirror.chainer import ChainError, plan_chain, plan_merge, suggest_al
 from androidmirror.ingest import load_seed
 from androidmirror.ontology import Ontology
 from androidmirror.patches import Op, Patch
-from androidmirror.server import create_app
+from androidmirror.p1_server import create_app
 from androidmirror.steward import GovernanceError, Steward
 
 SEED = Path(__file__).resolve().parents[2] / "data" / "seed_book1.json"

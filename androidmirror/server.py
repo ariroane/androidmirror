@@ -1,4 +1,8 @@
-"""HTTP API and the web UI (served from web/)."""
+"""HTTP API and web UI for Prototype 2 (served from web/index.html).
+
+Read-only over built Mirrors: build them with `python -m androidmirror build`.
+Every route takes an optional `corpus` (default: the first one built).
+"""
 
 from __future__ import annotations
 
@@ -10,59 +14,43 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import analysis, archetypes, corpus, evolver, llm, query
-from .ingest import ingest_chunks
-from .ontology import Ontology
-from .steward import GovernanceError, Steward, normalize
+from . import archetypes, llm
+from .mirror import ask as oracle
+from .mirror.build import mirror_dir
+from .mirror.corpus import SPECS
+from .mirror.store import Mirror
 
 ROOT = Path(__file__).resolve().parent.parent
 WEB = ROOT / "web"
 
 
-class Decision(BaseModel):
-    approver: str
-    note: str = ""
-
-
-class IngestReq(BaseModel):
-    book: int = 1
-    start: int = 0
-    count: int = 3
-
-
 class Ask(BaseModel):
     question: str
-
-
-class EvolveReq(BaseModel):
-    generations: int = 3
-    beam: int = 4
-    keep: int = 3
-    queue: bool = True
-
-
-class RefactorQueueReq(BaseModel):
-    keys: list[str] | None = None  # None queues every suggestion
-
-
-class Intervention(BaseModel):
-    node: str
-    delta: float = 1.0
-    retell: bool = False
+    corpus: str | None = None
 
 
 def create_app(data_dir: Path | None = None) -> FastAPI:
     data_dir = data_dir or Path(os.environ.get("ANDROIDMIRROR_DATA", ROOT / "data"))
-    onto = Ontology.load(data_dir / "ontology.json")
-    steward = Steward(onto, data_dir, corpus_text=corpus.load_text(data_dir))
     app = FastAPI(title="Android Mirror")
-    app.state.steward = steward
-    from .breaker_api import register as register_breaker  # Breaker routes: proposals only
+    cache: dict[str, tuple[float, Mirror]] = {}
 
-    register_breaker(app, steward)
+    def built() -> list[str]:
+        root = data_dir / "mirror"
+        return sorted(p.name for p in root.iterdir() if (p / "mirror.json").exists()) if root.exists() else []
 
-    def fail(e: Exception) -> HTTPException:
-        return HTTPException(status_code=400, detail=str(e))
+    def get(corpus: str | None) -> Mirror:
+        names = built()
+        name = corpus or os.environ.get("ANDROIDMIRROR_CORPUS") or (names[0] if names else None)
+        if not name or name not in names:
+            raise HTTPException(404, f"no Mirror built for {name or 'any corpus'}; run: python -m androidmirror build")
+        path = mirror_dir(data_dir, name) / "mirror.json"
+        mtime = path.stat().st_mtime
+        if name not in cache or cache[name][0] != mtime:  # reload after a rebuild
+            cache[name] = (mtime, Mirror.load(path.parent))
+        return cache[name][1]
+
+    def missing(e: KeyError) -> HTTPException:
+        return HTTPException(404, f"not found: {e.args[0]}")
 
     app.mount("/vendor", StaticFiles(directory=WEB / "vendor"), name="vendor")
 
@@ -72,147 +60,91 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
 
     @app.get("/api/status")
     def status() -> dict:
-        return {
-            "version": onto.version,
-            "nodes": len(onto.nodes),
-            "proposed": len(steward.list("proposed")),
-            "llm": llm.available(),
-            "model": llm.DEFAULT_MODEL,
-            "corpus": steward.corpus_norm is not None,
-        }
+        specs = sorted(p.stem for p in SPECS.glob("*.json"))
+        return {"built": built(), "corpora": specs, "llm": llm.available(), "model": llm.DEFAULT_MODEL}
+
+    @app.get("/api/meta")
+    def meta(corpus: str | None = None) -> dict:
+        m = get(corpus)
+        return {**m.meta, "stats": m.kb.stats(), "variables": len(m.variables), "concepts": len(m.nodes),
+                "claims": len(m.claims), "class_size": m.causal.get("class_size"),
+                "situations": sum(1 for x in m.situations if x["origin"] == "corpus")}
 
     @app.get("/api/graph")
-    def graph() -> dict:
-        return onto.snapshot()
+    def graph(layer: str = "kg", limit: int = 120, corpus: str | None = None) -> dict:
+        return get(corpus).graph(layer, limit)
 
-    @app.get("/api/patches")
-    def patches(status: str | None = "proposed") -> list[dict]:
-        return [p.model_dump() for p in steward.list(status or None)]
-
-    @app.post("/api/patches/{patch_id}/approve")
-    def approve(patch_id: str, d: Decision) -> dict:
+    @app.get("/api/node/{nid}")
+    def node(nid: str, corpus: str | None = None) -> dict:
         try:
-            return steward.approve(patch_id, d.approver, d.note).model_dump()
-        except GovernanceError as e:
-            raise fail(e)
+            return get(corpus).node(nid)
+        except KeyError as e:
+            raise missing(e) from None
 
-    @app.post("/api/patches/{patch_id}/reject")
-    def reject(patch_id: str, d: Decision) -> dict:
+    @app.get("/api/passage/{pid}")
+    def passage(pid: str, corpus: str | None = None) -> dict:
         try:
-            return steward.reject(patch_id, d.approver, d.note).model_dump()
-        except GovernanceError as e:
-            raise fail(e)
+            return get(corpus).passage(pid)
+        except KeyError as e:
+            raise missing(e) from None
 
-    @app.post("/api/patches/{patch_id}/rollback")
-    def rollback(patch_id: str, d: Decision) -> dict:
-        try:
-            return steward.rollback(patch_id, d.approver).model_dump()
-        except GovernanceError as e:
-            raise fail(e)
+    @app.get("/api/knowledge")
+    def knowledge(corpus: str | None = None) -> dict:
+        return get(corpus).knowledge()
 
-    @app.post("/api/ingest")
-    def ingest(r: IngestReq) -> dict:
-        try:
-            path = corpus.download(data_dir)
-        except Exception as e:  # network trouble on the user's machine
-            raise HTTPException(status_code=502, detail=f"could not download the corpus: {e}")
-        text = path.read_text(encoding="utf-8", errors="replace")
-        steward.corpus_norm = steward.corpus_norm or normalize(text)
-        chunks = [c for c in corpus.split_sections(text) if c.book == r.book][r.start : r.start + r.count]
-        if not chunks:
-            raise fail(ValueError("no sections in that range"))
-        try:
-            queued = ingest_chunks(steward, chunks)
-        except llm.LLMUnavailable as e:
-            raise fail(e)
-        return {"chunks": [c.locator for c in chunks], "queued": len(queued)}
+    @app.get("/api/holds")
+    def holds(s: str, r: str, o: str, corpus: str | None = None) -> dict:
+        m = get(corpus)
+        return {**m.holds(s, r, o), "s_label": m.label(s), "o_label": m.label(o)}
 
-    @app.post("/api/query")
+    @app.get("/api/causal")
+    def causal(corpus: str | None = None) -> dict:
+        return get(corpus).causal_view()
+
+    @app.get("/api/edge")
+    def edge(a: str, b: str, corpus: str | None = None) -> dict:
+        try:
+            return get(corpus).edge(a, b)
+        except KeyError as e:
+            raise missing(e) from None
+
+    @app.get("/api/effect")
+    def effect(x: str, y: str, corpus: str | None = None) -> dict:
+        m = get(corpus)
+        if x not in m.variables or y not in m.variables:
+            raise HTTPException(400, "both ends must be causal variables")
+        return m.effect(x, y)
+
+    @app.get("/api/situation/{sid}")
+    def situation(sid: str, corpus: str | None = None) -> dict:
+        try:
+            return get(corpus).situation(sid)
+        except KeyError as e:
+            raise missing(e) from None
+
+    @app.get("/api/profile")
+    def profile(corpus: str | None = None) -> dict:
+        return get(corpus).profile()
+
+    @app.post("/api/ask")
     def ask(a: Ask) -> dict:
         try:
-            return query.ask(onto, a.question)
+            return oracle.ask(get(a.corpus), a.question)
         except llm.LLMUnavailable as e:
-            raise fail(e)
-
-    @app.post("/api/intervene")
-    def intervene(i: Intervention) -> dict:
-        try:
-            effects = analysis.intervene(onto, i.node, i.delta)
-        except KeyError:
-            raise fail(ValueError(f"unknown node {i.node}"))
-        out: dict = {"node": i.node, "delta": i.delta, "effects": effects, "story": None}
-        if i.retell and llm.available():
-            label = onto.nodes[i.node]["label"]
-            verb = "more" if i.delta > 0 else "less"
-            lines = "\n".join(f"{e['label']}: {e['effect']:+.2f}" for e in effects[:12])
-            facts = "\n".join(query.neighborhood_facts(onto, [i.node] + [e["id"] for e in effects[:6]]))
-            out["story"] = llm.retell(f"{verb} {label} (delta {i.delta:+.1f})", lines, facts)
-        return out
-
-    @app.get("/api/investigate")
-    def investigate() -> dict:
-        return {"important": analysis.important_nodes(onto), "breaker": analysis.breaker(onto)}
-
-    @app.get("/api/probes")
-    def probes() -> list[dict]:
-        return [p.model_dump() for p in evolver.default_probes(data_dir)]
-
-    @app.post("/api/evolve")
-    def evolve(r: EvolveReq) -> dict:
-        """Search for better designs; queue them as proposals. Never applies anything."""
-        probes = evolver.default_probes(data_dir)
-        result = evolver.evolve(onto, probes, generations=r.generations, beam=r.beam, keep=r.keep)
-        queued = evolver.queue_designs(steward, result, probes) if r.queue else []
-        return {**{k: v for k, v in result.items() if k != "designs"},
-                "designs": [d.summary() for d in result["designs"]],
-                "queued": [p.id for p in queued]}
-
-    @app.get("/api/metrics")
-    def metrics() -> dict:
-        return analysis.metrics(onto)
+            raise HTTPException(400, str(e)) from None
 
     @app.get("/api/archetype")
-    def archetype(focus: str | None = None) -> dict:
-        """The archetype the Mirror (or one node's neighbourhood) most resembles. Read-only."""
+    def archetype(focus: str | None = None, corpus: str | None = None) -> dict:
+        snap = get(corpus).snapshot()
         try:
-            return archetypes.match(onto.graph_snapshot(), focus=focus)
+            return archetypes.match(snap, focus=focus)
         except KeyError:
-            raise HTTPException(status_code=404, detail=f"no such node: {focus}") from None
+            raise HTTPException(404, f"no such node: {focus}") from None
 
-    from . import chainer, refactor
-
-    chainer.register(app, steward)
-
-    def _pending_refactor_keys() -> set:
-        return {p.extra.get("key") for p in steward.list("proposed") if p.kind == "refactor"}
-
-    @app.get("/api/refactor")
-    def refactor_suggest() -> dict:
-        """The Refactorer's suggestions for the current graphs. Nothing is queued."""
-        result = refactor.suggest(onto.graph_snapshot())
-        pending = _pending_refactor_keys()
-        return {"base_version": result.base_version, "metrics": result.metrics,
-                "findings": [vars(f) for f in result.findings],
-                "patches": [{**p.model_dump(), "queued": p.extra["key"] in pending} for p in result.patches]}
-
-    @app.post("/api/refactor/queue")
-    def refactor_queue(r: RefactorQueueReq) -> dict:
-        """Queue suggestions by key (or all of them) for review. Never applies anything."""
-        pending = _pending_refactor_keys()
-        queued = []
-        for patch in refactor.suggest(onto.graph_snapshot()).patches:
-            key = patch.extra["key"]
-            if key in pending or (r.keys is not None and key not in r.keys):
-                continue
-            queued.append(steward.propose(patch).id)
-        steward.save()
-        return {"queued": queued}
-
-    @app.get("/api/chain/candidates")
-    def chain_candidates() -> list[dict]:
-        """Pairs of nodes that look like one concept, for the Merge button."""
-        label = lambda n: onto.nodes[n]["label"]
-        return [{"survivor": s, "absorbed": a, "survivor_label": label(s), "absorbed_label": label(a), "why": why}
-                for s, a, why in chainer.merge_candidates(onto.graph_snapshot())]
+    @app.get("/api/concepts")
+    def concepts(corpus: str | None = None) -> list[dict]:
+        m = get(corpus)
+        return sorted(({"id": k, "label": v["label"], "kind": v["kind"], "support": v.get("support", 0)}
+                       for k, v in m.nodes.items()), key=lambda r: -r["support"])
 
     return app
