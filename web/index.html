@@ -21,7 +21,8 @@
   #empty { position:absolute; inset:0; display:none; align-items:center; justify-content:center; padding:24px; }
   #empty div { max-width:520px; }
   aside { width:460px; max-width:48vw; border-left:1px solid var(--line); background:var(--panel); display:flex; flex-direction:column; min-height:0; }
-  nav { display:flex; flex-wrap:wrap; border-bottom:1px solid var(--line); }
+  nav { border-bottom:1px solid var(--line); }
+  nav .tabrow { display:flex; }
   nav button { flex:1; border:0; background:none; padding:10px 4px; color:var(--quiet); cursor:pointer; font:inherit; }
   nav button.on { color:var(--ink); box-shadow: inset 0 -2px var(--accent); }
   section { display:none; padding:14px; overflow:auto; flex:1; }
@@ -73,15 +74,21 @@ python -m androidmirror build --corpus fomc</pre>
   </div>
   <aside>
     <nav>
+      <div class="tabrow">
       <button data-tab="node" class="on">Node</button>
       <button data-tab="knowledge">Knowledge</button>
       <button data-tab="causal">Causal</button>
       <button data-tab="ask">Ask</button>
       <button data-tab="questions">Questions</button>
+      </div>
+      <div class="tabrow">
       <button data-tab="derange">Derange</button>
       <button data-tab="mutate">Mutate</button>
       <button data-tab="transmutate">Transmutate</button>
+      </div>
+      <div class="tabrow">
       <button data-tab="face">Face</button>
+      </div>
     </nav>
     <section id="node" class="on"><p class="muted">Click a node to see what it is, what the Mirror infers about it, and the passages it was built from.</p></section>
     <section id="knowledge"></section>
