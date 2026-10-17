@@ -268,8 +268,15 @@ function judgmentText(j) {
 const voice = e => e.held ? '' : ` <span class="pill">${esc(e.attribution !== 'self' ? 'quoting ' + e.attribution : REGISTER_WORD[e.register] || e.register)}</span>`;
 const evidenceLine = e => `<div class="small">${loc(e.passage, e.locator)} <span class="muted">${esc(KIND_WORD[e.kind] || e.kind)}</span>${voice(e)} <span class="q">“${esc(e.quote)}”</span></div>`;
 const STATUS_WORD = {arrow:'shown as a link', follows:'already covered by a chain of links', holds:'fits the model', rejected:'outweighed by stronger claims', 'not used':'too few passages to count', retracted:'withdrawn by your answer'};
+function claimText(id) {  // a constraint id in words: "x → y", "x makes no difference to y", "x acts on z only through y"
+  const [t, x, y, z] = id.split('|');
+  return t === 'no_path' ? `${lbl(x)} makes no difference to ${lbl(y)}` : t === 'only_through' ? `${lbl(x)} acts on ${lbl(z)} only through ${lbl(y)}` : `${lbl(x)} → ${lbl(y)}`;
+}
 function constraintCard(c, open) {
-  const why = c.status === 'rejected' && c.reason !== 'settled' ? `<div class="small neg">${c.reason === 'cycle' ? 'Would make a circle (A causes B causes A) with' : c.reason === 'denied' ? 'Ruled out by a “makes no difference” claim' : 'Outweighed by'}:${(c.conflicts || []).map(id => `<code>${esc(id.split('|').slice(1).map(lbl).join(' → '))}</code>`).join(', ')}${c.common_cause ? `. So the Mirror shows ${lbl(c.x)} and ${lbl(c.y)} as sharing a cause ${W()} never names.` : ''}</div>` : '';
+  const conflicts = (c.conflicts || []).map(id => `<code>${esc(claimText(id))}</code>`).join(', ');
+  const [dt, dx, dy, dz] = (c.reason === 'denied' && c.conflicts && c.conflicts[0] || '').split('|');
+  const chain = c.reason === 'denied' && c.path ? ` With this claim as a link, the model would run ${esc(c.path.map(lbl).join(' → '))}, so ${esc(lbl(dx))} would make a difference to ${esc(lbl(dt === 'only_through' ? dz : dy))}${dt === 'only_through' ? ` without going through ${esc(lbl(dy))}` : ''}.` : '';
+  const why = c.status === 'rejected' && c.reason !== 'settled' ? `<div class="small neg">${c.reason === 'cycle' ? `Would make a circle (A causes B causes A) with: ${conflicts}.` : c.reason === 'denied' ? `Goes against ${W()}’s stronger claim that ${conflicts}.${chain}` : `Outweighed by: ${conflicts}.`}${c.common_cause ? ` So the Mirror shows ${esc(lbl(c.x))} and ${esc(lbl(c.y))} as sharing a cause ${W()} never names.` : ''}</div>` : '';
   const path = c.status === 'follows' && c.path ? `<div class="small">Through ${c.path.map(lbl).join(' → ')}.</div>` : '';
   return `<div class="card"><div><b>${esc(c.text)}</b> <span class="small muted">${c.weight} passage${c.weight === 1 ? '' : 's'}${c.mentions > c.weight ? ` (said ${c.mentions} times)` : ''} · ${(c.status === 'not held' ? `not ${W()}’s own view` : c.common_cause ? (c.reason === 'settled' ? 'a shared cause, settled by your answer' : `clashes, so shown as a shared cause ${W()} never names`) : esc(STATUS_WORD[c.status] || c.status))}${c.sign_conflict ? ' · <span class="neg">elsewhere said to have the opposite effect</span>' : ''}</span></div>
     ${why}${path}<details ${open ? 'open' : ''}><summary class="small muted">Quotes (${c.n_evidence})</summary>${c.evidence.map(evidenceLine).join('')}</details></div>`;
@@ -390,7 +397,7 @@ async function loadCausal() {
         <tr><td>The rest says nothing about it</td><td>${P.new}</td></tr><tr><td>The rest predicts the opposite effect</td><td class="neg">${P['sign differs']}</td></tr>
         <tr><td>The rest has cause and effect the other way round</td><td class="neg">${P.contradicted}</td></tr>
         <tr><th>Hidden “no difference” claims (${sum(N)})</th><th></th></tr><tr><td>Also said elsewhere</td><td>${N.restated}</td></tr><tr><td>The rest agrees</td><td>${N.consistent}</td></tr><tr><td>The rest says it does make a difference</td><td class="neg">${N.contradicted}</td></tr></table>
-      ${(h0.examples || []).length ? `<details><summary class="small">Examples</summary>${h0.examples.map(x => `<div class="small"><span class="${x.result === 'follows' ? 'pos' : 'neg'}">${esc(x.result)}</span>: ${esc(x.constraint.split('|').slice(1).map(lbl).join(' → '))} ${loc(x.passage, x.locator)} <span class="q">“${esc(x.quote)}”</span></div>`).join('')}</details>` : ''}` : ''}
+      ${(h0.examples || []).length ? `<details><summary class="small">Examples</summary>${h0.examples.map(x => `<div class="small"><span class="${x.result === 'follows' ? 'pos' : 'neg'}">${esc(x.result)}</span>: ${esc(claimText(x.constraint))} ${loc(x.passage, x.locator)} <span class="q">“${esc(x.quote)}”</span></div>`).join('')}</details>` : ''}` : ''}
       <h4>Links (${c.edges.length})</h4>
       <table><tr><th>Link</th><th></th><th>Passages</th><th>How it is said</th></tr>${[...c.edges].sort((a, b) => b.weight - a.weight).map(e => `<tr class="click" data-edge="${esc(e.src)}|${esc(e.dst)}">
         <td>${esc(e.src_label)} → ${esc(e.dst_label)}</td><td class="${e.sign > 0 ? 'pos' : 'neg'}">${e.sign > 0 ? 'raises' : 'lowers'}</td><td>${e.weight}</td>
