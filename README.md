@@ -110,6 +110,7 @@ The Causal tab lists every constraint with its status, the tensions, the pairs s
 - **Derange:** where the worldview rests on least, under what matters most (see below).
 - **Face:** the Major Arcana card the whole Mirror most resembles, drawn as a face. See [The face](#the-face).
 - **Mutate:** merge concepts that are one, or split one used in two senses. See [Mutate](#mutate-merging-and-splitting-concepts).
+- **Transmutate:** combine two Mirrors into one and trim it to what is strong; nothing is written until you approve. See [docs/commands.md](docs/commands.md#transmutate).
 
 ## The face
 

@@ -214,7 +214,7 @@ Re-run `propose` as often as you like; it is free unless `--claude`, and replace
 
 **approve** writes the combined Mirror exactly as proposed to `data/mirror/meditations+fomc/`, where `serve` shows it in the Mirror menu like any other. `--keep N` (repeatable, by number or by id) spares a trim. Trimmed items are archived in `trimmed.json` in that folder, not deleted, and an earlier approval is moved to `history/`. Answers you approved in the Question engine come along: your rulings follow the concepts' new names, and your answers are never sampled out or trimmed. If either source Mirror has been rebuilt, or its answers have changed, since the proposal, approve refuses: propose again.
 
-Two Mirrors combined this way can be combined with a third. The web app has the same steps as routes (`POST /api/transmutate/propose`, `GET /api/transmutate?a=&b=`, `POST /api/transmutate/approve`) but no buttons yet.
+Two Mirrors combined this way can be combined with a third. The app's Transmutate tab does the same: pick two Mirrors, propose, tick the trims to keep, and approve with your name. The combined Mirror then becomes the one shown.
 
 ## p1
 

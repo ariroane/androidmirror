@@ -186,8 +186,11 @@ def test_api(tmp_path):
     assert "synthetic+second" not in client.get("/api/status").json()["built"]
     assert client.get("/api/transmutate", params={"a": "synthetic", "b": "second"}).json()["alignment"]
     assert client.post("/api/transmutate/propose", json={"a": "synthetic", "b": "nowhere"}).status_code == 400
-    r = client.post("/api/transmutate/approve", json={"a": "synthetic", "b": "second", "keep": ["1"]})
+    r = client.post("/api/transmutate/approve", json={"a": "synthetic", "b": "second", "keep": ["1"], "approver": "K"})
     assert r.json()["built"] == "synthetic+second" and r.json()["transmutation"]["spared"] == ["1"]
+    assert r.json()["transmutation"]["approver"] == "K"
+    p = client.get("/api/transmutate", params={"a": "synthetic", "b": "second"}).json()
+    assert all(t["text"] for t in p["trims"]) and all(x["text"] for x in p["crossings"]["causal"])
     assert "synthetic+second" in client.get("/api/status").json()["built"]
 
 
