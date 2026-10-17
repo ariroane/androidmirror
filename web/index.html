@@ -66,10 +66,10 @@
     <div id="legend"></div>
     <div id="empty"><div>
       <h3>No Mirror built yet</h3>
-      <p>Build one from a whole corpus. Claude reads every passage once, so this takes a while and uses your API key:</p>
+      <p>Build one from a whole text (a corpus). Claude reads every passage once, so this takes a while and uses your API key:</p>
       <pre class="passage">python -m androidmirror build --corpus meditations
 python -m androidmirror build --corpus fomc</pre>
-      <p class="muted">Try <code>--limit 30</code> first for a cheap trial run. A build that stops resumes where it left off.</p>
+      <p class="muted">Try <code>--limit 30</code> first for a cheap trial run. If a build stops partway, running it again picks up where it left off.</p>
     </div></div>
   </div>
   <aside>
@@ -90,52 +90,52 @@ python -m androidmirror build --corpus fomc</pre>
       <button data-tab="face">Face</button>
       </div>
     </nav>
-    <section id="node" class="on"><p class="muted">Click a node to see what it is, what the Mirror infers about it, and the passages it was built from.</p></section>
+    <section id="node" class="on"><p class="muted">Click a dot on the graph to see what that idea is, what follows from what the text says about it, and the passages it comes from.</p></section>
     <section id="knowledge"></section>
     <section id="causal"></section>
     <section id="ask">
       <div class="row"><input id="question" style="flex:1" placeholder="Ask the Mirror a question"><button class="b primary" id="askbtn">Ask</button></div>
       <div id="answer"></div>
     </section>
-    <section id="derange"><p class="muted">Where the subject's worldview rests on the least, under what matters most in it.</p></section>
+    <section id="derange"><p class="muted">Where what matters most to <span class="who">the subject</span> rests on the least evidence.</p></section>
     <section id="questions">
-      <p class="muted">What the Mirror's graphs leave open, most important first. An answer is only a proposal: nothing changes until you approve it with your name, and an approved answer can be revoked.</p>
-      <div class="row"><input id="approver" placeholder="Your name, to approve"><select id="qkind"><option value="">All kinds</option></select></div>
+      <p class="muted">Questions the Mirror can’t settle from the text alone, most important first. Your answer is only a suggestion until you approve it with your name, and you can take back an approved answer later.</p>
+      <div class="row"><input id="approver" placeholder="Your name (needed to approve)"><select id="qkind"><option value="">All kinds</option></select></div>
       <div id="qlist"></div>
       <h4>Your answers</h4>
       <div id="plist"></div>
     </section>
     <section id="face">
-      <p class="muted">The Major Arcana card the whole Mirror most resembles, read from both its knowledge graph and the subject's causal model.</p>
+      <p class="muted">The tarot card (from the 22 Major Arcana) this Mirror most resembles, judged from both what <span class="who">the subject</span> believes and what <span class="who">the subject</span> says causes what.</p>
       <div class="row"><button class="b" id="frun">Read again</button></div>
       <svg id="aface" viewBox="0 0 240 290" width="100%" style="max-width:300px"></svg>
       <div id="fcard"></div>
     </section>
     <section id="mutate">
-      <p class="muted">Merge concepts that are one, or split one used in two senses, then see what changes in both graphs. Nothing changes until you approve.</p>
+      <p class="muted">Merge two ideas that are really one, or split an idea that is used in two different senses, then see what would change. Nothing changes until you approve.</p>
       <datalist id="mconcepts"></datalist>
-      <div class="row"><button class="b" id="mfind">Find candidates</button><input id="mby" placeholder="Your name, to approve" style="flex:1"></div>
-      <div class="row"><input id="ma" list="mconcepts" placeholder="concept" size="12"><span>+</span><input id="mb" list="mconcepts" placeholder="concept" size="12">
-        <label class="small"><input type="checkbox" id="mopp"> opposites</label><button class="b" id="mmerge">Preview merge</button></div>
-      <div class="row"><input id="ms" list="mconcepts" placeholder="concept to split" size="16"><button class="b" id="msplit">Preview split</button></div>
+      <div class="row"><button class="b" id="mfind">Suggest merges and splits</button><input id="mby" placeholder="Your name (needed to approve)" style="flex:1"></div>
+      <div class="row"><input id="ma" list="mconcepts" placeholder="an idea" size="12"><span>+</span><input id="mb" list="mconcepts" placeholder="another idea" size="12">
+        <label class="small" title="Merge the second as the opposite end of the first, like calm and agitation"><input type="checkbox" id="mopp"> the second is the opposite</label><button class="b" id="mmerge">Preview merge</button></div>
+      <div class="row"><input id="ms" list="mconcepts" placeholder="idea to split" size="16"><button class="b" id="msplit">Preview split</button></div>
       <div id="mwords" class="small muted"></div>
       <div id="msenses">
-        <div class="row"><input class="msl" placeholder="sense 1, e.g. joy" size="14"><input class="msw" placeholder="its words, comma-separated" style="flex:1"></div>
-        <div class="row"><input class="msl" placeholder="sense 2, e.g. passion" size="14"><input class="msw" placeholder="its words, comma-separated" style="flex:1"></div>
-        <div class="row"><input class="msl" placeholder="sense 3 (optional)" size="14"><input class="msw" placeholder="its words, comma-separated" style="flex:1"></div>
+        <div class="row"><input class="msl" placeholder="sense 1, e.g. joy" size="14"><input class="msw" placeholder="words that signal this sense, comma-separated" style="flex:1"></div>
+        <div class="row"><input class="msl" placeholder="sense 2, e.g. passion" size="14"><input class="msw" placeholder="words that signal this sense, comma-separated" style="flex:1"></div>
+        <div class="row"><input class="msl" placeholder="sense 3 (optional)" size="14"><input class="msw" placeholder="words that signal this sense, comma-separated" style="flex:1"></div>
       </div>
-      <div class="row"><label class="small"><input type="checkbox" id="mclaude"> Or let Claude read the senses in the passages (uses your key; ignores the senses above)</label></div>
-      <p class="small muted">Leave the senses empty to split along what the Mirror itself shows (a concept called both good and bad, or said both to raise and to lower one thing).</p>
+      <div class="row"><label class="small"><input type="checkbox" id="mclaude"> Or let Claude work out the senses from the passages (uses your API key; ignores the senses above)</label></div>
+      <p class="small muted">Leave the senses empty to split where the Mirror already sees a conflict: an idea called both good and bad, or said both to increase and to decrease the same thing.</p>
       <div id="mout"></div>
       <div id="mlist"></div>
     </section>
     <section id="transmutate">
-      <p class="muted">Combine two Mirrors into one, then trim it to the relationships and causes a reader of half the corpus would still find. Nothing is written until you approve; what is trimmed is archived, not deleted.</p>
+      <p class="muted">Combine two Mirrors into one, then suggest trimming what doesn’t hold up: every link and fact is re-tested on many random halves of the passages, and what survives too rarely is suggested for removal. Nothing is written until you approve, and anything trimmed is kept in an archive, not deleted.</p>
       <div class="row"><select id="ta" title="First Mirror"></select><span>+</span><select id="tb" title="Second Mirror"></select></div>
-      <div class="row"><input id="tpairs" placeholder="pair: a_concept=b_concept, …" style="flex:1"></div>
-      <div class="row"><input id="topp" placeholder="opposites: a_concept=b_concept, …" style="flex:1"></div>
-      <div class="row"><input id="tdrop" placeholder="leave unpaired: b_concept, …" style="flex:1"></div>
-      <div class="row"><label class="small"><input type="checkbox" id="tclaude"> Claude pairs concepts by meaning (1 call)</label>
+      <div class="row"><input id="tpairs" placeholder="same idea in both: first_idea=second_idea, …" style="flex:1"></div>
+      <div class="row"><input id="topp" placeholder="opposite ideas: first_idea=second_idea, …" style="flex:1"></div>
+      <div class="row"><input id="tdrop" placeholder="keep apart (ideas from the second Mirror): second_idea, …" style="flex:1"></div>
+      <div class="row"><label class="small"><input type="checkbox" id="tclaude"> Let Claude match ideas by meaning (one call, uses your API key)</label>
         <button class="b primary" id="tpropose">Propose</button></div>
       <div id="tout"></div>
       <div id="tprop"></div>
@@ -158,7 +158,57 @@ const api = async (path, body) => {
 };
 const fail = (el, err) => el.innerHTML = `<p class="neg">${esc(err.message)}</p>`;
 const lbl = id => esc(labels[id] || id);
-const rel = r => esc(String(r).replace(/_/g, ' '));
+// ---------- plain wording for the Mirror's internal terms ----------
+let who = 'the subject';  // the corpus's subject, e.g. "Marcus Aurelius"; set in refresh()
+const Who = () => who.charAt(0).toUpperCase() + who.slice(1);
+const W = () => esc(who), WW = () => esc(Who());
+const REL_WORD = {is_a:'is a kind of', part_of:'is part of', same_as:'is the same as', opposes:'opposes', requires:'needs',
+  accords_with:'is in line with', expresses:'shows itself as', exemplifies:'embodies', practices:'practices', learned_from:'learned from',
+  values:'values', rejects:'rejects', related_to:'is linked to'};
+const REL_DO = {exemplifies:'embody', practices:'practice', learned_from:'learn from', values:'value', rejects:'reject'};
+const EVALS = ['good', 'bad', 'indifferent'];
+const relWord = (r, o) => r === 'is_a' && EVALS.includes(o) ? 'is' : (REL_WORD[r] || String(r).replace(/_/g, ' '));
+const REL_NOT = {opposes:'does not oppose', requires:'does not need', expresses:'does not show itself as', exemplifies:'does not embody',
+  practices:'does not practice', learned_from:'did not learn from', values:'does not value', rejects:'does not reject'};
+const relNot = (r, o) => { const w = relWord(r, o); return REL_NOT[r] || (w.startsWith('is') ? 'is not' + w.slice(2) : 'not ' + w); };
+const rel = (r, o, neg) => esc(neg ? relNot(r, o) : relWord(r, o));
+const factText = key => { const [s, r, o, neg] = String(key).split('|'); return `${lbl(s)} ${rel(r, o, neg)} ${lbl(o)}`; };
+function ruleText(rule) {  // the name of the inference rule behind a derived fact
+  if (rule === 'same_as substitution') return 'two names for one thing: what is true of one is true of the other';
+  const m = String(rule).match(/^(\w+) (is symmetric|is transitive|is inherited along is_a|passes from a class to its members)$/);
+  if (!m) return esc(rule);
+  const w = `“${esc(REL_WORD[m[1]] || m[1])}”`;
+  return {'is symmetric': `${w} works both ways`, 'is transitive': `${w} carries along a chain (A to B, B to C, so A to C)`,
+    'is inherited along is_a': `${w} passes from a kind to everything of that kind`,
+    'passes from a class to its members': `${w} passes from a kind to everything of that kind`}[m[2]];
+}
+const KIND_NOUN = {agent:'a person or group', place:'a place', event:'an event', object:'a physical thing', disposition:'a character trait',
+  emotion:'a feeling', practice:'a practice', belief:'a belief', state:'a state of being', faculty:'a faculty of mind', concept:'an idea', class:'a category'};
+const VIOLATION = {domain_range:'Doesn’t make sense as stated', disjoint_evaluations:'Called more than one of good, bad and indifferent',
+  values_and_rejects:'Both valued and rejected', denied_but_follows:'Denied, yet it follows from other statements',
+  taxonomy_cycle:'Each is called a kind of the other', self_opposition:'Said to oppose itself'};
+const violationTitle = t => esc(VIOLATION[t] || String(t).replace(/_/g, ' '));
+function violationWhy(v) {  // a plain sentence for one inconsistency, built from its parts
+  const [s, r, o] = String(v.fact || '').split('|');
+  if (v.type === 'domain_range') {
+    const m = String(v.why || '').match(/^\w+ needs an? ([\w/]+) as (subject|object), got (\w+)$/);
+    const left = `“${factText(v.fact)}” is left out of the reasoning`;
+    if (m) {
+      const need = m[1].split('/').map(k => KIND_NOUN[k] || k).join(' or '), got = KIND_NOUN[m[3]] || m[3];
+      return m[2] === 'subject'
+        ? `${left}: only ${esc(need)} can ${esc(REL_DO[r] || relWord(r))} something, and ${lbl(s)} is listed as ${esc(got)}.`
+        : `${left}: one can only ${esc(REL_DO[r] || relWord(r))} ${esc(need)}, and ${lbl(o)} is listed as ${esc(got)}.`;
+    }
+    if (/^only is_a, values and rejects/.test(v.why || '')) return `${left}: good, bad and indifferent can only say what something is, or what someone values or rejects.`;
+    return `${left}: it uses a kind of link the Mirror doesn’t know.`;
+  }
+  if (v.type === 'disjoint_evaluations') return `${lbl(v.node)} is called ${(v.evaluations || []).map(esc).join(' and ')}, but nothing can be more than one of these.`;
+  if (v.type === 'values_and_rejects') return `${lbl(v.agent)} is said both to value and to reject ${lbl(v.node)}.`;
+  if (v.type === 'denied_but_follows') return `${WW()} denies that ${factText(v.fact)}, yet it follows from other things ${W()} says.`;
+  if (v.type === 'taxonomy_cycle') { const [a, b] = v.nodes || []; return `${lbl(a)} is called a kind of ${lbl(b)}, and ${lbl(b)} a kind of ${lbl(a)}. They may be the same idea.`; }
+  if (v.type === 'self_opposition') return `${lbl(v.node)} is said to oppose itself.`;
+  return esc(v.why || (v.facts || []).join(', '));
+}
 const evalPill = e => e ? `<span class="pill ${e}">${e}</span>` : '';
 const tab = name => { document.querySelectorAll('nav button, section').forEach(x => x.classList.remove('on'));
   document.querySelector(`nav button[data-tab="${name}"]`).classList.add('on'); $('#' + name).classList.add('on'); };
@@ -174,7 +224,7 @@ async function drawGraph(keepPositions) {
   g.nodes.forEach(n => labels[n.id] = n.label);
   const els = g.nodes.map(n => ({data:{id:n.id, label:n.label, ev:n.evaluation||'none', size:12 + Math.min(26, Math.sqrt(n.support||1) * 3), variable:n.variable ? 1 : 0, value:n.value || 0}}));
   g.edges.forEach(e => {
-    if (layer === 'kg') { els.push({data:{id:e.id, source:e.source, target:e.target, label:String(e.rel).replace(/_/g,' '), status:'kg', sign:0, w:1 + Math.min(4, Math.log2(1 + (e.support||1)))}}); return; }
+    if (layer === 'kg') { els.push({data:{id:e.id, source:e.source, target:e.target, label:relWord(e.rel, e.target), status:'kg', sign:0, w:1 + Math.min(4, Math.log2(1 + (e.support||1)))}}); return; }
     els.push({data:{id:e.id, source:e.source, target:e.target, label:String(e.weight), status:e.status, sign:e.sign, w:1 + Math.min(6, 1.5 * Math.log2(1 + e.weight))}});
   });
   const evColor = {good:css('--pos'), bad:css('--neg'), indifferent:css('--mid'), conflicted:'#b05fd8', none:'#8a8a86'};
@@ -197,12 +247,14 @@ async function drawGraph(keepPositions) {
   if (pos && cy.nodes().every(n => pos[n.id()])) cy.layout({name:'preset', positions:n => pos[n.id()], fit:false}).run();
   else cy.layout({name:'cose', animate:false, randomize:true, nodeRepulsion:() => 500000, idealEdgeLength:() => 100, nodeOverlap:40, gravity:0.3, numIter:2500, padding:40}).run();
   $('#legend').innerHTML = layer === 'kg'
-    ? `Node colour: the subject's evaluation (<span class="pos">good</span>, <span class="neg">bad</span>, indifferent, none). Stated facts the subject holds${g.hidden ? `; ${g.hidden} less-connected concepts hidden` : ''}.`
-    : `The subject's own causal model, from their causal judgments. <span class="pos">Green arrow</span>: raises; <span class="neg">red bar</span>: lowers. Number and thickness: passages that say it. Dashed: may run only through another path. Double ring: what the subject urges (<span class="pos">more</span> or <span class="neg">less</span> of).`;
+    ? `Dot colour: whether ${W()} calls it <span class="pos">good</span>, <span class="neg">bad</span> or indifferent (purple: more than one; grey: never says). Lines: facts ${W()} states as true${g.hidden ? `; ${g.hidden} less-connected ideas hidden` : ''}.`
+    : `What ${W()} says causes what. <span class="pos">Green arrow</span>: more of one brings more of the other; <span class="neg">red bar</span>: brings less. Number and thickness: how many passages say it. Dashed: may work only by way of other steps. Double ring: something ${W()} wants <span class="pos">more</span> or <span class="neg">less</span> of.`;
 }
 
 // ---------- judgments ----------
-const KIND_WORD = {causes:'says', intervention:'thought experiment', means_end:'means to an end', screens_off:'not this but that', independent:'makes no difference'};
+const KIND_WORD = {causes:'says so', intervention:'thought experiment', means_end:'means to an end', screens_off:'not this but that', independent:'makes no difference'};
+const REGISTER_WORD = {asks:'only asks', entertains:'only supposes', describes:'states', urges:'urges'};
+const MODALITY_WORD = {prescribes:'recommends', asks:'only asks', entertains:'only supposes'};
 function judgmentText(j) {
   const x = esc(j.x_label || lbl(j.x)), y = esc(j.y_label || lbl(j.y)), z = esc(j.z_label || (j.z ? lbl(j.z) : ''));
   const verb = j.sign > 0 ? '<span class="pos">raises</span>' : '<span class="neg">lowers</span>';
@@ -211,13 +263,13 @@ function judgmentText(j) {
     means_end:`${x} is a way to ${y}`, screens_off:`not ${x} but ${y} ${j.sign > 0 ? 'brings about' : 'lessens'} ${z}`,
     independent:`${x} makes no difference to ${y}`}[j.kind] || esc(j.kind);
 }
-const voice = e => e.held ? '' : ` <span class="pill">${esc(e.attribution !== 'self' ? 'reported: ' + e.attribution : e.register)}</span>`;
+const voice = e => e.held ? '' : ` <span class="pill">${esc(e.attribution !== 'self' ? 'quoting ' + e.attribution : REGISTER_WORD[e.register] || e.register)}</span>`;
 const evidenceLine = e => `<div class="small">${loc(e.passage, e.locator)} <span class="muted">${esc(KIND_WORD[e.kind] || e.kind)}</span>${voice(e)} <span class="q">“${esc(e.quote)}”</span></div>`;
-const STATUS_WORD = {arrow:'an arrow of the model', follows:'follows from the model', holds:'holds in the model', rejected:'in tension', 'not held':'not the subject\'s own view', 'not used':'below the minimum weight', retracted:'retracted by your answer'};
+const STATUS_WORD = {arrow:'shown as a link', follows:'already covered by a chain of links', holds:'fits the model', rejected:'clashes with stronger claims', 'not used':'too few passages to count', retracted:'withdrawn by your answer'};
 function constraintCard(c, open) {
-  const why = c.status === 'rejected' ? `<div class="small neg">${c.reason === 'cycle' ? 'Would close a loop with' : c.reason === 'denied' ? 'Ruled out by the denial' : 'Outweighed by'}: ${(c.conflicts || []).map(id => `<code>${esc(id.split('|').slice(1).map(lbl).join(' → '))}</code>`).join(', ')}</div>` : '';
+  const why = c.status === 'rejected' ? `<div class="small neg">${c.reason === 'cycle' ? 'Would make a circle (A causes B causes A) with' : c.reason === 'denied' ? 'Ruled out by a “makes no difference” claim' : 'Outweighed by'}:${(c.conflicts || []).map(id => `<code>${esc(id.split('|').slice(1).map(lbl).join(' → '))}</code>`).join(', ')}</div>` : '';
   const path = c.status === 'follows' && c.path ? `<div class="small">Through ${c.path.map(lbl).join(' → ')}.</div>` : '';
-  return `<div class="card"><div><b>${esc(c.text)}</b> <span class="small muted">${c.weight} passage${c.weight === 1 ? '' : 's'}${c.mentions > c.weight ? ` (said ${c.mentions} times)` : ''} · ${esc(STATUS_WORD[c.status] || c.status)}${c.sign_conflict ? ' · <span class="neg">also said the other way round</span>' : ''}</span></div>
+  return `<div class="card"><div><b>${esc(c.text)}</b> <span class="small muted">${c.weight} passage${c.weight === 1 ? '' : 's'}${c.mentions > c.weight ? ` (said ${c.mentions} times)` : ''} · ${(c.status === 'not held' ? `not ${W()}’s own view` : esc(STATUS_WORD[c.status] || c.status))}${c.sign_conflict ? ' · <span class="neg">elsewhere said to have the opposite effect</span>' : ''}</span></div>
     ${why}${path}<details ${open ? 'open' : ''}><summary class="small muted">Quotes (${c.n_evidence})</summary>${c.evidence.map(evidenceLine).join('')}</details></div>`;
 }
 
@@ -235,15 +287,15 @@ async function showNode(id) {
     if (n.pole_of) h += `<p class="small">The opposite pole of <button class="link" data-node="${esc(n.pole_of)}">${lbl(n.pole_of)}</button>.</p>`;
     if (n.aliases.length) h += `<div class="small muted">Also: ${n.aliases.map(esc).join(', ')}</div>`;
     if (n.classes.length) h += `<div class="small">Kind of: ${n.classes.map(c => `<button class="link" data-node="${esc(c)}">${lbl(c)}</button>`).join(', ')}</div>`;
-    if (n.value) h += `<div class="small">The subject urges <b class="${n.value.direction > 0 ? 'pos' : n.value.direction < 0 ? 'neg' : ''}">${n.value.direction > 0 ? 'more' : n.value.direction < 0 ? 'less' : 'both more and less'}</b> of it (${n.value.more} passage${n.value.more === 1 ? '' : 's'} for more, ${n.value.less} for less).</div>${n.value.evidence.slice(0, 3).map(quote).join('')}`;
-    h += `<h4>Stated (${n.facts.length})</h4>` + (n.facts.length ? n.facts.slice(0, 40).map(f => `<div class="card">
-        <div><button class="link" data-node="${esc(f.s)}">${esc(f.s_label)}</button> ${f.neg ? '<b>not</b> ' : ''}<i>${rel(f.r)}</i> <button class="link" data-node="${esc(f.o)}">${esc(f.o_label)}</button>
-        <span class="muted small">${f.support} passage${f.support === 1 ? '' : 's'}${f.held ? '' : ' · reported, not held'}${f.qualifiers.length ? ' · ' + f.qualifiers.map(esc).join('; ') : ''}</span></div>
-        ${f.evidence.slice(0, 3).map(e => e.passage === 'codebook' ? '<div class="small muted">by construction in the codebook</div>' : quote(e) + (e.modality && e.modality !== 'asserts' ? `<span class="small muted">${esc(e.modality)}${e.attribution && e.attribution !== 'self' ? ', ' + esc(e.attribution) : ''}</span>` : '')).join('')}</div>`).join('') : '<p class="muted">None.</p>');
-    if (n.inferred.length) h += `<h4>Inferred (${n.inferred.length})</h4><table>${n.inferred.map(x => `<tr class="click" data-holds="${esc(x.s)}|${esc(x.r)}|${esc(x.o)}"><td>${esc(x.s_label)} <i>${rel(x.r)}</i> ${esc(x.o_label)}</td><td class="muted small">${esc(x.rule)}</td></tr>`).join('')}</table>`;
-    if (n.causal.edges.length) h += `<h4>In the subject's causal model</h4><table>${n.causal.edges.map(e => `<tr class="click" data-edge="${esc(e.src)}|${esc(e.dst)}"><td>${esc(e.src_label)} → ${esc(e.dst_label)}</td><td class="${e.sign > 0 ? 'pos' : 'neg'}">${e.sign > 0 ? 'raises' : 'lowers'}</td><td class="small muted">${e.weight} passage${e.weight === 1 ? '' : 's'}${e.open ? ' · may run only through ' + e.open.labels.map(esc).join(' → ') : ''}</td></tr>`).join('')}</table>`;
-    if (n.causal.constraints.length) h += `<h4>The subject's causal judgments about it (${n.causal.constraints.length})</h4>` + n.causal.constraints.slice(0, 30).map(c => constraintCard(c)).join('');
-    if (n.violations.length) h += `<h4>Inconsistencies</h4>` + n.violations.map(v => `<div class="small neg">${esc(v.type.replace(/_/g, ' '))}: ${esc(v.why || (v.facts || []).join(', '))}</div>`).join('');
+    if (n.value) h += `<div class="small">${WW()} wants <b class="${n.value.direction > 0 ? 'pos' : n.value.direction < 0 ? 'neg' : ''}">${n.value.direction > 0 ? 'more' : n.value.direction < 0 ? 'less' : 'more in some places and less in others'}</b> of it (${n.value.more} passage${n.value.more === 1 ? '' : 's'} ask for more, ${n.value.less} for less).</div>${n.value.evidence.slice(0, 3).map(quote).join('')}`;
+    h += `<h4>What the text states (${n.facts.length})</h4>` + (n.facts.length ? n.facts.slice(0, 40).map(f => `<div class="card">
+        <div><button class="link" data-node="${esc(f.s)}">${esc(f.s_label)}</button> <i>${f.neg ? `<b>${rel(f.r, f.o, true)}</b>` : rel(f.r, f.o)}</i> <button class="link" data-node="${esc(f.o)}">${esc(f.o_label)}</button>
+        <span class="muted small">${f.support} passage${f.support === 1 ? '' : 's'}${f.held ? '' : ' · mentioned, not endorsed'}${f.qualifiers.length ? ' · ' + f.qualifiers.map(esc).join('; ') : ''}</span></div>
+        ${f.evidence.slice(0, 3).map(e => e.passage === 'codebook' ? '<div class="small muted">built into the Mirror’s list of ideas</div>' : quote(e) + (e.modality && e.modality !== 'asserts' ? `<span class="small muted">${esc(MODALITY_WORD[e.modality] || e.modality)}${e.attribution && e.attribution !== 'self' ? ', quoting ' + esc(e.attribution) : ''}</span>` : '')).join('')}</div>`).join('') : '<p class="muted">None.</p>');
+    if (n.inferred.length) h += `<h4>What follows by logic (${n.inferred.length})</h4><table>${n.inferred.map(x => `<tr class="click" data-holds="${esc(x.s)}|${esc(x.r)}|${esc(x.o)}"><td>${esc(x.s_label)} <i>${rel(x.r, x.o)}</i> ${esc(x.o_label)}</td><td class="muted small">${ruleText(x.rule)}</td></tr>`).join('')}</table>`;
+    if (n.causal.edges.length) h += `<h4>Causes and effects, as ${W()} sees them</h4><table>${n.causal.edges.map(e => `<tr class="click" data-edge="${esc(e.src)}|${esc(e.dst)}"><td>${esc(e.src_label)} → ${esc(e.dst_label)}</td><td class="${e.sign > 0 ? 'pos' : 'neg'}">${e.sign > 0 ? 'raises' : 'lowers'}</td><td class="small muted">${e.weight} passage${e.weight === 1 ? '' : 's'}${e.open ? ' · may work only by way of ' + e.open.labels.map(esc).join(' → ') : ''}</td></tr>`).join('')}</table>`;
+    if (n.causal.constraints.length) h += `<h4>What ${W()} says it causes or is caused by (${n.causal.constraints.length})</h4>` + n.causal.constraints.slice(0, 30).map(c => constraintCard(c)).join('');
+    if (n.violations.length) h += `<h4>Things that don’t fit together</h4>` + n.violations.map(v => `<div class="small neg"><b>${violationTitle(v.type)}.</b> ${violationWhy(v)}</div>`).join('');
     h += `<h4>Passages (${n.mentions.length})</h4>` + (n.mentions.slice(0, 60).map(m => `<div class="small">${loc(m.passage, m.locator)} <span class="q">“${esc(m.quote)}”</span></div>`).join('') || '<p class="muted">None.</p>');
     h += '<div id="ptext"></div>';
     el.innerHTML = h;
@@ -255,10 +307,10 @@ async function showPassage(pid, target) {
   try {
     const p = await api(`/api/passage/${encodeURIComponent(pid)}`);
     el.innerHTML = `<h4>${esc(p.locator)}</h4><div class="passage">${esc(p.text)}</div>` +
-      (p.judgments.length ? `<h4>Causal judgments read here (${p.judgments.length})</h4>` + p.judgments.map(j => `<div class="small">${judgmentText(j)} <span class="muted">${esc(KIND_WORD[j.kind])}</span>${voice(j)} <span class="q">“${esc(j.quote)}”</span></div>`).join('') : '') +
-      (p.unresolved.length ? `<div class="small muted">Outside the codebook: ${p.unresolved.map(u => esc(u.missing.join(', '))).join('; ')}</div>` : '') +
-      (p.values.length ? `<div class="small">Urges: ${p.values.map(v => `${v.direction > 0 ? 'more' : 'less'} ${esc(v.label)}`).join('; ')}</div>` : '') +
-      (p.facts.length ? `<div class="small">Facts coded: ${p.facts.map(f => `${esc(f.s_label)} ${f.neg ? 'not ' : ''}<i>${rel(f.r)}</i> ${esc(f.o_label)}`).join('; ')}</div>` : '');
+      (p.judgments.length ? `<h4>Cause-and-effect claims in this passage (${p.judgments.length})</h4>` + p.judgments.map(j => `<div class="small">${judgmentText(j)} <span class="muted">${esc(KIND_WORD[j.kind])}</span>${voice(j)} <span class="q">“${esc(j.quote)}”</span></div>`).join('') : '') +
+      (p.unresolved.length ? `<div class="small muted">Ideas here the Mirror doesn’t track: ${p.unresolved.map(u => esc(u.missing.join(', '))).join('; ')}</div>` : '') +
+      (p.values.length ? `<div class="small">Wants: ${p.values.map(v => `${v.direction > 0 ? 'more' : 'less'} ${esc(v.label)}`).join('; ')}</div>` : '') +
+      (p.facts.length ? `<div class="small">Facts read from it: ${p.facts.map(f => `${esc(f.s_label)} <i>${rel(f.r, f.o, f.neg)}</i> ${esc(f.o_label)}`).join('; ')}</div>` : '');
     el.scrollIntoView({behavior:'smooth', block:'start'});
   } catch (err) { fail(el, err); }
 }
@@ -266,10 +318,10 @@ async function showPassage(pid, target) {
 // ---------- knowledge ----------
 function proofTree(p) {
   if (!p) return '';
-  const head = `${lbl(p.s)} <i>${rel(p.r)}</i> ${lbl(p.o)}`;
-  if (p.rule === 'stated') return `<li>${head} <span class="muted small">stated, ${p.support} passage(s)</span>${(p.evidence || []).slice(0, 2).map(quote).join('')}</li>`;
-  if (p.rule === 'denied') return `<li><b>not</b> ${head} <span class="muted small">denied</span>${(p.evidence || []).slice(0, 2).map(quote).join('')}</li>`;
-  return `<li>${head} <span class="muted small">because ${esc(p.rule)}</span><ul class="tree">${(p.from || []).map(proofTree).join('')}</ul></li>`;
+  const head = `${lbl(p.s)} <i>${rel(p.r, p.o)}</i> ${lbl(p.o)}`;
+  if (p.rule === 'stated') return `<li>${head} <span class="muted small">stated in ${p.support} passage${p.support === 1 ? '' : 's'}</span>${(p.evidence || []).slice(0, 2).map(quote).join('')}</li>`;
+  if (p.rule === 'denied') return `<li><b>Denied:</b> ${head} <span class="muted small">the text says this is not so</span>${(p.evidence || []).slice(0, 2).map(quote).join('')}</li>`;
+  return `<li>${head} <span class="muted small">because ${ruleText(p.rule)}</span><ul class="tree">${(p.from || []).map(proofTree).join('')}</ul></li>`;
 }
 async function loadKnowledge() {
   const el = $('#knowledge');
@@ -278,13 +330,23 @@ async function loadKnowledge() {
     cs.forEach(c => labels[c.id] = c.label);
     const opts = cs.map(c => `<option value="${esc(c.id)}">${esc(c.label)}</option>`).join('');
     const rels = ['is_a', 'part_of', 'same_as', 'opposes', 'requires', 'accords_with', 'expresses', 'exemplifies', 'practices', 'learned_from', 'values', 'rejects', 'related_to'];
-    el.innerHTML = `<p>${k.stats.held} facts the subject holds, ${k.stats.inferred} more that follow from them by the ontology's rules, ${k.stats.reported_not_held} reported views it does not hold, ${k.stats.violations} inconsistencies.</p>
+    const nn = (k, one, many) => `<b>${k}</b> ${k === 1 ? one : many}`;
+    el.innerHTML = `<p>${nn(k.stats.held, 'fact', 'facts')} ${W()} states as true. ${nn(k.stats.inferred, 'more follows', 'more follow')} from those by simple logic (if justice is a kind of virtue, and virtue is good, then justice is good). ${nn(k.stats.reported_not_held, 'view', 'views')} ${W()} mentions without endorsing: quoting someone else, asking, or supposing. ${nn(k.stats.violations, 'thing that doesn’t', 'things that don’t')} fit together.</p>
       <h4>Does it follow?</h4>
-      <div class="row"><select id="hs">${opts}</select><select id="hr">${rels.map(r => `<option>${r}</option>`).join('')}</select><select id="ho">${opts}</select><button class="b primary" id="hbtn">Check</button></div>
+      <p class="small muted">Pick a statement to see whether the text says it, or whether it follows from what the text says.</p>
+      <div class="row"><select id="hs">${opts}</select><select id="hr">${rels.map(r => `<option value="${r}">${esc(REL_WORD[r])}</option>`).join('')}</select><select id="ho">${opts}</select><button class="b primary" id="hbtn">Check</button></div>
       <div id="hout"></div>
-      <h4>Inconsistencies</h4>
-      ${k.violations.length ? k.violations.map(v => `<div class="card"><b>${esc(v.type.replace(/_/g, ' '))}</b> <span class="muted small">${esc(v.why || '')}</span><ul class="tree">${(v.proofs || []).map(proofTree).join('')}</ul></div>`).join('') : '<p class="muted">None found.</p>'}
-      <p class="muted small">Rules: is_a, part_of, requires and same_as are transitive; opposes and same_as are symmetric; opposes, requires and accords_with pass from a class to its members; values and rejects pass from a class to its members. good, bad and indifferent are disjoint. Only the subject's own assertions and self-prescriptions are reasoned over. Missing means not found, not false.</p>`;
+      <h4>Things that don’t fit together</h4>
+      ${k.violations.length ? k.violations.map(v => `<div class="card"><b>${violationTitle(v.type)}</b> <div class="small">${violationWhy(v)}</div><ul class="tree">${(v.proofs || []).map(proofTree).join('')}</ul></div>`).join('') : '<p class="muted">None found.</p>'}
+      <h4>How the Mirror reasons</h4>
+      <ul class="small muted">
+        <li><b>Chains:</b> “is a kind of”, “is part of”, “needs” and “is the same as” carry along a chain. If A is a kind of B and B is a kind of C, then A is a kind of C.</li>
+        <li><b>Both ways:</b> “opposes” and “is the same as” work in both directions. If A opposes B, B opposes A.</li>
+        <li><b>Kinds pass things on:</b> what a kind opposes, needs or is in line with, everything of that kind does too. Whoever values or rejects a kind values or rejects everything of that kind.</li>
+        <li><b>Good, bad and indifferent exclude each other:</b> nothing can be two of them at once.</li>
+        <li><b>Only ${W()}’s own views count:</b> what ${W()} asserts or recommends. Quoted views, questions and suppositions are kept but not reasoned from.</li>
+        <li><b>Missing is not false:</b> if something isn’t here, the text doesn’t say it. That doesn’t mean ${W()} thinks it is false.</li>
+      </ul>`;
     const hs = $('#hs'); hs.value = cs.find(c => c.id === 'self') ? 'self' : hs.value; $('#ho').value = cs.find(c => c.id === 'good') ? 'good' : $('#ho').value;
     $('#hbtn').onclick = async () => {
       try { await checkHolds($('#hs').value, $('#hr').value, $('#ho').value); } catch (err) { fail($('#hout'), err); }
@@ -294,9 +356,9 @@ async function loadKnowledge() {
 async function checkHolds(s, r, o) {
   const h = await api(`/api/holds?s=${encodeURIComponent(s)}&r=${encodeURIComponent(r)}&o=${encodeURIComponent(o)}`);
   const out = $('#hout');
-  out.innerHTML = `<p><b>${esc(h.status)}</b>${h.conflict ? ' <span class="neg">(and also denied)</span>' : ''}</p>` +
+  out.innerHTML = `<p><b>${esc({stated:'Yes: the text says so', inferred:'Yes: it follows from what the text says', denied:'No: the text denies it', 'not found':'Not found'}[h.status] || h.status)}</b>${h.conflict ? ' <span class="neg">(but it is also denied in the text)</span>' : ''}</p>` +
     (h.proof ? `<ul class="tree">${proofTree(h.proof)}</ul>` : '') + (h.evidence ? h.evidence.slice(0, 3).map(quote).join('') : '') +
-    (h.status === 'not found' ? '<p class="muted small">Neither stated nor derivable. The graph is open-world, so this is not a denial.</p>' : '');
+    (h.status === 'not found' ? `<p class="muted small">The text neither says this nor implies it. That doesn’t mean ${W()} thinks it is false.</p>` : '');
 }
 
 // ---------- causal ----------
@@ -309,36 +371,36 @@ async function loadCausal() {
     const by = s => c.constraints.filter(x => x.status === s);
     const opts = Object.keys(c.labels).sort((a, b) => c.labels[a].localeCompare(c.labels[b])).map(id => `<option value="${esc(id)}">${esc(c.labels[id])}</option>`).join('');
     const sum = o => Object.values(o).reduce((a, b) => a + b, 0);
-    let h = `<p>The subject's own causal model, fitted to <b>${st.held_judgments}</b> causal judgments the subject makes (${st.held_constraints} distinct claims). Each claim counts once per passage that makes it, however often it is repeated. Arrows come only from what the subject says; nothing is learned from how often ideas appear together.</p>
-      <table><tr><td>Arrows</td><td>${st.arrows}</td><td class="small muted">${st.open} may run only through another path</td></tr>
-      <tr><td>Claims explained by a chain</td><td>${st.follows}</td><td class="small muted">said, and already implied by other judgments</td></tr>
-      <tr><td>Denials that hold</td><td>${st.denials_held}</td><td class="small muted">"x makes no difference to y", "not x but y"</td></tr>
-      <tr><td>In tension</td><td class="${st.rejected ? 'neg' : ''}">${st.rejected}</td><td class="small muted">claims that close a loop or break a stronger denial</td></tr></table>
-      <h4>What does changing one concept do to another, in the subject's model?</h4>
-      <div class="row"><select id="ex">${opts}</select> on <select id="ey">${opts}</select><button class="b primary" id="ebtn">Trace</button></div>
+    let h = `<p>What ${W()} says causes what, built from <b>${st.held_judgments}</b> cause-and-effect claims ${W()} makes (${st.held_constraints} different claims). A claim counts once for each passage that makes it, however often it is repeated there. Links come only from what ${W()} says, never from how often two ideas appear together.</p>
+      <table><tr><td>Cause-and-effect links</td><td>${st.arrows}</td><td class="small muted">${st.open} of them may work only by way of other steps</td></tr>
+      <tr><td>Claims already covered by a chain</td><td>${st.follows}</td><td class="small muted">said outright, and also implied by other links (A raises B, B raises C, so A raises C)</td></tr>
+      <tr><td>“No difference” claims that fit</td><td>${st.denials_held}</td><td class="small muted">“x makes no difference to y”, “not x but y”</td></tr>
+      <tr><td>Claims that clash</td><td class="${st.rejected ? 'neg' : ''}">${st.rejected}</td><td class="small muted">claims that would make a circle, or go against a stronger “no difference” claim</td></tr></table>
+      <h4>If one idea changes, what happens to another, as ${W()} sees it?</h4>
+      <div class="row">More <select id="ex">${opts}</select> does what to <select id="ey">${opts}</select><button class="b primary" id="ebtn">Trace</button></div>
       <div id="eout"></div><div id="edgeout"></div>
-      ${h0.folds ? `<h4>Does the rest of the corpus predict a passage?</h4>
-      <p class="small">The model is fitted without one block of passages at a time (${h0.folds} blocks), and each held-out claim is checked against it.</p>
-      <table><tr><th>Held-out claims (${sum(P)})</th><th></th></tr>
-        <tr><td>Said elsewhere too</td><td>${P.restated}</td></tr><tr><td>Not said elsewhere, but follows from the rest</td><td class="pos">${P.follows}</td></tr>
-        <tr><td>Nothing elsewhere bears on it</td><td>${P.new}</td></tr><tr><td>The rest gives the opposite sign</td><td class="neg">${P['sign differs']}</td></tr>
-        <tr><td>The rest runs the other way</td><td class="neg">${P.contradicted}</td></tr>
-        <tr><th>Held-out denials (${sum(N)})</th><th></th></tr><tr><td>Said elsewhere too</td><td>${N.restated}</td></tr><tr><td>Consistent with the rest</td><td>${N.consistent}</td></tr><tr><td>The rest implies a path</td><td class="neg">${N.contradicted}</td></tr></table>
+      ${h0.folds ? `<h4>Prediction test: can the rest of the text predict what a passage says?</h4>
+      <p class="small">The passages are split into ${h0.folds} groups. Each group is hidden in turn, the model is rebuilt from the other passages, and every claim in the hidden group is checked against that model. Green means the rest of the text predicted it; red means the rest says otherwise.</p>
+      <table><tr><th>Hidden cause-and-effect claims (${sum(P)})</th><th></th></tr>
+        <tr><td>Also said elsewhere</td><td>${P.restated}</td></tr><tr><td>Not said elsewhere, but predicted by the rest</td><td class="pos">${P.follows}</td></tr>
+        <tr><td>The rest says nothing about it</td><td>${P.new}</td></tr><tr><td>The rest predicts the opposite effect</td><td class="neg">${P['sign differs']}</td></tr>
+        <tr><td>The rest has cause and effect the other way round</td><td class="neg">${P.contradicted}</td></tr>
+        <tr><th>Hidden “no difference” claims (${sum(N)})</th><th></th></tr><tr><td>Also said elsewhere</td><td>${N.restated}</td></tr><tr><td>The rest agrees</td><td>${N.consistent}</td></tr><tr><td>The rest says it does make a difference</td><td class="neg">${N.contradicted}</td></tr></table>
       ${(h0.examples || []).length ? `<details><summary class="small">Examples</summary>${h0.examples.map(x => `<div class="small"><span class="${x.result === 'follows' ? 'pos' : 'neg'}">${esc(x.result)}</span>: ${esc(x.constraint.split('|').slice(1).map(lbl).join(' → '))} ${loc(x.passage, x.locator)} <span class="q">“${esc(x.quote)}”</span></div>`).join('')}</details>` : ''}` : ''}
-      <h4>Arrows (${c.edges.length})</h4>
-      <table><tr><th>Arrow</th><th></th><th>Passages</th><th>How it is said</th></tr>${[...c.edges].sort((a, b) => b.weight - a.weight).map(e => `<tr class="click" data-edge="${esc(e.src)}|${esc(e.dst)}">
+      <h4>Links (${c.edges.length})</h4>
+      <table><tr><th>Link</th><th></th><th>Passages</th><th>How it is said</th></tr>${[...c.edges].sort((a, b) => b.weight - a.weight).map(e => `<tr class="click" data-edge="${esc(e.src)}|${esc(e.dst)}">
         <td>${esc(e.src_label)} → ${esc(e.dst_label)}</td><td class="${e.sign > 0 ? 'pos' : 'neg'}">${e.sign > 0 ? 'raises' : 'lowers'}</td><td>${e.weight}</td>
-        <td class="small muted">${Object.keys(e.kinds).map(k => esc(KIND_WORD[k] || k)).join(', ')}${e.direct ? ', directly' : ''}${e.open ? `; may run only through ${e.open.labels.map(esc).join(' → ')}` : ''}${e.note ? '; ' + esc(e.note) : ''}</td></tr>`).join('')}</table>
-      ${c.feedback.length ? `<p class="small">Said in both directions (a loop the model cannot draw): ${c.feedback.map(f => `${lbl(f.pair[0])} ⇄ ${lbl(f.pair[1])}`).join(', ')}</p>` : ''}
-      <h4>In tension (${by('rejected').length})</h4><p class="small muted">Where the subject's judgments do not fit together. The stronger side is kept; this side is shown, not dropped.</p>
+        <td class="small muted">${Object.keys(e.kinds).map(k => esc(KIND_WORD[k] || k)).join(', ')}${e.direct ? ', directly' : ''}${e.open ? `; may work only by way of ${e.open.labels.map(esc).join(' → ')}` : ''}${e.note ? '; ' + esc(e.note) : ''}</td></tr>`).join('')}</table>
+      ${c.feedback.length ? `<p class="small">Each said to affect the other (the model can’t show circles): ${c.feedback.map(f => `${lbl(f.pair[0])} ⇄ ${lbl(f.pair[1])}`).join(', ')}</p>` : ''}
+      <h4>Claims that clash (${by('rejected').length})</h4><p class="small muted">Places where what ${W()} says doesn’t fit together. The side with more passages stays in the model; the other side is listed here rather than thrown away.</p>
       ${by('rejected').map(x => constraintCard(x)).join('') || '<p class="muted">None.</p>'}
-      <h4>Denials that hold (${by('holds').length})</h4>${by('holds').map(x => constraintCard(x)).join('') || '<p class="muted">None.</p>'}
-      <details><summary><b>Claims explained by a chain (${by('follows').length})</b></summary>${by('follows').map(x => constraintCard(x)).join('')}</details>
-      <h4>Values: what the subject urges (${c.values.length})</h4><p class="small muted">Kept apart from the causal model: wanting something is not a claim about what it does.</p>
-      <table>${c.values.slice(0, 60).map(v => `<tr class="click" data-node="${esc(v.concept)}"><td>${esc(v.label)}</td><td class="${v.direction > 0 ? 'pos' : v.direction < 0 ? 'neg' : ''}">${v.direction > 0 ? 'more' : v.direction < 0 ? 'less' : 'both'}</td><td class="small muted">${v.more} for more, ${v.less} for less</td></tr>`).join('')}</table>
-      <details><summary class="muted">Views the subject reports or entertains, not held (${by('not held').length})</summary>${by('not held').map(x => constraintCard(x)).join('')}</details>
-      <details><summary class="muted">Judgments about concepts outside the codebook (${c.n_unresolved})</summary>${c.unresolved.map(u => `<div class="small">${esc(Object.values(u.labels).join(' / '))} <span class="muted">(${esc(u.missing.join(', '))} not in the codebook)</span> ${loc(u.passage, u.locator)}</div>`).join('')}</details>
-      <p class="muted small">How it is fitted: claims are taken strongest first, a denial before a claim on a tie. A claim the model already implies adds nothing; a claim the subject does not call direct waits until the rest is in. A claim that would close a loop or break a stronger denial is put in tension, with what it ran into. This is the model the subject's words state, not a model of the world, and not Claude's model of the subject. Settings: minimum ${c.settings.min_weight} passage(s); <code>python -m androidmirror causal --min-weight 2</code> to change.</p>`;
+      <h4>“No difference” claims that fit (${by('holds').length})</h4>${by('holds').map(x => constraintCard(x)).join('') || '<p class="muted">None.</p>'}
+      <details><summary><b>Claims already covered by a chain (${by('follows').length})</b></summary>${by('follows').map(x => constraintCard(x)).join('')}</details>
+      <h4>What ${W()} wants more or less of (${c.values.length})</h4><p class="small muted">Kept apart from cause and effect: wanting something is not a claim about what it does.</p>
+      <table>${c.values.slice(0, 60).map(v => `<tr class="click" data-node="${esc(v.concept)}"><td>${esc(v.label)}</td><td class="${v.direction > 0 ? 'pos' : v.direction < 0 ? 'neg' : ''}">${v.direction > 0 ? 'more' : v.direction < 0 ? 'less' : 'mixed'}</td><td class="small muted">${v.more} passages ask for more, ${v.less} for less</td></tr>`).join('')}</table>
+      <details><summary class="muted">Views ${W()} mentions without endorsing (${by('not held').length})</summary>${by('not held').map(x => constraintCard(x)).join('')}</details>
+      <details><summary class="muted">Claims about ideas the Mirror doesn’t track (${c.n_unresolved})</summary>${c.unresolved.map(u => `<div class="small">${esc(Object.values(u.labels).join(' / '))} <span class="muted">(${esc(u.missing.join(', '))} not tracked)</span> ${loc(u.passage, u.locator)}</div>`).join('')}</details>
+      <p class="muted small">How the model is built: claims said in the most passages go in first, and a “no difference” claim goes before a cause claim when they tie. A claim the model already implies adds nothing new. A claim ${W()} doesn’t call direct waits until the rest is in, since it may only mean an indirect effect. A claim that would make a circle, or go against a stronger “no difference” claim, goes under “Claims that clash”, with what it ran into. This is the picture ${W()}’s own words give: not a model of the world, and not Claude’s opinion of ${W()}. A link needs at least ${c.settings.min_weight} passage${c.settings.min_weight === 1 ? '' : 's'}; change this with <code>python -m androidmirror causal --min-weight 2</code>.</p>`;
     el.innerHTML = h;
     const nodes = Object.keys(c.labels);
     if (c.edges.length) { $('#ex').value = c.edges[0].src; $('#ey').value = c.edges[0].dst; }
@@ -351,11 +413,11 @@ async function showEdge(src, dst) {
   try {
     const e = await api(`/api/edge?src=${encodeURIComponent(src)}&dst=${encodeURIComponent(dst)}`);
     out.innerHTML = `<div class="card"><h3>${esc(e.src_label)} → ${esc(e.dst_label)} <span class="pill ${e.sign > 0 ? 'good' : 'bad'}">${e.sign > 0 ? 'raises' : 'lowers'}</span></h3>
-      ${e.open ? `<p class="small">The subject never calls this direct, and the model also gets there through ${e.open.labels.map(esc).join(' → ')}: they may mean only that.</p>` : ''}
+      ${e.open ? `<p class="small">${WW()} never says this happens directly, and the model already gets there by way of ${e.open.labels.map(esc).join(' → ')}, so this may mean only that.</p>` : ''}
       ${e.note ? `<p class="small muted">Drawn ${esc(e.note)}.</p>` : ''}
       ${e.own ? constraintCard(e.own, true) : ''}
-      ${e.supports.length ? `<b class="small">Also carries</b>${e.supports.map(x => constraintCard(x)).join('')}` : ''}
-      ${e.challenged_by.length ? `<b class="small neg">Judgments it outweighs</b>${e.challenged_by.map(x => constraintCard(x)).join('')}` : ''}
+      ${e.supports.length ? `<b class="small">Other claims this link covers</b>${e.supports.map(x => constraintCard(x)).join('')}` : ''}
+      ${e.challenged_by.length ? `<b class="small neg">Claims it wins out over</b>${e.challenged_by.map(x => constraintCard(x)).join('')}` : ''}
       <div id="edgeptext"></div></div>`;
     out.scrollIntoView({behavior:'smooth', block:'start'});
   } catch (err) { fail(out, err); }
@@ -365,10 +427,15 @@ async function runExplain() {
   if (x === y) { out.innerHTML = '<p class="muted">Pick two different concepts.</p>'; return; }
   try {
     const r = await api(`/api/explain?x=${encodeURIComponent(x)}&y=${encodeURIComponent(y)}`);
-    out.innerHTML = `<p>More ${esc(r.x_label)}: <b>${esc(r.verdict)}</b> ${esc(r.y_label)}.</p>
+    const xl = esc(r.x_label), yl = esc(r.y_label), v = String(r.verdict);
+    const verdict = v === 'raises' ? `More ${xl} means <b class="pos">more</b> ${yl}.` : v === 'lowers' ? `More ${xl} means <b class="neg">less</b> ${yl}.`
+      : v.startsWith('mixed') ? `More ${xl} has <b>mixed effects</b> on ${yl}: some routes raise it, some lower it.`
+      : v.startsWith('makes no difference') ? `More ${xl} <b>makes no difference</b> to ${yl}, and ${W()} says so.`
+      : v.startsWith('not said') ? `<b>Nothing</b> ${W()} says links ${xl} to ${yl}.` : `More ${xl}: <b>${esc(v)}</b> ${yl}.`;
+    out.innerHTML = `<p>${verdict}</p>
       ${r.paths.map(p => `<div class="small">${p.labels.map(esc).join(' → ')} <span class="${p.sign > 0 ? 'pos' : 'neg'}">${p.sign > 0 ? 'raises' : 'lowers'}</span>${p.steps.some(s => s.open) ? ' <span class="muted">(through a step that may be indirect)</span>' : ''}</div>`).join('')}
       ${r.denial ? constraintCard(r.denial) : ''}
-      ${r.reverse ? `<p class="small muted">In the subject's model ${esc(r.y_label)} acts on ${esc(r.x_label)}, not the other way.</p>` : ''}
+      ${r.reverse ? `<p class="small muted">As ${W()} sees it, ${yl} affects ${xl}, not the other way round.</p>` : ''}
       ${r.claims.filter(c => !r.denial || c.id !== r.denial.id).map(c => constraintCard(c)).join('')}`;
   } catch (err) { fail(out, err); }
 }
@@ -379,35 +446,35 @@ async function loadDerange() {
   const el = $('#derange');
   if (derangeFor === corpus) return;
   derangeFor = corpus;
-  el.innerHTML = '<p class="muted">Knocking out the thinnest supports and re-fitting (no Claude calls)…</p>';
+  el.innerHTML = '<p class="muted">Removing the weakest supports one at a time and rebuilding (no Claude calls)…</p>';
   try {
     const d = await api('/api/derange');
     Object.assign(labels, d.labels);
     const n = (k, w) => `${k} ${w}${k === 1 ? '' : 's'}`;
     const nodeLink = id => `<button class="link" data-node="${esc(id)}">${lbl(id)}</button>`;
-    const subTable = (rows, what) => rows.length ? `<table><tr><th>${what}</th><th>Weight</th><th>Size</th><th>Thinnest support</th></tr>${rows.map(r => `<tr class="click" data-node="${esc(r.id)}">
-      <td>${esc(r.label)}</td><td>${r.importance}</td><td>${r.size}</td><td class="${r.weakest && r.weakest.strength <= 1 ? 'neg' : ''}">${r.weakest ? n(r.weakest.strength, 'passage') : '<span class="muted">nothing single</span>'}</td></tr>`).join('')}</table>` : '<p class="muted">Nothing to look at yet.</p>';
+    const subTable = (rows, what) => rows.length ? `<table><tr><th>${what}</th><th>Matters</th><th>Depends on it</th><th>Weakest support</th></tr>${rows.map(r => `<tr class="click" data-node="${esc(r.id)}">
+      <td>${esc(r.label)}</td><td>${r.importance}</td><td>${r.size}</td><td class="${r.weakest && r.weakest.strength <= 1 ? 'neg' : ''}">${r.weakest ? n(r.weakest.strength, 'passage') : '<span class="muted">no single weak point</span>'}</td></tr>`).join('')}</table>` : '<p class="muted">Nothing to look at yet.</p>';
     const causalCard = f => `<div class="card"><div><b>${esc(f.probe)}</b></div>
-      <div class="small muted">Score ${f.score} · rests on ${n(f.strength, 'passage')}${f.basis.some(b => b.sign_conflict) ? ' · <span class="neg">also said the other way round</span>' : ''}${f.basis.some(b => b.open) ? ' · may run only through another path' : ''}</div>
+      <div class="small muted">Score ${f.score} · rests on ${n(f.strength, 'passage')}${f.basis.some(b => b.sign_conflict) ? ' · <span class="neg">elsewhere said to have the opposite effect</span>' : ''}${f.basis.some(b => b.open) ? ' · may work only by way of other steps' : ''}</div>
       ${f.basis.map(b => `<div class="small click" data-edge="${esc(b.src)}|${esc(b.dst)}">${lbl(b.src)} → ${lbl(b.dst)} <span class="${b.sign > 0 ? 'pos' : 'neg'}">${b.sign > 0 ? 'raises' : 'lowers'}</span> · ${n(b.weight, 'passage')}</div>`).join('')}
-      ${f.ends.map(h => `<div class="small">Under ${nodeLink(h.end)} (urged in ${n(h.importance, 'passage')}): ${h.lost_labels.length ? `${h.lost_labels.map(esc).join(', ')} would no longer act on it` : ''}${h.lost_labels.length && h.changed.length ? '; ' : ''}${h.changed.length ? `${h.changed.map(c => esc(c.label)).join(', ')} would act on it differently` : ''} <span class="muted">(${h.lost.length + h.changed.length} of ${h.of})</span></div>`).join('')}
+      ${f.ends.map(h => `<div class="small">For ${nodeLink(h.end)} (wanted more or less of in ${n(h.importance, 'passage')}): ${h.lost_labels.length ? `${h.lost_labels.map(esc).join(', ')} would no longer affect it` : ''}${h.lost_labels.length && h.changed.length ? '; ' : ''}${h.changed.length ? `${h.changed.map(c => esc(c.label)).join(', ')} would affect it differently` : ''} <span class="muted">(${h.lost.length + h.changed.length} of ${h.of})</span></div>`).join('')}
       ${f.claims_fall.length ? `<div class="small">Claims that would stop holding: ${f.claims_fall.map(esc).join('; ')}</div>` : ''}
-      ${f.now_drawn.length ? `<div class="small">Without it the model would draw ${f.now_drawn.map(esc).join(', ')} instead.</div>` : ''}
-      ${f.against.length ? `<div class="small neg">It outweighs: ${f.against.map(esc).join('; ')}</div>` : ''}
+      ${f.now_drawn.length ? `<div class="small">Without it the model would show ${f.now_drawn.map(esc).join(', ')} instead.</div>` : ''}
+      ${f.against.length ? `<div class="small neg">It wins out over: ${f.against.map(esc).join('; ')}</div>` : ''}
       <details><summary class="small muted">Quotes</summary>${f.basis.flatMap(b => b.evidence).map(evidenceLine).join('')}</details></div>`;
     const factCard = f => `<div class="card"><div><b>${esc(f.probe)}</b></div>
-      <div class="small muted">Score ${f.score} · rests on ${n(f.strength, 'passage')}${f.denied ? ' · <span class="neg">also denied</span>' : ''}${f.against.length ? ` · <span class="neg">${f.against.map(a => esc(a.replace(/_/g, ' '))).join(', ')}</span>` : ''}</div>
-      ${f.concepts.map(h => `<details><summary class="small">Under ${nodeLink(h.concept)}: ${h.n_lost} of ${h.of} held facts would stop following</summary>${h.lost.map(t => `<div class="small">${esc(t)}</div>`).join('')}</details>`).join('')}
+      <div class="small muted">Score ${f.score} · rests on ${n(f.strength, 'passage')}${f.denied ? ' · <span class="neg">also denied</span>' : ''}${f.against.length ? ` · <span class="neg">${f.against.map(violationTitle).join(', ')}</span>` : ''}</div>
+      ${f.concepts.map(h => `<details><summary class="small">For ${nodeLink(h.concept)}: ${h.n_lost} of ${h.of} facts about it would no longer follow</summary>${h.lost.map(t => `<div class="small">${esc(t)}</div>`).join('')}</details>`).join('')}
       ${f.evidence.map(quote).join('')}</div>`;
-    el.innerHTML = `<p>Every arrow and fact goes back to passages. Derange looks for little support under a lot of weight: it knocks out the thinnest support under what matters most (the subject's ends in the causal model, the concepts the corpus is most about), re-fits, and shows what would fall. It only reads; nothing here changes the Mirror. Each finding ends in the question it raises.</p>
-      <h4>Causal: the subject's ends</h4><p class="small muted">Weight: passages that urge more or less of it. Size: things that act on it in the subject's model. Thinnest support: the fewest passages whose loss would change how something acts on it.</p>
-      ${subTable(d.causal.subgraphs, 'End')}
-      ${d.causal.findings.map(causalCard).join('') || '<p class="muted">No single support holds up much of the causal model.</p>'}
-      <h4>Conceptual: the main concepts</h4><p class="small muted">Weight: passages that mention it. Size: facts the subject holds about it, stated or inferred.</p>
-      ${subTable(d.conceptual.subgraphs, 'Concept')}
-      ${d.conceptual.findings.map(factCard).join('') || '<p class="muted">No single fact holds up much of what is held.</p>'}
+    el.innerHTML = `<p>Every link and fact in the Mirror rests on passages. Derange looks for places where a lot rests on very little. It removes the weakest support under what matters most (what ${W()} wants more or less of, and the ideas the text is most about), rebuilds, and shows what would fall. It only looks: nothing here changes the Mirror. Each finding ends with a question, which also appears in the Questions tab for you to answer.</p>
+      <h4>Cause and effect: what ${W()} wants</h4><p class="small muted">Matters: passages that ask for more or less of it. Depends on it: ideas that affect it, as ${W()} sees it. Weakest support: the fewest passages whose loss would change how something affects it.</p>
+      ${subTable(d.causal.subgraphs, 'Goal')}
+      ${d.causal.findings.map(causalCard).join('') || '<p class="muted">No single weak point holds up much of the cause-and-effect picture.</p>'}
+      <h4>Ideas: the main ones</h4><p class="small muted">Matters: passages that mention it. Depends on it: facts about it, stated or following by logic.</p>
+      ${subTable(d.conceptual.subgraphs, 'Idea')}
+      ${d.conceptual.findings.map(factCard).join('') || '<p class="muted">No single fact holds up much of the rest.</p>'}
       <div id="dptext"></div>
-      <p class="muted small">Score: the share of each important subgraph that falls, times its weight, per passage of support. ${d.stats.knocked_out} candidate supports were knocked out and re-checked; <code>python -m androidmirror derange</code> prints the same list.</p>`;
+      <p class="muted small">Score: how much of each important area would fall, times how much it matters, divided by the passages behind the weak point. ${d.stats.knocked_out} possible weak points were removed and re-checked; <code>python -m androidmirror derange</code> prints the same list.</p>`;
   } catch (err) { derangeFor = null; fail(el, err); }
 }
 
@@ -497,12 +564,12 @@ async function loadFace() {
       : r.undecided ? `<h3>Undecided</h3><p class="muted">No card's patterns stand out from chance yet. Closest: ${cardName(a)} (${a.score}) and ${cardName(r.runners_up[0])} (${r.runners_up[0].score}).</p>`
       : `<h3>${cardName(a)}</h3><p>${esc(a.theme)}${a.reversed ? ', with the signs turned around' : ''}. <span class="muted">Score ${a.score}, ahead of the next card by ${r.margin}.</span></p>`;
     if (a && !r.undecided) {
-      html += '<h4>Why this card</h4>' + (r.evidence.length ? r.evidence.map((e, i) => `<div class="card"><div>${esc(e.text)} <span class="muted">${e.layer}, ${e.count} found</span></div>` +
+      html += '<h4>Why this card</h4>' + (r.evidence.length ? r.evidence.map((e, i) => `<div class="card"><div>${esc(e.text)} <span class="muted">${esc({kg:'beliefs', causal:'cause and effect'}[e.layer] || e.layer)}, ${e.count} found</span></div>` +
         e.examples.map((x, j) => `<div><button class="b" data-ev="${i}:${j}">${x.labels.map(esc).join(' → ') || 'the whole graph'}</button></div>` +
           x.quotes.map(qq => `<div class="q">“${esc(qq)}”</div>`).join('')).join('') + '</div>').join('') : '<p class="muted">A whole-graph property; nothing to point at.</p>');
       html += `<p class="muted">Next closest: ${r.runners_up.map(c => `${cardName(c)} ${c.score}`).join(', ')}</p>`;
     }
-    if (r.unclassified_relations.length) html += `<p class="muted">Relations the cards don't read yet: ${r.unclassified_relations.map(esc).join(', ')}.</p>`;
+    if (r.unclassified_relations.length) html += `<p class="muted">Kinds of link the cards don’t use yet: ${r.unclassified_relations.map(esc).join(', ')}.</p>`;
     if (r.scores.length) html += `<details><summary class="muted">All 22 cards</summary><table>${r.scores.map(c => `<tr><td>${cardName(c)}</td><td>${c.score}</td></tr>`).join('')}</table></details>`;
     $('#fcard').innerHTML = html;
     $('#fcard').onclick = e => {
@@ -515,11 +582,11 @@ async function loadFace() {
 $('#frun').onclick = loadFace;
 
 // ---------- questions ----------
-const QKIND = {tension:'judgments in tension', sign:'which direction', open:'direct or through', weak:'one passage only', link:'unconnected', conflict:'inconsistency', evaluate:'unevaluated', want:'more or less', basis:'weak basis (Derange)'};
+const QKIND = {tension:'claims that clash', sign:'which direction', open:'direct or indirect', weak:'only one passage', link:'missing link', conflict:'doesn’t fit together', evaluate:'good or bad?', want:'more or less?', basis:'weak foundation (from Derange)'};
 const PSTATUS = {proposed:'waiting for approval', approved:'approved', rejected:'rejected', revoked:'revoked', superseded:'replaced by a later answer'};
 function previewText(p) {
   const v = p.preview || {}, li = (h, xs) => xs && xs.length ? `<div class="small">${h}: ${xs.map(esc).join('; ')}</div>` : '';
-  return `<div class="small"><b>If approved:</b> ${esc(v.summary || '')}</div>${li('Arrows added', v.arrows_added)}${li('Arrows removed', v.arrows_removed)}${li('Arrows flipped', v.arrows_flipped)}${li('Evaluations', v.evaluations)}${li('Values', v.values)}`;
+  return `<div class="small"><b>If approved:</b> ${esc(v.summary || '')}</div>${li('Links added', v.arrows_added)}${li('Links removed', v.arrows_removed)}${li('Links whose effect flips', v.arrows_flipped)}${li('Good, bad or indifferent', v.evaluations)}${li('Wants more or less', v.values)}`;
 }
 function proposalCard(p) {
   const acts = p.status === 'proposed' ? `<div class="row"><button class="b primary" data-pact="approve" data-pid="${esc(p.id)}">Approve</button><button class="b" data-pact="reject" data-pid="${esc(p.id)}">Reject</button></div>`
@@ -564,27 +631,29 @@ $('#qkind').onchange = loadQuestions;
 $('#approver').value = store.get('approver') || '';
 
 // ---------- mutate ----------
+const MSOURCE = {same_as:'called the same thing', taxonomy_cycle:'each called a kind of the other', causal_twins:'same cause-and-effect role',
+  disjoint_evaluations:'called both good and bad', sign_conflict:'said both to increase and to decrease', user:'you asked for it'};
 const items = (xs, f) => xs.map(x => `<li class="small">${f(x)}</li>`).join('');
 function mutateCard(p) {
   const v = p.preview, k = v.kg, c = v.causal, pending = p.status === 'pending';
-  const pct = h => h ? `${Math.round(h.supported * 100)}% supported, ${Math.round(h.contradicted * 100)}% contradicted` : 'not checked';
+  const pct = h => h ? `${Math.round(h.supported * 100)}% predicted by the rest, ${Math.round(h.contradicted * 100)}% contradicted` : 'not run';
   const detail = [
     k.combined.length && `<h4>Facts combined</h4><ul>${items(k.combined, f => `${esc(f.text)} (${f.support}) ← ${f.from.map(x => esc(x.text)).join('; ')}`)}</ul>`,
     k.divided.length && `<h4>Facts divided</h4><ul>${items(k.divided, f => `${esc(f.text)} → ${f.into.map(x => esc(x.text)).join('; ')}`)}</ul>`,
-    k.collapsed.length && `<h4>Facts that say nothing once merged</h4><ul>${items(k.collapsed, f => f.from.map(x => esc(x.text)).join('; '))}</ul>`,
-    c.collapsed.length && `<h4>Causal judgments that say nothing once merged</h4><ul>${items(c.collapsed, j => `${esc(j.text)} ${loc(j.passage, j.locator)}`)}</ul>`,
-    `<h4>Arrows here</h4><table><tr><th>Before</th><th>After</th></tr><tr><td>${c.edges_before.map(e => esc(e.text)).join('<br>') || '—'}</td><td>${c.edges_after.map(e => `${esc(e.text)} <span class="muted">${e.weight}</span>`).join('<br>') || '—'}</td></tr></table>`,
-    c.constraints.length && `<h4>Judgments, re-weighed</h4><ul>${items(c.constraints, x => `${esc(x.text)} <span class="muted">${x.weight} passages, ${esc(x.status)}</span>${x.from.length > 1 ? ` ← ${x.from.map(y => esc(y.text)).join('; ')}` : ''}`)}</ul>`,
+    k.collapsed.length && `<h4>Facts that become empty once merged (like “anger is the same as anger”)</h4><ul>${items(k.collapsed, f => f.from.map(x => esc(x.text)).join('; '))}</ul>`,
+    c.collapsed.length && `<h4>Cause-and-effect claims that become empty once merged</h4><ul>${items(c.collapsed, j => `${esc(j.text)} ${loc(j.passage, j.locator)}`)}</ul>`,
+    `<h4>Links involving these ideas</h4><table><tr><th>Before</th><th>After</th></tr><tr><td>${c.edges_before.map(e => esc(e.text)).join('<br>') || '—'}</td><td>${c.edges_after.map(e => `${esc(e.text)} <span class="muted">${e.weight}</span>`).join('<br>') || '—'}</td></tr></table>`,
+    c.constraints.length && `<h4>Claims, re-counted</h4><ul>${items(c.constraints, x => `${esc(x.text)} <span class="muted">${x.weight} passage${x.weight === 1 ? '' : 's'}, ${esc(STATUS_WORD[x.status] || x.status)}</span>${x.from.length > 1 ? ` ← ${x.from.map(y => esc(y.text)).join('; ')}` : ''}`)}</ul>`,
     (c.ripple.added.length || c.ripple.removed.length || c.ripple.status_changed.length) && `<h4>Elsewhere in the model</h4><ul>${items(c.ripple.added, e => `+ ${esc(e.text)}`)}${items(c.ripple.removed, e => `− ${esc(e.text)}`)}${items(c.ripple.status_changed, x => `${esc(x.text)}: ${esc(x.before)} → ${esc(x.after)}`)}</ul>`,
-    `<h4>Inconsistencies here</h4><p class="small">${k.violations_before.length} before, ${k.violations_after.length} after. Inferred facts about them: ${k.inferred_before} → ${k.inferred_after}.</p>`,
-    `<h4>Held-out passages</h4><p class="small">Before: ${pct(c.holdout_before)}. After: ${pct(c.holdout_after)}.</p>`,
+    `<h4>Things that don’t fit together</h4><p class="small">${k.violations_before.length} before, ${k.violations_after.length} after. Facts about them that follow by logic: ${k.inferred_before} → ${k.inferred_after}.</p>`,
+    `<h4>Prediction test</h4><p class="small">Hidden claims, before: ${pct(c.holdout_before)}. After: ${pct(c.holdout_after)}.</p>`,
   ].filter(Boolean).join('');
-  return `<div class="card" data-mid="${esc(p.id)}"><div><span class="pill">${esc(p.status)}</span><span class="muted small">${esc(p.source.replace(/_/g, ' '))}</span></div>
+  return `<div class="card" data-mid="${esc(p.id)}"><div><span class="pill">${esc(p.status)}</span><span class="muted small">${esc(MSOURCE[p.source] || p.source.replace(/_/g, ' '))}</span></div>
     <p>${esc(v.summary)}</p><p class="small muted">${esc(p.reason)}</p>
     ${p.note ? `<p class="small">${esc(p.note)}</p>` : ''}
     ${v.warnings.map(w => `<p class="small neg">${esc(w)}</p>`).join('')}
-    <details><summary class="muted">What changes</summary>${detail}</details>
-    ${pending ? `<div class="row">${c.holdout_after ? '' : '<button class="b" data-mact="check">Check held-out</button>'}<button class="b primary" data-mact="approve">Approve</button><button class="b" data-mact="reject">Reject</button></div>` : ''}</div>`;
+    <details><summary class="muted">What would change</summary>${detail}</details>
+    ${pending ? `<div class="row">${c.holdout_after ? '' : '<button class="b" data-mact="check">Run prediction test</button>'}<button class="b primary" data-mact="approve">Approve</button><button class="b" data-mact="reject">Reject</button></div>` : ''}</div>`;
 }
 async function loadMutate() {
   try {
@@ -618,14 +687,14 @@ $('#ms').onchange = async () => {  // the words the corpus uses for the concept:
   if (!id) return;
   try {
     const r = await api(`/api/mutate/words/${encodeURIComponent(id)}`);
-    $('#mwords').textContent = `${r.label} is read from ${r.passages} passages. Words used for it: ` +
+    $('#mwords').textContent = `${r.label} appears in ${r.passages} passages, under these words: ` +
       (r.words.map(w => `${w.word} (${w.passages})`).join(', ') || 'none recorded') +
-      (r.words.length < 2 ? '. With one word, words cannot tell the senses apart; let Claude read them.' : '.');
+      (r.words.length < 2 ? '. There is only one word for it, so words can’t tell the senses apart; let Claude work them out instead.' : '.');
   } catch (err) { $('#mwords').textContent = err.message; }
 };
 $('#mutate').addEventListener('click', e => {
   if (e.target.id === 'mundo') return mutateDo(async () => { const r = await api('/api/mutate/undo', {approver: $('#mby').value.trim()});
-    await refresh(); return r.how === 'restored' ? `Undid ${r.id}.` : `Undid ${r.id}; run build again (cached, free) to take it out of the Mirror.`; });
+    await refresh(); return r.how === 'restored' ? `Undid ${r.id}.` : `Undid ${r.id}. Run the build again to take it out of the Mirror (it reuses saved work, so it costs nothing).`; });
   const b = e.target.closest('[data-mact]'); if (!b) return;
   const id = b.closest('[data-mid]').dataset.mid, act = b.dataset.mact;
   if (act === 'approve' && !$('#mby').value.trim()) { $('#mout').innerHTML = '<p class="neg small">Type your name first: an approval records who approved it.</p>'; return; }
@@ -644,23 +713,25 @@ const tpair = () => ({a: $('#ta').value, b: $('#tb').value});
 function tlist(title, xs, f, open) {
   return `<details ${open ? 'open' : ''}><summary><b>${esc(title)}</b> <span class="muted">(${xs.length})</span></summary>${xs.length ? `<ul>${items(xs, f)}</ul>` : '<p class="muted small">None.</p>'}</details>`;
 }
+const THOW = {'same label':'same name', alias:'alternate name', claude:'matched by Claude', you:'paired by you'};
+const TKIND = {cycle:'would make a circle', denied:'ruled out by a “no difference” claim', outweighed:'outweighed', sign:'opposite effects'};
 function transmutateView(p) {
   const s = p.stats, c = p.crossings;
-  const line = x => `${x.concepts} concepts, ${x.facts} facts, ${x.judgments} judgments, ${x.arrows} arrows, ${x.rejected} in tension`;
-  const pairs = p.alignment.map(x => `<li class="small">${esc(p.b)}'s <b>${esc(x.b_label)}</b> ${x.polarity === 1 ? 'is' : '<span class="neg">is the opposite of</span>'} ${esc(p.a)}'s <b>${esc(x.a_label)}</b> <span class="muted">${esc(x.how)}</span> <button class="link" data-tdrop="${esc(x.b)}">leave unpaired</button></li>`).join('');
-  const tensions = [...c.causal.map(x => `${esc(x.text)}: <span class="neg">${esc(x.kind)}</span>, ${esc(x.why)}`),
-    ...c.kg.map(x => `${esc(String(x.type).replace(/_/g, ' '))}: ${esc(x.text)}`),
-    ...c.values.map(x => `${esc(x.text)}: urged ${Object.entries(x.by_source).map(([k, d]) => `${d > 0 ? 'more' : 'less'} by ${esc(k)}`).join(', ')}`)];
+  const line = x => `${x.concepts} ideas, ${x.facts} facts, ${x.judgments} cause-and-effect claims, ${x.arrows} links, ${x.rejected} clashing`;
+  const pairs = p.alignment.map(x => `<li class="small">${esc(p.b)}'s <b>${esc(x.b_label)}</b> ${x.polarity === 1 ? 'is' : '<span class="neg">is the opposite of</span>'} ${esc(p.a)}'s <b>${esc(x.a_label)}</b> <span class="muted">${esc(THOW[x.how] || x.how)}</span> <button class="link" data-tdrop="${esc(x.b)}">keep apart</button></li>`).join('');
+  const tensions = [...c.causal.map(x => `${esc(x.text)}: <span class="neg">${esc(TKIND[x.kind] || x.kind)}</span>, ${esc(x.why)}`),
+    ...c.kg.map(x => `${violationTitle(x.type)}: ${esc(x.text)}`),
+    ...c.values.map(x => `${esc(x.text)}: ${Object.entries(x.by_source).map(([k, d]) => `${esc(k)} wants ${d > 0 ? 'more' : 'less'}`).join(', ')}`)];
   return `<div class="card"><h3>${esc(p.a)} + ${esc(p.b)}</h3><p class="small muted">Proposed ${esc(p.created)}</p>
     <p class="small">Combined: ${line(s.combined)}.<br>After trimming: ${line(s.trimmed)}.</p>
-    ${s.arrows_new.length ? `<p class="small neg">Arrows that only appear after trimming: ${s.arrows_new.map(e => esc(e.replace('|', ' → '))).join(', ')}</p>` : ''}</div>
-    <details open><summary><b>Aligned concepts</b> <span class="muted">(${p.alignment.length})</span></summary><ul>${pairs || '<li class="small muted">None.</li>'}</ul></details>
-    ${tlist('Both Mirrors say', c.agreed, x => `${esc(x.text)} <span class="muted">${x.weight} passages, ${esc(x.status)}${x.sign_conflict ? ', they disagree on the sign' : ''}</span>`)}
-    ${tlist('Tensions that come from combining', tensions, x => x, true)}
-    <h4>Proposed trims (${p.trims.length})</h4><p class="small muted">Tick any to keep. Trims survived less than ${Math.round(p.settings.keep * 100)}% of ${p.settings.samples} half-corpus readings.</p>
+    ${s.arrows_new.length ? `<p class="small neg">Links that appear only after trimming: ${s.arrows_new.map(e => esc(e.replace('|', ' → '))).join(', ')}</p>` : ''}</div>
+    <details open><summary><b>Ideas matched across the two</b> <span class="muted">(${p.alignment.length})</span></summary><ul>${pairs || '<li class="small muted">None.</li>'}</ul></details>
+    ${tlist('Both Mirrors say', c.agreed, x => `${esc(x.text)} <span class="muted">${x.weight} passage${x.weight === 1 ? '' : 's'}, ${esc(STATUS_WORD[x.status] || x.status)}${x.sign_conflict ? ', but they disagree on whether it raises or lowers' : ''}</span>`)}
+    ${tlist('Clashes created by combining', tensions, x => x, true)}
+    <h4>Suggested trims (${p.trims.length})</h4><p class="small muted">Each of these held up in fewer than ${Math.round(p.settings.keep * 100)}% of ${p.settings.samples} tests, each test using a random half of the passages. Tick any you want to keep.</p>
     <div class="row"><button class="b" id="tall">Keep all</button><button class="b" id="tnone">Keep none</button></div>
     <table>${p.trims.map(t => `<tr><td><input type="checkbox" data-tkeep="${t.n}"></td><td class="small"><span class="pill">${esc(t.what)}</span>${esc(t.text || t.id)}<div class="muted">${esc(t.why)}</div></td></tr>`).join('')}</table>
-    <div class="row"><input id="tby" placeholder="Your name, to approve" style="flex:1"><button class="b primary" id="tapprove">Approve and write the combined Mirror</button></div>`;
+    <div class="row"><input id="tby" placeholder="Your name (needed to approve)" style="flex:1"><button class="b primary" id="tapprove">Approve and write the combined Mirror</button></div>`;
 }
 async function loadTransmutate() {
   try {
@@ -678,13 +749,13 @@ async function showTransmutation() {
   tproposal = null;
   if (!a || !b || a === b) { $('#tprop').innerHTML = '<p class="muted small">Build at least two Mirrors, then pick two different ones.</p>'; return; }
   const r = await fetch(`/api/transmutate?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`);
-  if (r.status === 404) { $('#tprop').innerHTML = '<p class="muted small">No proposal for these two yet. Propose one; it is free unless Claude pairs the concepts.</p>'; return; }
+  if (r.status === 404) { $('#tprop').innerHTML = '<p class="muted small">No proposal for these two yet. Making one costs nothing unless Claude matches the ideas.</p>'; return; }
   tproposal = await r.json();
   $('#tprop').innerHTML = transmutateView(tproposal);
   $('#tby').value = store.get('approver') || '';
 }
 async function transmutateDo(fn) {
-  $('#tout').innerHTML = '<p class="muted">Working… scoring fitness re-fits the model many times, so this can take a minute.</p>';
+  $('#tout').innerHTML = '<p class="muted">Working… testing each item rebuilds the model many times, so this can take a minute.</p>';
   try { const r = await fn(); $('#tout').innerHTML = r ? `<p class="small">${r}</p>` : ''; } catch (err) { fail($('#tout'), err); }
 }
 const tpropose = extraDrop => transmutateDo(async () => {
@@ -738,7 +809,9 @@ async function refresh() {
   $('#corpus').innerHTML = s.built.map(b => `<option ${b === corpus ? 'selected' : ''}>${esc(b)}</option>`).join('');
   const m = await api('/api/meta');
   labels = {};
-  $('#stat').textContent = `${m.corpus.title} · ${m.passages} passages · ${m.concepts} concepts · ${m.stats.held} facts held, ${m.stats.inferred} inferred · ${m.judgments} causal judgments, ${m.causal ? m.causal.arrows : 0} arrows · Claude ${s.llm ? 'on' : 'off'}`;
+  who = (m.corpus && m.corpus.subject) || 'the subject';
+  document.querySelectorAll('.who').forEach(x => x.textContent = who);
+  $('#stat').textContent = `${m.corpus.title} · ${m.passages} passages · ${m.concepts} ideas · ${m.stats.held} facts stated, ${m.stats.inferred} more by logic · ${m.judgments} cause-and-effect claims, ${m.causal ? m.causal.arrows : 0} links · Claude ${s.llm ? 'on' : 'off'}`;
   await drawGraph();
   causalData = null;
   loadKnowledge(); loadCausal(); loadFace(); loadQuestions(); loadMutate();

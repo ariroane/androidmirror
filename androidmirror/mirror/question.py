@@ -99,7 +99,7 @@ class Asker:
           evidence: list[dict[str, Any]], passages: int = 1) -> dict[str, Any]:
         about = [n for n in dict.fromkeys(about) if n]
         mean = sum(self.imp.get(n, 0) for n in about) / max(1, len(about))
-        return {"id": _qid(kind, key), "kind": kind, "text": text, "about": about,
+        return {"id": _qid(kind, key), "kind": kind, "text": text[:1].upper() + text[1:], "about": about,
                 "labels": {n: self.L(n) for n in about}, "why": why, "evidence": evidence[:4],
                 "options": options + [SKIP], "score": round(BASE[kind] * (0.5 + mean) * math.log(2 + passages), 3)}
 
@@ -119,7 +119,7 @@ class Asker:
                 continue
             said = self.m.say(c)
             against = "; ".join(self.m.say(o) for o in others)
-            how = {"cycle": "it would close a loop with", "denied": "it breaks the denial",
+            how = {"cycle": "that would make a circle with", "denied": "that goes against the “makes no difference” claim",
                    "outweighed": "it is outweighed by"}.get(c.get("reason"), "it clashes with")
             text = (f"{self.subject} says {said} ({_plural(c['weight'])}), but {how}: {against}. "
                     f"Which does {self.subject} hold?")
@@ -134,7 +134,7 @@ class Asker:
                              "changes": [{"type": "ruling", "target": c["id"], "ruling": "retract", "says": f"not: {said}"}]})
             ev = self.quotes(c) + [e for o in others for e in self.quotes(o)[:1]]
             out.append(self.q("tension", c["id"], text, [c["x"], c["y"], c["z"]] + [o["x"] for o in others], opts,
-                              "the fit had to drop one of the subject's judgments to stay consistent", ev,
+                              f"the model can't fit all of these claims from {self.subject} at once", ev,
                               c["weight"] + sum(o["weight"] for o in others)))
         return out
 
@@ -175,7 +175,7 @@ class Asker:
                      "changes": [{"type": "ruling", "target": c["id"], "ruling": "affirm", "indirect": True,
                                   "says": f"{x} {verb} {y} only through {via}"}]}]
             out.append(self.q("open", c["id"], text, [e["src"], e["dst"]] + e["open"]["through"], opts,
-                              "the subject's other judgments also explain it, so the arrow may be a shortcut",
+                              f"{self.subject}'s other claims already explain it, so this link may be a shortcut",
                               self.quotes(c), e["weight"]))
         return out
 
@@ -192,7 +192,7 @@ class Asker:
                     {"key": "no", "label": "No, that reads too much into the passage",
                      "changes": [{"type": "ruling", "target": c["id"], "ruling": "retract", "says": f"not: {said}"}]}]
             out.append(self.q("weak", c["id"], text, [e["src"], e["dst"]], opts,
-                              "an arrow resting on a single passage is the easiest to misread", self.quotes(c), 1))
+                              "a link that rests on a single passage is the easiest to misread", self.quotes(c), 1))
         return out
 
     def links(self) -> list[dict[str, Any]]:
@@ -223,14 +223,14 @@ class Asker:
                 continue
             seen.add(frozenset((a, b)))
             hint = f"{self.subject} says {self.L(f['s'])} {f['r'].replace('_', ' ')} {self.L(f['o'])}"
-            out.append(self._link(a, b, f"{hint}. ", "the knowledge graph relates them, the causal model does not",
+            out.append(self._link(a, b, f"{hint}. ", "the facts link them, but nothing is said about cause and effect between them",
                                   [{k: e[k] for k in ("passage", "locator", "quote")} for e in f["evidence"][:2]],
                                   f["support"]))
         central = sorted((n for n in m.nodes if eligible(n)), key=lambda n: -self.imp.get(n, 0))[:8]
         for a, b in combinations(central, 2):
             if unsaid(a, b) and frozenset((a, b)) not in seen:
                 seen.add(frozenset((a, b)))
-                out.append(self._link(a, b, "", "two of the concepts the subject returns to most, with no judgment "
+                out.append(self._link(a, b, "", f"two of the ideas {self.subject} returns to most, with no cause-and-effect claim "
                                       "between them", [], 1))
         return out
 
@@ -303,7 +303,7 @@ class Asker:
                          "changes": self.drop((s, r, o))}]
                 text = f"{S} denies that {said}, yet it follows from other things {S} says. Which holds?"
                 out.append(self.q("conflict", f"denied|{v['fact']}", text, [s, o], opts,
-                                  "a denied fact that the reasoner derives anyway", self._fact_quotes(v["facts"]), 2))
+                                  "denied, yet it follows by logic from other statements", self._fact_quotes(v["facts"]), 2))
             elif t == "values_and_rejects":
                 n = v["node"]
                 x = self.L(n)
@@ -363,7 +363,7 @@ class Asker:
             text = f"{self.subject} speaks of {x} in {_plural(node['support'])} but never says whether it is good, " \
                    f"bad or indifferent. Which?"
             ev = [{k: mm[k] for k in ("passage", "locator", "quote")} for mm in node.get("mentions", [])[:3]]
-            out.append(self.q("evaluate", n, text, [n], opts, "an unevaluated concept the subject returns to", ev,
+            out.append(self.q("evaluate", n, text, [n], opts, f"an idea {self.subject} returns to without saying whether it is good or bad", ev,
                               node["support"]))
         return out
 
@@ -384,7 +384,7 @@ class Asker:
                     {"key": "less", "label": f"Less {x}", "changes": [{"type": "value", "concept": v["concept"],
                                                                          "direction": -1, "says": f"wants less {x}"}]}]
             ev = [{k: e[k] for k in ("passage", "locator", "quote")} for e in v["evidence"][:3]]
-            out.append(self.q("want", v["concept"], text, [v["concept"]], opts, "the passages urge both ways", ev,
+            out.append(self.q("want", v["concept"], text, [v["concept"]], opts, "some passages ask for more, others for less", ev,
                               v["more"] + v["less"]))
         return out
 
@@ -422,7 +422,7 @@ class Asker:
                 continue
             opts = [{"key": "yes", "label": "Yes, it holds",
                      "changes": [{"type": "fact", "s": f["s"], "r": f["r"], "o": f["o"], "says": f"{f['text']} (settled)"}]},
-                    {"key": "no", "label": "No, the subject does not hold it",
+                    {"key": "no", "label": f"No, {self.subject} does not hold it",
                      "changes": [{"type": "retract_fact", "key": f["fact"], "says": f"no longer held: {f['text']}"}]}]
             ev = [{k: e[k] for k in ("passage", "locator", "quote")} for e in f.get("evidence", [])]
             out.append(self.q("basis", f["id"], f.get("probe") or f"Does {self.subject} hold that {f['text']}?",
