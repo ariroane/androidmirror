@@ -459,7 +459,7 @@ def _warnings(data: dict[str, Any], m: dict[str, Any], prev: dict[str, Any], kb:
                     out.append(f"{lab(s)} is part of {lab(o)}: merged, that distinction is lost")
         held = [c for c in prev["causal"]["collapsed"] if c["held"]]
         if prev["causal"]["n_collapsed"]:
-            out.append(f"{prev['causal']['n_collapsed']} causal judgment(s) between them say nothing once merged"
+            out.append(f"{prev['causal']['n_collapsed']} cause-and-effect claim(s) between them become empty once merged"
                        + (f", e.g. “{held[0]['text']}” ({held[0]['locator']})" if held else ""))
     else:
         default = next(s for s in m["senses"] if s["id"] == m["default"])
@@ -488,18 +488,18 @@ def _summary(data: dict[str, Any], m: dict[str, Any], prev: dict[str, Any]) -> s
     if m["type"] == "merge":
         names = " and ".join(lab(x["id"]) + (" (as its opposite)" if x["polarity"] == -1 else "") for x in m["members"])
         head = f"Merge {names} into {m.get('label') or lab(m['into'])}"
-        kg = f"{k['facts_before']} facts become {k['facts_after']} ({k['n_combined']} combined, {k['n_collapsed']} collapsed)"
+        kg = f"{k['facts_before']} facts become {k['facts_after']} ({k['n_combined']} combined, {k['n_collapsed']} emptied)"
     else:
         head = f"Split {lab(m['node'])} into " + ", ".join(f"{s['label']} ({len(s['passages'])})" for s in m["senses"])
         kg = f"{k['facts_before']} facts become {k['facts_after']} ({k['n_divided']} divided between senses)"
-    causal = f"arrows here {len(c['edges_before'])} → {len(c['edges_after'])}"
+    causal = f"links involving these ideas {len(c['edges_before'])} → {len(c['edges_after'])}"
     ripple = len(c["ripple"]["added"]) + len(c["ripple"]["removed"]) + len(c["ripple"]["status_changed"])
     if ripple:
         causal += f", {ripple} change(s) elsewhere in the model"
     hb, ha = c["holdout_before"], c["holdout_after"]
     if not hb or not ha:
-        return f"{head}. Knowledge graph: {kg}. Causal model: {causal}. Held-out check not run yet."
-    return (f"{head}. Knowledge graph: {kg}. Causal model: {causal}. Held-out claims the rest restates or implies: "
+        return f"{head}. Knowledge graph: {kg}. Cause and effect: {causal}. Prediction test not run yet."
+    return (f"{head}. Knowledge graph: {kg}. Cause and effect: {causal}. Prediction test, hidden claims the rest predicts: "
             f"{hb['supported']:.0%} → {ha['supported']:.0%}, contradicted: {hb['contradicted']:.0%} → {ha['contradicted']:.0%}.")
 
 

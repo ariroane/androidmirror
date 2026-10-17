@@ -86,7 +86,7 @@ def test_merge_combines_evidence_and_refits(tmp_path):
     assert c["reaches|anger|misery"]["weight"] == 6
     assert v["causal"]["n_collapsed"] == 1 and v["causal"]["collapsed"][0]["text"] == "anger raises wrath"
     assert any(x["r"] == "same_as" for x in v["kg"]["collapsed"])
-    assert any("say nothing once merged" in w for w in v["warnings"])
+    assert any("become empty once merged" in w for w in v["warnings"])
     assert {e["text"] for e in v["causal"]["edges_after"]} >= {"opinion raises anger", "anger raises misery"}
     assert {e["text"] for e in v["causal"]["edges_lost"]} == {"anger raises wrath"}  # a self-loop now
 
@@ -140,7 +140,7 @@ def test_detectors_find_synonyms_opposites_and_senses(tmp_path):
     # the held-out check is left for later, so that finding candidates stays quick
     assert all(p["preview"]["causal"]["holdout_after"] is None for p in found)
     checked = mutate.Engine(root).check(same["id"])
-    assert checked["preview"]["causal"]["holdout_after"]["claims"] > 0 and "Held-out claims" in checked["preview"]["summary"]
+    assert checked["preview"]["causal"]["holdout_after"]["claims"] > 0 and "Prediction test" in checked["preview"]["summary"]
 
 
 def test_split_divides_facts_and_resolves_the_contradiction(tmp_path):

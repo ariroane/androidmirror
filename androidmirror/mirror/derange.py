@@ -227,7 +227,7 @@ def _causal_probe(mirror: Any, basis: list[dict[str, Any]], hits: list[dict[str,
                           for b in basis)
     top = max(hits, key=lambda h: h["importance"] * h["share"])
     n = len(top["lost"]) + len(top["changed"])
-    return (f"Is it so that {claims}? {who} says so in {_n(strength, 'passage')}, yet without it {n} of the "
+    return (f"Is it so that {claims}? {who[:1].upper() + who[1:]} says so in {_n(strength, 'passage')}, yet without it {n} of the "
             f"{_n(top['of'], 'thing')} that act on {top['label']} would no longer act on it the same way.")
 
 
@@ -322,7 +322,7 @@ def _fact_text(mirror: Any, t: tuple) -> str:
 def _fact_probe(mirror: Any, f: dict[str, Any], hits: list[dict[str, Any]], strength: int) -> str:
     who = (mirror.meta.get("corpus") or {}).get("subject") or "the subject"
     top = max(hits, key=lambda h: h["importance"] * h["share"])
-    return (f"Is it so that {_fact_text(mirror, (f['s'], f['r'], f['o']))}? {who} says so in {_n(strength, 'passage')}, "
+    return (f"Is it so that {_fact_text(mirror, (f['s'], f['r'], f['o']))}? {who[:1].upper() + who[1:]} says so in {_n(strength, 'passage')}, "
             f"yet {top['n_lost']} of the {_n(top['of'], 'thing')} held about {top['label']} rest on it.")
 
 
