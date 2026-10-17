@@ -55,6 +55,16 @@ def test_the_thinnest_support_under_an_end_comes_first():
     assert end["weakest"] == {"finding": "cut:judgment>calm", "strength": 1}
 
 
+def test_an_arrow_the_user_settled_is_never_cut():
+    m = mirror(chain(), values=[V("calm", 5)])
+    for c in m.causal["constraints"]:
+        c["pinned"] = c["id"] == "reaches|judgment|calm"  # as the Question engine marks an approved answer
+    ids = [f["id"] for f in derange.run(m)["causal"]["findings"]]
+    assert "cut:judgment>calm" not in ids and "cut:practice>judgment" in ids
+    # a ruling judgment (Question engine) bears only on the constraint it names
+    assert derange.judgment_constraints({"kind": "ruling", "target": "reaches|a|b"}) == {"reaches|a|b"}
+
+
 def test_what_the_subjects_other_words_carry_does_not_fall():
     # "practice brings calm, in the end" (said once) follows from the chain; without judgment -> calm it is drawn itself
     js = chain() + [J("causes", "practice", "calm", p="c")]

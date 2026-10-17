@@ -20,6 +20,7 @@ second kind of weakness: little support under a lot of weight.
    - Causal: for each thing that acts on an end, the minimum cut between them
      with each arrow's capacity the passages that make it: the fewest passages
      the subject's account of "this bears on that" rests on at its thinnest.
+     An arrow the user settled by answering a question (pinned) is never cut.
    - Conceptual: the stated facts each held fact about the concept rests on
      (the premises of its proof): a premise said in one passage that a dozen
      inferences pass through.
@@ -73,6 +74,8 @@ def run(mirror: Any, settings: dict[str, Any] | None = None) -> dict[str, Any]:
 def judgment_constraints(j: dict[str, Any]) -> set[str]:
     """The ids of the constraints a judgment counts toward (the same mapping as judgments.constraints)."""
     k = j["kind"]
+    if k == "ruling":  # the user's ruling on a constraint (Question engine): bears on that constraint only
+        return {j["target"]}
     if k == "screens_off":
         return {f"reaches|{j['y']}|{j['z']}", f"only_through|{j['x']}|{j['y']}|{j['z']}"}
     if k == "independent" or (k == "intervention" and j["sign"] == 0):
@@ -119,9 +122,14 @@ def causal_bases(mirror: Any, cfg: dict[str, Any]) -> dict[str, Any]:
     if not edges or not ends:
         return {"subgraphs": [], "findings": [], "tried": 0}
 
+    # an arrow the user settled by answering a question is not a weakness of the corpus: it is never cut
+    rows = {c["id"]: c for c in model.get("constraints", [])}
     net = nx.DiGraph()
     for e in edges:
-        net.add_edge(e["src"], e["dst"], capacity=e["weight"])
+        if rows.get(e["constraint"], {}).get("pinned"):
+            net.add_edge(e["src"], e["dst"])  # no capacity: unbounded
+        else:
+            net.add_edge(e["src"], e["dst"], capacity=e["weight"])
     by_pair = {(e["src"], e["dst"]): e for e in edges}
 
     # candidate bases: the minimum cut under each thing that acts on each end
@@ -129,7 +137,10 @@ def causal_bases(mirror: Any, cfg: dict[str, Any]) -> dict[str, Any]:
     for end in ends:
         v = end["id"]
         for a in before[v]:
-            _, (side, _) = nx.minimum_cut(net, a, v)
+            try:
+                _, (side, _) = nx.minimum_cut(net, a, v)
+            except nx.NetworkXUnbounded:
+                continue  # every way from a to v runs through what the user settled
             cut = frozenset((s, t) for s in side for t in net.successors(s) if t not in side)
             if cut and cut not in candidates:
                 candidates[cut] = _surgery_score(net, cut, ends, before)
@@ -137,7 +148,6 @@ def causal_bases(mirror: Any, cfg: dict[str, Any]) -> dict[str, Any]:
 
     settings = model.get("settings") or {}
     statuses = {c["id"]: c["status"] for c in model.get("constraints", [])}
-    rows = {c["id"]: c for c in model.get("constraints", [])}
     findings = []
     for cut in ranked:
         removed = {by_pair[p]["constraint"] for p in cut}
@@ -202,7 +212,7 @@ def _surgery_score(net: nx.DiGraph, cut: frozenset, ends: list[dict[str, Any]],
     """A quick estimate before refitting: the important share cut off, per passage of the cut."""
     h = net.copy()
     h.remove_edges_from(cut)
-    capacity = sum(net.edges[p]["capacity"] for p in cut)
+    capacity = sum(net.edges[p].get("capacity", 0) for p in cut)
     damage = 0.0
     for end in ends:
         v, acc = end["id"], before[end["id"]]
