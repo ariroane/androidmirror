@@ -108,6 +108,11 @@ The Causal tab lists every constraint with its status, the tensions, the pairs s
 - **Causal:** counts, the held-out check, Trace, the arrows, tensions, denials that hold, claims explained by a chain, values, reported views, and judgments about concepts outside the codebook.
 - **Ask:** the Oracle answers from stated and inferred facts, the subject's causal judgments and model, their values and the most relevant passages, and cites passages by locator.
 - **Face:** the Major Arcana card the Mirror most resembles (from Prototype 1), read from the new graphs.
+- **Mutate:** merge concepts that are one, or split one used in two senses; see below.
+
+## Mutate: merging and splitting concepts
+
+The codebook decides what counts as one concept, and it can be wrong both ways: two words for one thing ("wrath", "anger"), a word and its opposite ("calm" is anger at −1), or one word for two things (the pleasure the subject calls good and the pleasure they call bad). The mutate engine finds such cases from the Mirror's own structure (the subject says two concepts are the same, each is a kind of the other, they play the same or a mirror-image causal role, one is called both good and bad or said both to raise and to lower one thing), or takes them from you, and re-evaluates the edges: everything read from each passage moves with it (signs turned around for an opposite), the knowledge base is re-run and the causal model re-fitted, so merged evidence is weighed together and a judgment between two merged concepts ("anger breeds wrath") is shown as saying nothing any more. Each proposal previews what changes in both graphs, including the held-out check, and **is applied only when you approve it**; it can be undone, and approved mutations are made again on every rebuild. Offline except `split --claude`, where Claude reads which sense each passage uses.
 
 ## Command reference
 
@@ -120,6 +125,7 @@ The full guide, with every option, examples, what each step costs and what to do
 | `benchmark [--n 300] [--seeds 5] [--claude]` | The planted-subject benchmark. Offline and free unless `--claude`. |
 | `serve [--port 8000]` | The web app. |
 | `ask "question" [--corpus NAME]` | The Oracle from the command line. |
+| `mutate propose\|merge\|split\|show\|approve\|reject\|undo` | Merge or split concepts; previews, applied only on approval. Offline except `split --claude`. |
 | `p1 ...` | The paused Prototype 1 app (patch review, Refactorer, Breaker, Chainer, Evolver): [docs/prototype1.md](docs/prototype1.md). |
 
 ## Adding a corpus
@@ -145,6 +151,7 @@ Splitters: `paragraphs` (one text file, short paragraphs merged), `documents` (a
 | `androidmirror/mirror/causal/` | Fitting the graph to the constraints, Trace, the held-out check |
 | `androidmirror/mirror/benchmark.py` | The planted-subject benchmark |
 | `androidmirror/mirror/build.py`, `store.py`, `ask.py` | The pipeline, the read views, the Oracle |
+| `androidmirror/mirror/mutate.py`, `mutate_api.py` | The mutate engine and its routes |
 | `androidmirror/server.py`, `web/index.html` | The app |
 | `androidmirror/p1_*`, `refactor.py`, `breaker.py`, `chainer.py`, `evolver/` | Prototype 1, paused |
 

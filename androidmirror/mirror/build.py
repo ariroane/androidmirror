@@ -17,7 +17,7 @@ from typing import Any, Callable
 
 from .. import llm
 from . import codebook as cb
-from . import coding
+from . import coding, mutate
 from . import judgments as jd
 from .causal import fit, holdout, public
 from .corpus import CorpusSpec, Passage, fetch, split
@@ -155,9 +155,10 @@ def build(spec: CorpusSpec, data_dir: Path, coder: Any = None, limit: int | None
                  "passages": len(passages), "coded": len(codings), "read": len(readings), "prototype": 3},
         "passage_ids": [p.id for p in passages],
         "nodes": nodes, "facts": facts, "judgments": judgments, "unresolved": unresolved,
-        "values": jd.values(values),
+        "values": jd.values(values), "value_records": values,
         "causal": {"settings": settings or {}},
     }
+    mirror = mutate.replay(mirror, root, log)  # the mutations the user approved, made again on the new reading
     mirror = finalize(mirror, root, settings, log)
     st = mirror["causal"]["stats"]
     log(f"built: {len(nodes)} concepts, {len(facts)} facts, {st['held_judgments']} of the subject's causal judgments "

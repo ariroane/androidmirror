@@ -20,6 +20,7 @@ Commands that call Claude need `ANTHROPIC_API_KEY` in the local `.env` file. Eve
 | `benchmark` | Test the causal fit on a subject whose model is known | No (`--claude`: yes) |
 | `serve` | Open the web app | No (the Ask tab makes 1 call per question) |
 | `ask` | Ask the Mirror a question from the command line | 1 call per question |
+| `mutate` | Merge or split concepts, preview what changes in both graphs, apply what you approve | No (`split --claude`: 1 call per 50 passages) |
 | `p1` | The paused Prototype 1 app | Some subcommands |
 
 ## The usual order
@@ -127,6 +128,37 @@ python -m androidmirror ask "How does the Committee respond to inflation?" --cor
 ```
 
 Without a key it prints the facts it found instead of an answer.
+
+## mutate
+
+Merges concepts that are one ("wrath" and "anger", or "calm" as the opposite of "anger"), or splits one the subject uses in two senses, then re-evaluates their edges: every fact, causal judgment, value and mention moves with its passage, the knowledge base is re-run and the causal model re-fitted. Each proposal shows what would change; **nothing changes until you approve it.**
+
+```powershell
+python -m androidmirror mutate propose                           # candidates the Mirror points to, with previews
+python -m androidmirror mutate merge anger wrath                 # preview merging wrath into anger
+python -m androidmirror mutate merge anger calm --opposite calm  # calm is anger at -1
+python -m androidmirror mutate split pleasure                    # split along the evidence (called good and bad, ...)
+python -m androidmirror mutate split pleasure --sense "joy: joy, gladness" --sense "passion: pleasure, delight"
+python -m androidmirror mutate split pleasure --claude           # Claude reads the senses in the passages
+python -m androidmirror mutate show m-1a2b3c4d                   # the whole preview, with the held-out check
+python -m androidmirror mutate approve m-1a2b3c4d --by "your name"
+python -m androidmirror mutate undo
+```
+
+| Action | What it does |
+|---|---|
+| `propose [--limit 8]` | Looks for concepts the subject calls the same, that are each a kind of the other, or that play the same (or a mirror-image) causal role; and for concepts called both good and bad, or said both to raise and to lower one thing. Previews each one, without the held-out check so it stays quick |
+| `merge A B [--opposite B] [--into A] [--label "..."]` | Previews a merge. The concepts merge into the one read from the most passages unless `--into` says otherwise |
+| `split A [--sense "label: word, word" ...] [--claude]` | Previews a split. Passages are assigned by evidence, then by the words used for the concept in them, then to the first sense; the preview says how many went each way |
+| `show ID` | The whole preview, running the held-out check if it has not run yet |
+| `approve ID [--by NAME]` | Applies it to the Mirror. If the Mirror changed since the proposal, it is recomputed and shown again instead |
+| `reject ID` | Rejects it; `propose` will not bring it back |
+| `undo` | Takes back the last approved mutation |
+| `list` | Every proposal and its status |
+
+What a preview shows: facts combined, divided between senses, or that say nothing once merged ("wrath is the same as anger"); causal judgments between merged concepts, which say nothing once merged and are listed with their passages; the arrows at those concepts before and after; each judgment re-weighed with the ones it came from; changes elsewhere in the causal model; inconsistencies; and how many held-out claims the rest of the corpus restates or implies, and how many it contradicts, before and after. Warnings flag a merge the subject's own words argue against (they call one the contrary of the other, or a kind of the other).
+
+Approved mutations are kept in `data/mirror/<corpus>/mutations/` with who approved them and a copy of the Mirror from before, and `build` makes them again on every rebuild. Passages read for the first time after a split go to the first sense. The web app's Mutate tab does the same.
 
 ## p1
 

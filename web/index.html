@@ -78,6 +78,7 @@ python -m androidmirror build --corpus fomc</pre>
       <button data-tab="causal">Causal</button>
       <button data-tab="ask">Ask</button>
       <button data-tab="face">Face</button>
+      <button data-tab="mutate">Mutate</button>
     </nav>
     <section id="node" class="on"><p class="muted">Click a node to see what it is, what the Mirror infers about it, and the passages it was built from.</p></section>
     <section id="knowledge"></section>
@@ -91,6 +92,16 @@ python -m androidmirror build --corpus fomc</pre>
       <div class="row"><select id="ffocus"></select><button class="b" id="frun">Read</button></div>
       <svg id="aface" viewBox="0 0 240 290" width="100%" style="max-width:300px"></svg>
       <div id="fcard"></div>
+    </section>
+    <section id="mutate">
+      <p class="muted">Merge concepts that are one, or split one used in two senses, then see what changes in both graphs. Nothing changes until you approve.</p>
+      <datalist id="mconcepts"></datalist>
+      <div class="row"><button class="b" id="mfind">Find candidates</button><input id="mby" placeholder="Your name, to approve" style="flex:1"></div>
+      <div class="row"><input id="ma" list="mconcepts" placeholder="concept" size="12"><span>+</span><input id="mb" list="mconcepts" placeholder="concept" size="12">
+        <label class="small"><input type="checkbox" id="mopp"> opposites</label><button class="b" id="mmerge">Preview merge</button></div>
+      <div class="row"><input id="ms" list="mconcepts" placeholder="concept" size="12"><label class="small"><input type="checkbox" id="mclaude"> Claude reads the senses</label><button class="b" id="msplit">Preview split</button></div>
+      <div id="mout"></div>
+      <div id="mlist"></div>
     </section>
   </aside>
 </main>
@@ -433,11 +444,69 @@ async function loadFace() {
 $('#frun').onclick = loadFace;
 $('#ffocus').onchange = loadFace;
 
+// ---------- mutate ----------
+const items = (xs, f) => xs.map(x => `<li class="small">${f(x)}</li>`).join('');
+function proposalCard(p) {
+  const v = p.preview, k = v.kg, c = v.causal, pending = p.status === 'pending';
+  const pct = h => h ? `${Math.round(h.supported * 100)}% supported, ${Math.round(h.contradicted * 100)}% contradicted` : 'not checked';
+  const detail = [
+    k.combined.length && `<h4>Facts combined</h4><ul>${items(k.combined, f => `${esc(f.text)} (${f.support}) ← ${f.from.map(x => esc(x.text)).join('; ')}`)}</ul>`,
+    k.divided.length && `<h4>Facts divided</h4><ul>${items(k.divided, f => `${esc(f.text)} → ${f.into.map(x => esc(x.text)).join('; ')}`)}</ul>`,
+    k.collapsed.length && `<h4>Facts that say nothing once merged</h4><ul>${items(k.collapsed, f => f.from.map(x => esc(x.text)).join('; '))}</ul>`,
+    c.collapsed.length && `<h4>Causal judgments that say nothing once merged</h4><ul>${items(c.collapsed, j => `${esc(j.text)} ${loc(j.passage, j.locator)}`)}</ul>`,
+    `<h4>Arrows here</h4><table><tr><th>Before</th><th>After</th></tr><tr><td>${c.edges_before.map(e => esc(e.text)).join('<br>') || '—'}</td><td>${c.edges_after.map(e => `${esc(e.text)} <span class="muted">${e.weight}</span>`).join('<br>') || '—'}</td></tr></table>`,
+    c.constraints.length && `<h4>Judgments, re-weighed</h4><ul>${items(c.constraints, x => `${esc(x.text)} <span class="muted">${x.weight} passages, ${esc(x.status)}</span>${x.from.length > 1 ? ` ← ${x.from.map(y => esc(y.text)).join('; ')}` : ''}`)}</ul>`,
+    (c.ripple.added.length || c.ripple.removed.length || c.ripple.status_changed.length) && `<h4>Elsewhere in the model</h4><ul>${items(c.ripple.added, e => `+ ${esc(e.text)}`)}${items(c.ripple.removed, e => `− ${esc(e.text)}`)}${items(c.ripple.status_changed, x => `${esc(x.text)}: ${esc(x.before)} → ${esc(x.after)}`)}</ul>`,
+    `<h4>Inconsistencies here</h4><p class="small">${k.violations_before.length} before, ${k.violations_after.length} after. Inferred facts about them: ${k.inferred_before} → ${k.inferred_after}.</p>`,
+    `<h4>Held-out passages</h4><p class="small">Before: ${pct(c.holdout_before)}. After: ${pct(c.holdout_after)}.</p>`,
+  ].filter(Boolean).join('');
+  return `<div class="card" data-mid="${esc(p.id)}"><div><span class="pill">${esc(p.status)}</span><span class="muted small">${esc(p.source.replace(/_/g, ' '))}</span></div>
+    <p>${esc(v.summary)}</p><p class="small muted">${esc(p.reason)}</p>
+    ${p.note ? `<p class="small">${esc(p.note)}</p>` : ''}
+    ${v.warnings.map(w => `<p class="small neg">${esc(w)}</p>`).join('')}
+    <details><summary class="muted">What changes</summary>${detail}</details>
+    ${pending ? `<div class="row">${c.holdout_after ? '' : '<button class="b" data-mact="check">Check held-out</button>'}<button class="b primary" data-mact="approve">Approve</button><button class="b" data-mact="reject">Reject</button></div>` : ''}</div>`;
+}
+async function loadMutate() {
+  try {
+    const cs = await api('/api/concepts');
+    $('#mconcepts').innerHTML = cs.filter(c => !c.id.endsWith('~')).map(c => `<option value="${esc(c.id)}">${esc(c.label)}</option>`).join('');
+    const r = await api('/api/mutate');
+    const last = r.applied[r.applied.length - 1];
+    $('#mlist').innerHTML = (last ? `<div class="row small">Last applied: ${esc(last.id)} by ${esc(last.approver)} <button class="b" id="mundo">Undo</button></div>` : '') +
+      (r.proposals.length ? r.proposals.map(proposalCard).join('') : '<p class="muted small">No proposals yet.</p>');
+  } catch (err) { fail($('#mlist'), err); }
+}
+async function mutateDo(fn) {
+  $('#mout').innerHTML = '<p class="muted">Working…</p>';
+  try { const r = await fn(); $('#mout').innerHTML = r ? `<p class="small">${esc(r)}</p>` : ''; } catch (err) { fail($('#mout'), err); }
+  loadMutate();
+}
+$('#mby').value = store.get('approver') || '';
+$('#mby').onchange = () => store.set('approver', $('#mby').value.trim());
+$('#mfind').onclick = () => mutateDo(async () => { const r = await api('/api/mutate/propose', {}); return `${r.proposals.length} proposals.`; });
+$('#mmerge').onclick = () => mutateDo(async () => { const a = $('#ma').value.trim(), b = $('#mb').value.trim();
+  await api('/api/mutate/merge', {ids: [a, b], opposite: $('#mopp').checked ? [b] : []}); });
+$('#msplit').onclick = () => mutateDo(async () => { await api('/api/mutate/split', {node: $('#ms').value.trim(), claude: $('#mclaude').checked}); });
+$('#mutate').addEventListener('click', e => {
+  if (e.target.id === 'mundo') return mutateDo(async () => { const r = await api('/api/mutate/undo', {approver: $('#mby').value.trim()});
+    await refresh(); return r.how === 'restored' ? `Undid ${r.id}.` : `Undid ${r.id}; run build again (cached, free) to take it out of the Mirror.`; });
+  const b = e.target.closest('[data-mact]'); if (!b) return;
+  const id = b.closest('[data-mid]').dataset.mid, act = b.dataset.mact;
+  if (act === 'approve' && !$('#mby').value.trim()) { $('#mout').innerHTML = '<p class="neg small">Type your name first: an approval records who approved it.</p>'; return; }
+  mutateDo(async () => {
+    const r = await api(`/api/mutate/${encodeURIComponent(id)}/${act}`, {approver: $('#mby').value.trim()});
+    if (act !== 'approve') return '';
+    if (r.status === 'applied') { await refresh(); return 'Applied. Undo takes it back.'; }
+    return r.status === 'stale' ? 'The Mirror changed since this was proposed, so it was recomputed. Review it and approve again.' : 'This no longer applies to the Mirror.';
+  });
+});
+
 // ---------- wiring ----------
 document.addEventListener('click', e => {
   const t = e.target.closest('[data-passage],[data-node],[data-edge],[data-holds]'); if (!t) return;
   if (t.dataset.passage) {
-    const box = t.closest('#causal') ? $('#edgeptext') : t.closest('#ask') ? $('#askp') : t.closest('#knowledge') ? $('#hout') : $('#ptext');
+    const box = t.closest('#causal') ? $('#edgeptext') : t.closest('#ask') ? $('#askp') : t.closest('#knowledge') ? $('#hout') : t.closest('#mutate') ? $('#mout') : $('#ptext');
     showPassage(t.dataset.passage, box);
   } else if (t.dataset.node) showNode(t.dataset.node);
   else if (t.dataset.edge) { const [a, b] = t.dataset.edge.split('|'); tab('causal'); showEdge(a, b); }
@@ -463,7 +532,7 @@ async function refresh() {
   $('#stat').textContent = `${m.corpus.title} · ${m.passages} passages · ${m.concepts} concepts · ${m.stats.held} facts held, ${m.stats.inferred} inferred · ${m.judgments} causal judgments, ${m.causal ? m.causal.arrows : 0} arrows · Claude ${s.llm ? 'on' : 'off'}`;
   await drawGraph();
   causalData = null;
-  loadKnowledge(); loadCausal(); loadFace();
+  loadKnowledge(); loadCausal(); loadFace(); loadMutate();
 }
 refresh().catch(err => $('#stat').textContent = err.message);
 </script>
