@@ -90,6 +90,30 @@ def test_store_views_and_api(tmp_path):
     assert any("pathway: alpha -> gamma -> delta -> epsilon, so alpha lowers epsilon" in f for f in r["facts"])
 
 
+def test_ask_answers_then_proposes_uses(tmp_path, monkeypatch):
+    from androidmirror import llm
+    from androidmirror.mirror import ask
+    from androidmirror.mirror.build import mirror_dir
+    from androidmirror.mirror.store import Mirror
+
+    spec, *_ = make(tmp_path)
+    m = Mirror.load(mirror_dir(tmp_path, spec.id))
+    calls = []
+
+    def fake(system, user, schema, **_):
+        calls.append((system, user))
+        if "uses" in schema["properties"]:
+            return {"uses": [{"lever": "alpha", "outcome": "less epsilon", "how": "via gamma and delta",
+                              "assumes": "Tester's model holds", "citations": ["C1"]}] * 4}
+        return {"answer": "Alpha lowers epsilon [C1].", "citations": ["C1"], "nodes_used": ["alpha"]}
+
+    monkeypatch.setattr(llm, "available", lambda: True)
+    monkeypatch.setattr(llm, "_json_call", fake)
+    r = ask.ask(m, "what does alpha do to epsilon?")
+    assert r["answer"].startswith("Alpha") and len(r["uses"]) == 3 and r["uses"][0]["lever"] == "alpha"
+    assert len(calls) == 2 and "Answer: Alpha lowers epsilon [C1]." in calls[1][1] and "[C1]" in calls[1][1]
+
+
 def test_no_mirror_built_yet(tmp_path):
     client = TestClient(create_app(tmp_path))
     assert client.get("/api/status").json()["built"] == []

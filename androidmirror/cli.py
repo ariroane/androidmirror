@@ -190,6 +190,9 @@ free: causal, derange, benchmark (without --claude), serve. Full guide: docs/com
             raise SystemExit("no Mirror built yet: python -m androidmirror build")
         r = oracle.ask(m, args.question)
         print(r["answer"] or "\n".join(r["facts"]))
+        for u in r["uses"]:
+            print(f"\nWay to use this: change {u['lever']} to move {u['outcome']}\n  {u['how']}\n  Assumes: {u['assumes']}"
+                  f"\n  Based on {' '.join(u['citations'])}")
 
 
 def _mutate(args: argparse.Namespace) -> None:
