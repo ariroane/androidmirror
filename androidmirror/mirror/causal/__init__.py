@@ -116,8 +116,9 @@ def fit(judgments: list[dict[str, Any]], settings: dict[str, Any] | None = None,
         exclude: set[str] | frozenset = frozenset()) -> dict[str, Any]:
     cfg = {**DEFAULTS, **(settings or {})}
     allc = build_constraints(judgments, exclude)
-    used = [c for c in allc if c["weight"] >= cfg["min_weight"]]
-    used.sort(key=lambda c: (-c["weight"], RANK[c["type"]], -c["mentions"], c["id"]))
+    used = [c for c in allc if c["weight"] >= cfg["min_weight"] or c.get("pinned")]
+    # what the user's answers settled comes first, then the corpus, strongest first
+    used.sort(key=lambda c: (not c.get("pinned"), -c["weight"], RANK[c["type"]], -c["mentions"], c["id"]))
     g = Graph()
     for c in used:
         for n in (c["x"], c["y"], c["z"]):
@@ -170,6 +171,11 @@ def fit(judgments: list[dict[str, Any]], settings: dict[str, Any] | None = None,
     # a path, and only if none does is it drawn as an arrow of its own. A denial is still weighed against it now.
     deferred: list[dict[str, Any]] = []
     for c in used:
+        if not c.get("pinned") and deferred and deferred[-1].get("pinned"):
+            # what the user settled is drawn before anything else from the corpus can block it
+            for d in deferred:
+                claim(d, defer=False)
+            deferred = []
         if c["type"] == "reaches":
             if not claim(c, defer=not c["direct"]):
                 deferred.append(c)
@@ -177,7 +183,7 @@ def fit(judgments: list[dict[str, Any]], settings: dict[str, Any] | None = None,
         target, skip = _target(c)
         p = g.path(c["x"], target, skip)
         stronger = next((d for d in deferred if c["type"] == "no_path" and (d["x"], d["y"]) == (c["x"], c["y"])
-                         and d["weight"] > c["weight"]), None)
+                         and (d["weight"] > c["weight"] or d.get("pinned") and not c.get("pinned"))), None)
         if p is not None:
             status[c["id"]] = {"status": "rejected", "reason": "outweighed", "path": p, "conflicts": g.path_constraints(p)}
         elif stronger:
@@ -188,6 +194,7 @@ def fit(judgments: list[dict[str, Any]], settings: dict[str, Any] | None = None,
     for c in deferred:
         claim(c, defer=False)
 
+    by_id = {c["id"]: c for c in allc}
     # arrows the rest of the graph also explains: the subject may mean them only through the other path
     for rec in g.edges():
         if rec["direct"]:
@@ -196,18 +203,25 @@ def fit(judgments: list[dict[str, Any]], settings: dict[str, Any] | None = None,
         g.remove(a, b)
         alt = [p for p, s in g.signed_paths(a, b) if s == rec["sign"]]
         g.add(a, b, rec)
-        if alt:
-            rec["open"] = {"through": min(alt, key=len)}
+        if not alt:
+            continue
+        through = min(alt, key=len)
+        if by_id[rec["constraint"]].get("indirect"):  # the user said it acts only through the other path
+            g.remove(a, b)
+            for u, v in zip(through, through[1:]):
+                g.succ[u][v]["supports"].append(rec["constraint"])
+            status[rec["constraint"]] = {"status": "follows", "path": through}
+        else:
+            rec["open"] = {"through": through}
 
-    by_id = {c["id"]: c for c in allc}
     pairs = {(c["x"], c["y"]) for c in used if c["type"] == "reaches"}
     feedback = sorted({tuple(sorted((x, y))) for x, y in pairs if (y, x) in pairs})
     rows = []
     for c in allc:
-        st = status.get(c["id"], {"status": "not used" if c["weight"] else "not held"})
+        st = status.get(c["id"], {"status": "retracted" if c.get("retracted") else "not used" if c["weight"] else "not held"})
         rows.append({**{k: c[k] for k in ("id", "type", "x", "y", "z", "sign", "weight", "mentions", "kinds", "direct",
                                           "sign_conflict", "held")}, **st, "evidence": c["evidence"][:12],
-                     "n_evidence": len(c["evidence"])})
+                     "n_evidence": len(c["evidence"]), "pinned": c.get("pinned", False), "ruling": c.get("ruling")})
     edges = g.edges()
     nodes = sorted(n for n in g.succ if g.succ[n] or any(n in g.succ[m] for m in g.succ)) if edges else []
     isolated = sorted(n for n in g.succ if n not in set(nodes))

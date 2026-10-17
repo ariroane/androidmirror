@@ -189,3 +189,30 @@ def test_api(tmp_path):
     r = client.post("/api/transmutate/approve", json={"a": "synthetic", "b": "second", "keep": ["1"]})
     assert r.json()["built"] == "synthetic+second" and r.json()["transmutation"]["spared"] == ["1"]
     assert "synthetic+second" in client.get("/api/status").json()["built"]
+
+
+def test_your_approved_answers_come_along(tmp_path):
+    from androidmirror.mirror import answers
+
+    data = make(tmp_path)
+    root = data / "mirror" / "second"
+    answers.save(root, {"proposals": [{
+        "id": "q1", "question": "Does eta raise theta?", "answer": "No, I take that back.", "status": "approved",
+        "changes": [{"type": "ruling", "target": "reaches|eta|theta", "ruling": "retract"},
+                    {"type": "judgment", "kind": "causes", "x": "theta", "y": "alpha", "sign": 1, "scope": "direct"}]}]})
+    p = proposal(data)
+    trims = {t["id"] for t in p["trims"]}
+    # said once, but it is your answer: pinned, so never trimmed
+    assert "c:reaches|second:theta|alpha" not in trims and "n:second:theta" not in trims
+    m = tm.approve(data, "synthetic", "second", log=quiet)
+    rows = {c["id"]: c for c in m["causal"]["constraints"]}
+    assert rows["reaches|second:eta|second:theta"]["status"] == "retracted"  # the ruling followed the renamed concepts
+    assert rows["reaches|second:theta|alpha"]["pinned"]
+    assert any(pid.startswith("second:answer:") for pid in m["passage_ids"])
+
+    proposal(data)
+    book = answers.load(root)
+    book["proposals"][0]["status"] = "revoked"
+    answers.save(root, book)
+    with pytest.raises(RuntimeError, match="changed since"):
+        tm.approve(data, "synthetic", "second", log=quiet)

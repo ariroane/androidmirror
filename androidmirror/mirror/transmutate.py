@@ -43,6 +43,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .. import llm
+from . import answers
 from .causal import fit, holdout, public
 from .codebook import norm
 from .judgments import constraints as build_constraints
@@ -76,7 +77,7 @@ def proposal_dir(data_dir: Path, a: str, b: str) -> Path:
 
 
 def load_source(data_dir: Path, name: str) -> dict[str, Any]:
-    """A built Mirror as raw data: its mirror.json, passages, and a hash to tell if it changes."""
+    """A built Mirror as raw data, with the answers you approved laid over it, and a hash to tell if either changes."""
     root = data_dir / "mirror" / name
     path = root / "mirror.json"
     if not path.exists():
@@ -85,7 +86,10 @@ def load_source(data_dir: Path, name: str) -> dict[str, Any]:
     mirror = json.loads(raw)
     if "judgments" not in mirror:
         raise RuntimeError(f"{name} was built by Prototype 2; run build again before combining it")
-    passages = json.loads((root / "passages.json").read_text(encoding="utf-8"))
+    book = answers.path(root)
+    raw += book.read_bytes() if book.exists() else b""
+    mirror = answers.overlay(mirror, answers.load(root))
+    passages = json.loads((root / "passages.json").read_text(encoding="utf-8")) + mirror.pop("answer_passages", [])
     return {"id": name, "mirror": mirror, "passages": passages, "hash": hashlib.sha256(raw).hexdigest()[:16]}
 
 
@@ -316,7 +320,10 @@ def combine(a: dict[str, Any], b: dict[str, Any], pairs: list[dict[str, Any]]) -
             if len({x, y, z} - {""}) < (3 if j["z"] else 2):
                 continue
             flip = py * pz if j["kind"] == "screens_off" else px * py
-            judgments.append({**ev_map(side, j), "x": x, "y": y, "z": z, "sign": j["sign"] * flip})
+            rec = {**ev_map(side, j), "x": x, "y": y, "z": z, "sign": j["sign"] * flip}
+            if j["kind"] == "ruling":  # your ruling on a constraint follows the constraint's new name
+                rec["target"] = "|".join([j["target"].split("|")[0], x, y] + ([z] if z else []))
+            judgments.append(rec)
         unresolved += [ev_map(side, u) for u in m.get("unresolved", [])]
         for v in m.get("values", []):
             cid, pol = ids.concept(side, v["concept"])
@@ -430,7 +437,8 @@ def fitness(mirror: dict[str, Any], model: dict[str, Any], settings: dict[str, A
     cfg = {**DEFAULTS, **(settings or {})}
     share, rounds = cfg["share"], cfg["samples"]
     rng = random.Random(cfg["seed"])
-    pids = sorted({j["passage"] for j in mirror["judgments"]})
+    # your approved answers are never sampled out: only the corpus is read in part
+    pids = sorted({j["passage"] for j in mirror["judgments"] if not _answered(j["passage"])})
     rows = [c for c in model["constraints"] if c["held"]]
     survived: Counter = Counter()
     for r in range(rounds):
@@ -452,7 +460,7 @@ def fitness(mirror: dict[str, Any], model: dict[str, Any], settings: dict[str, A
     facts = {}
     for f in mirror["facts"]:
         held = _held_passages(f)
-        codebook = all(e["passage"].endswith(":codebook") for e in f["evidence"])
+        codebook = all(e["passage"].endswith(":codebook") for e in f["evidence"]) or any(map(_answered, held))
         facts[fact_key(f["s"], f["r"], f["o"], f["neg"])] = 1.0 if codebook else round(1 - (1 - share) ** len(held), 3) if held else 0.0
     return {"settings": cfg, "claims": claims, "facts": facts}
 
@@ -462,6 +470,8 @@ def trims(mirror: dict[str, Any], model: dict[str, Any], fit_: dict[str, Any]) -
     keep = fit_["settings"]["keep"]
     out = []
     for c in model["constraints"]:
+        if c.get("pinned") or c["status"] == "retracted":
+            continue  # settled by your answers: never trimmed
         if not c["held"]:
             out.append({"id": f"c:{c['id']}", "what": "judgment", "why": "a view the subject reports or entertains, not their own",
                         "fitness": 0.0, "weight": 0})
@@ -498,7 +508,13 @@ def trims(mirror: dict[str, Any], model: dict[str, Any], fit_: dict[str, Any]) -
     return out
 
 
+def _answered(pid: str) -> bool:
+    return answers.PREFIX in pid
+
+
 def _constraint_ids(j: dict[str, Any]) -> list[str]:
+    if j["kind"] == "ruling":
+        return [j["target"]]
     if j["kind"] == "screens_off":
         return [f"reaches|{j['y']}|{j['z']}", f"only_through|{j['x']}|{j['y']}|{j['z']}"]
     if j["kind"] == "independent" or (j["kind"] == "intervention" and j["sign"] == 0):

@@ -77,7 +77,10 @@ python -m androidmirror build --corpus fomc</pre>
       <button data-tab="knowledge">Knowledge</button>
       <button data-tab="causal">Causal</button>
       <button data-tab="ask">Ask</button>
+      <button data-tab="questions">Questions</button>
       <button data-tab="face">Face</button>
+      <button data-tab="derange">Derange</button>
+      <button data-tab="mutate">Mutate</button>
     </nav>
     <section id="node" class="on"><p class="muted">Click a node to see what it is, what the Mirror infers about it, and the passages it was built from.</p></section>
     <section id="knowledge"></section>
@@ -86,11 +89,29 @@ python -m androidmirror build --corpus fomc</pre>
       <div class="row"><input id="question" style="flex:1" placeholder="Ask the Mirror a question"><button class="b primary" id="askbtn">Ask</button></div>
       <div id="answer"></div>
     </section>
+    <section id="derange"><p class="muted">Where the subject's worldview rests on the least, under what matters most in it.</p></section>
+    <section id="questions">
+      <p class="muted">What the Mirror's graphs leave open, most important first. An answer is only a proposal: nothing changes until you approve it with your name, and an approved answer can be revoked.</p>
+      <div class="row"><input id="approver" placeholder="Your name, to approve"><select id="qkind"><option value="">All kinds</option></select></div>
+      <div id="qlist"></div>
+      <h4>Your answers</h4>
+      <div id="plist"></div>
+    </section>
     <section id="face">
-      <p class="muted">The Major Arcana card the Mirror's two graphs most resemble, read from both its knowledge graph and the subject's causal model.</p>
-      <div class="row"><select id="ffocus"></select><button class="b" id="frun">Read</button></div>
+      <p class="muted">The Major Arcana card the whole Mirror most resembles, read from both its knowledge graph and the subject's causal model.</p>
+      <div class="row"><button class="b" id="frun">Read again</button></div>
       <svg id="aface" viewBox="0 0 240 290" width="100%" style="max-width:300px"></svg>
       <div id="fcard"></div>
+    </section>
+    <section id="mutate">
+      <p class="muted">Merge concepts that are one, or split one used in two senses, then see what changes in both graphs. Nothing changes until you approve.</p>
+      <datalist id="mconcepts"></datalist>
+      <div class="row"><button class="b" id="mfind">Find candidates</button><input id="mby" placeholder="Your name, to approve" style="flex:1"></div>
+      <div class="row"><input id="ma" list="mconcepts" placeholder="concept" size="12"><span>+</span><input id="mb" list="mconcepts" placeholder="concept" size="12">
+        <label class="small"><input type="checkbox" id="mopp"> opposites</label><button class="b" id="mmerge">Preview merge</button></div>
+      <div class="row"><input id="ms" list="mconcepts" placeholder="concept" size="12"><label class="small"><input type="checkbox" id="mclaude"> Claude reads the senses</label><button class="b" id="msplit">Preview split</button></div>
+      <div id="mout"></div>
+      <div id="mlist"></div>
     </section>
   </aside>
 </main>
@@ -165,7 +186,7 @@ function judgmentText(j) {
 }
 const voice = e => e.held ? '' : ` <span class="pill">${esc(e.attribution !== 'self' ? 'reported: ' + e.attribution : e.register)}</span>`;
 const evidenceLine = e => `<div class="small">${loc(e.passage, e.locator)} <span class="muted">${esc(KIND_WORD[e.kind] || e.kind)}</span>${voice(e)} <span class="q">“${esc(e.quote)}”</span></div>`;
-const STATUS_WORD = {arrow:'an arrow of the model', follows:'follows from the model', holds:'holds in the model', rejected:'in tension', 'not held':'not the subject\'s own view', 'not used':'below the minimum weight'};
+const STATUS_WORD = {arrow:'an arrow of the model', follows:'follows from the model', holds:'holds in the model', rejected:'in tension', 'not held':'not the subject\'s own view', 'not used':'below the minimum weight', retracted:'retracted by your answer'};
 function constraintCard(c, open) {
   const why = c.status === 'rejected' ? `<div class="small neg">${c.reason === 'cycle' ? 'Would close a loop with' : c.reason === 'denied' ? 'Ruled out by the denial' : 'Outweighed by'}: ${(c.conflicts || []).map(id => `<code>${esc(id.split('|').slice(1).map(lbl).join(' → '))}</code>`).join(', ')}</div>` : '';
   const path = c.status === 'follows' && c.path ? `<div class="small">Through ${c.path.map(lbl).join(' → ')}.</div>` : '';
@@ -325,6 +346,44 @@ async function runExplain() {
   } catch (err) { fail(out, err); }
 }
 
+// ---------- derange ----------
+let derangeFor = null;
+async function loadDerange() {
+  const el = $('#derange');
+  if (derangeFor === corpus) return;
+  derangeFor = corpus;
+  el.innerHTML = '<p class="muted">Knocking out the thinnest supports and re-fitting (no Claude calls)…</p>';
+  try {
+    const d = await api('/api/derange');
+    Object.assign(labels, d.labels);
+    const n = (k, w) => `${k} ${w}${k === 1 ? '' : 's'}`;
+    const nodeLink = id => `<button class="link" data-node="${esc(id)}">${lbl(id)}</button>`;
+    const subTable = (rows, what) => rows.length ? `<table><tr><th>${what}</th><th>Weight</th><th>Size</th><th>Thinnest support</th></tr>${rows.map(r => `<tr class="click" data-node="${esc(r.id)}">
+      <td>${esc(r.label)}</td><td>${r.importance}</td><td>${r.size}</td><td class="${r.weakest && r.weakest.strength <= 1 ? 'neg' : ''}">${r.weakest ? n(r.weakest.strength, 'passage') : '<span class="muted">nothing single</span>'}</td></tr>`).join('')}</table>` : '<p class="muted">Nothing to look at yet.</p>';
+    const causalCard = f => `<div class="card"><div><b>${esc(f.probe)}</b></div>
+      <div class="small muted">Score ${f.score} · rests on ${n(f.strength, 'passage')}${f.basis.some(b => b.sign_conflict) ? ' · <span class="neg">also said the other way round</span>' : ''}${f.basis.some(b => b.open) ? ' · may run only through another path' : ''}</div>
+      ${f.basis.map(b => `<div class="small click" data-edge="${esc(b.src)}|${esc(b.dst)}">${lbl(b.src)} → ${lbl(b.dst)} <span class="${b.sign > 0 ? 'pos' : 'neg'}">${b.sign > 0 ? 'raises' : 'lowers'}</span> · ${n(b.weight, 'passage')}</div>`).join('')}
+      ${f.ends.map(h => `<div class="small">Under ${nodeLink(h.end)} (urged in ${n(h.importance, 'passage')}): ${h.lost_labels.length ? `${h.lost_labels.map(esc).join(', ')} would no longer act on it` : ''}${h.lost_labels.length && h.changed.length ? '; ' : ''}${h.changed.length ? `${h.changed.map(c => esc(c.label)).join(', ')} would act on it differently` : ''} <span class="muted">(${h.lost.length + h.changed.length} of ${h.of})</span></div>`).join('')}
+      ${f.claims_fall.length ? `<div class="small">Claims that would stop holding: ${f.claims_fall.map(esc).join('; ')}</div>` : ''}
+      ${f.now_drawn.length ? `<div class="small">Without it the model would draw ${f.now_drawn.map(esc).join(', ')} instead.</div>` : ''}
+      ${f.against.length ? `<div class="small neg">It outweighs: ${f.against.map(esc).join('; ')}</div>` : ''}
+      <details><summary class="small muted">Quotes</summary>${f.basis.flatMap(b => b.evidence).map(evidenceLine).join('')}</details></div>`;
+    const factCard = f => `<div class="card"><div><b>${esc(f.probe)}</b></div>
+      <div class="small muted">Score ${f.score} · rests on ${n(f.strength, 'passage')}${f.denied ? ' · <span class="neg">also denied</span>' : ''}${f.against.length ? ` · <span class="neg">${f.against.map(a => esc(a.replace(/_/g, ' '))).join(', ')}</span>` : ''}</div>
+      ${f.concepts.map(h => `<details><summary class="small">Under ${nodeLink(h.concept)}: ${h.n_lost} of ${h.of} held facts would stop following</summary>${h.lost.map(t => `<div class="small">${esc(t)}</div>`).join('')}</details>`).join('')}
+      ${f.evidence.map(quote).join('')}</div>`;
+    el.innerHTML = `<p>Every arrow and fact goes back to passages. Derange looks for little support under a lot of weight: it knocks out the thinnest support under what matters most (the subject's ends in the causal model, the concepts the corpus is most about), re-fits, and shows what would fall. It only reads; nothing here changes the Mirror. Each finding ends in the question it raises.</p>
+      <h4>Causal: the subject's ends</h4><p class="small muted">Weight: passages that urge more or less of it. Size: things that act on it in the subject's model. Thinnest support: the fewest passages whose loss would change how something acts on it.</p>
+      ${subTable(d.causal.subgraphs, 'End')}
+      ${d.causal.findings.map(causalCard).join('') || '<p class="muted">No single support holds up much of the causal model.</p>'}
+      <h4>Conceptual: the main concepts</h4><p class="small muted">Weight: passages that mention it. Size: facts the subject holds about it, stated or inferred.</p>
+      ${subTable(d.conceptual.subgraphs, 'Concept')}
+      ${d.conceptual.findings.map(factCard).join('') || '<p class="muted">No single fact holds up much of what is held.</p>'}
+      <div id="dptext"></div>
+      <p class="muted small">Score: the share of each important subgraph that falls, times its weight, per passage of support. ${d.stats.knocked_out} candidate supports were knocked out and re-checked; <code>python -m androidmirror derange</code> prints the same list.</p>`;
+  } catch (err) { derangeFor = null; fail(el, err); }
+}
+
 // ---------- ask ----------
 $('#askbtn').onclick = async () => {
   const out = $('#answer'); out.innerHTML = '<p class="muted">Thinking…</p>';
@@ -402,13 +461,9 @@ function drawFace(card, opacity) {
 }
 const cardName = c => `${c.numeral} · ${esc(c.name)}${c.reversed ? ' (reversed)' : ''}`;
 async function loadFace() {
-  const sel = $('#ffocus'), keep = sel.value;
-  const nodes = Object.entries(labels).sort((a, b) => a[1].localeCompare(b[1]));
-  sel.innerHTML = '<option value="">Whole Mirror</option>' + nodes.map(([id, l]) => `<option value="${esc(id)}">Around ${esc(l)}</option>`).join('');
-  sel.value = labels[keep] ? keep : '';
   $('#fcard').innerHTML = '<p class="muted">Reading…</p>';
   try {
-    const r = await api('/api/archetype' + (sel.value ? `?focus=${encodeURIComponent(sel.value)}` : ''));
+    const r = await api('/api/archetype');
     const a = r.archetype;
     drawFace(r.undecided ? null : a, 0.45 + 0.55 * Math.min(1, r.margin / 0.4));
     let html = !a ? '<p class="muted">Too little here to read yet.</p>'
@@ -431,19 +486,125 @@ async function loadFace() {
   } catch (err) { fail($('#fcard'), err); }
 }
 $('#frun').onclick = loadFace;
-$('#ffocus').onchange = loadFace;
+
+// ---------- questions ----------
+const QKIND = {tension:'judgments in tension', sign:'which direction', open:'direct or through', weak:'one passage only', link:'unconnected', conflict:'inconsistency', evaluate:'unevaluated', want:'more or less', basis:'weak basis (Derange)'};
+const PSTATUS = {proposed:'waiting for approval', approved:'approved', rejected:'rejected', revoked:'revoked', superseded:'replaced by a later answer'};
+function previewText(p) {
+  const v = p.preview || {}, li = (h, xs) => xs && xs.length ? `<div class="small">${h}: ${xs.map(esc).join('; ')}</div>` : '';
+  return `<div class="small"><b>If approved:</b> ${esc(v.summary || '')}</div>${li('Arrows added', v.arrows_added)}${li('Arrows removed', v.arrows_removed)}${li('Arrows flipped', v.arrows_flipped)}${li('Evaluations', v.evaluations)}${li('Values', v.values)}`;
+}
+function proposalCard(p) {
+  const acts = p.status === 'proposed' ? `<div class="row"><button class="b primary" data-pact="approve" data-pid="${esc(p.id)}">Approve</button><button class="b" data-pact="reject" data-pid="${esc(p.id)}">Reject</button></div>`
+    : p.status === 'approved' ? `<div class="row"><button class="b" data-pact="revoke" data-pid="${esc(p.id)}">Revoke</button></div>` : '';
+  return `<div class="card"><div class="small muted">${esc(PSTATUS[p.status] || p.status)}${p.approved_by ? ' by ' + esc(p.approved_by) : ''}</div><div>${esc(p.question)}</div>
+    <div><b>${esc(p.answer)}</b>${p.note ? ` <span class="muted">(${esc(p.note)})</span>` : ''}</div>
+    ${p.changes.map(c => `<div class="small">· ${esc(c.says || c.type)}</div>`).join('')}${p.status === 'proposed' ? previewText(p) : ''}${acts}</div>`;
+}
+async function loadQuestions() {
+  const el = $('#qlist'); el.innerHTML = '<p class="muted">Loading…</p>';
+  try {
+    const kind = $('#qkind').value;
+    const r = await api(`/api/questions?limit=12${kind ? '&kind=' + kind : ''}`);
+    $('#qkind').innerHTML = `<option value="">All kinds (${r.total})</option>` + Object.entries(QKIND).map(([k, w]) => `<option value="${k}" ${k === kind ? 'selected' : ''}>${esc(w)}${r.counts[k] ? ` (${r.counts[k]})` : ''}</option>`).join('');
+    el.innerHTML = r.questions.map(q => `<div class="card" data-q="${esc(q.id)}"><div class="small muted">${esc(QKIND[q.kind] || q.kind)} · ${esc(q.why)}</div>
+      <div><b>${esc(q.text)}</b></div>${q.evidence.slice(0, 2).map(quote).join('')}
+      <div class="row">${q.options.map(o => `<button class="b" data-qopt="${esc(o.key)}">${esc(o.label)}</button>`).join('')}</div>
+      ${r.llm ? `<div class="row"><input style="flex:1" placeholder="Or answer in your own words"><button class="b" data-qtext="1">Answer</button></div>` : ''}<div class="qout"></div></div>`).join('') || '<p class="muted">No open questions.</p>';
+    $('#plist').innerHTML = r.proposals.map(proposalCard).join('') || '<p class="muted">None yet.</p>';
+  } catch (err) { fail(el, err); }
+}
+$('#questions').addEventListener('click', async e => {
+  const b = e.target.closest('[data-qopt],[data-qtext],[data-pact]'); if (!b) return;
+  try {
+    if (b.dataset.pact) {
+      const approver = $('#approver').value.trim(); store.set('approver', approver);
+      if (b.dataset.pact === 'approve' && !approver) { $('#approver').focus(); throw new Error('Type your name to approve.'); }
+      await api(`/api/proposals/${encodeURIComponent(b.dataset.pid)}/${b.dataset.pact}`, {approver});
+      if (b.dataset.pact !== 'reject') { refresh(); }
+      return loadQuestions();
+    }
+    const card = b.closest('[data-q]'), out = card.querySelector('.qout');
+    if (b.dataset.qopt === 'skip') return card.remove();
+    out.innerHTML = '<p class="muted">Working out what it would change…</p>';
+    const body = {question_id: card.dataset.q};
+    if (b.dataset.qopt) body.option = b.dataset.qopt; else body.text = card.querySelector('input').value;
+    const p = await api('/api/questions/answer', body);
+    out.innerHTML = p.status === 'skipped' ? '<p class="muted">Skipped.</p>' : proposalCard(p);
+  } catch (err) { const box = b.closest('[data-q]'); fail(box ? box.querySelector('.qout') : $('#plist'), err); }
+});
+$('#qkind').onchange = loadQuestions;
+$('#approver').value = store.get('approver') || '';
+
+// ---------- mutate ----------
+const items = (xs, f) => xs.map(x => `<li class="small">${f(x)}</li>`).join('');
+function mutateCard(p) {
+  const v = p.preview, k = v.kg, c = v.causal, pending = p.status === 'pending';
+  const pct = h => h ? `${Math.round(h.supported * 100)}% supported, ${Math.round(h.contradicted * 100)}% contradicted` : 'not checked';
+  const detail = [
+    k.combined.length && `<h4>Facts combined</h4><ul>${items(k.combined, f => `${esc(f.text)} (${f.support}) ← ${f.from.map(x => esc(x.text)).join('; ')}`)}</ul>`,
+    k.divided.length && `<h4>Facts divided</h4><ul>${items(k.divided, f => `${esc(f.text)} → ${f.into.map(x => esc(x.text)).join('; ')}`)}</ul>`,
+    k.collapsed.length && `<h4>Facts that say nothing once merged</h4><ul>${items(k.collapsed, f => f.from.map(x => esc(x.text)).join('; '))}</ul>`,
+    c.collapsed.length && `<h4>Causal judgments that say nothing once merged</h4><ul>${items(c.collapsed, j => `${esc(j.text)} ${loc(j.passage, j.locator)}`)}</ul>`,
+    `<h4>Arrows here</h4><table><tr><th>Before</th><th>After</th></tr><tr><td>${c.edges_before.map(e => esc(e.text)).join('<br>') || '—'}</td><td>${c.edges_after.map(e => `${esc(e.text)} <span class="muted">${e.weight}</span>`).join('<br>') || '—'}</td></tr></table>`,
+    c.constraints.length && `<h4>Judgments, re-weighed</h4><ul>${items(c.constraints, x => `${esc(x.text)} <span class="muted">${x.weight} passages, ${esc(x.status)}</span>${x.from.length > 1 ? ` ← ${x.from.map(y => esc(y.text)).join('; ')}` : ''}`)}</ul>`,
+    (c.ripple.added.length || c.ripple.removed.length || c.ripple.status_changed.length) && `<h4>Elsewhere in the model</h4><ul>${items(c.ripple.added, e => `+ ${esc(e.text)}`)}${items(c.ripple.removed, e => `− ${esc(e.text)}`)}${items(c.ripple.status_changed, x => `${esc(x.text)}: ${esc(x.before)} → ${esc(x.after)}`)}</ul>`,
+    `<h4>Inconsistencies here</h4><p class="small">${k.violations_before.length} before, ${k.violations_after.length} after. Inferred facts about them: ${k.inferred_before} → ${k.inferred_after}.</p>`,
+    `<h4>Held-out passages</h4><p class="small">Before: ${pct(c.holdout_before)}. After: ${pct(c.holdout_after)}.</p>`,
+  ].filter(Boolean).join('');
+  return `<div class="card" data-mid="${esc(p.id)}"><div><span class="pill">${esc(p.status)}</span><span class="muted small">${esc(p.source.replace(/_/g, ' '))}</span></div>
+    <p>${esc(v.summary)}</p><p class="small muted">${esc(p.reason)}</p>
+    ${p.note ? `<p class="small">${esc(p.note)}</p>` : ''}
+    ${v.warnings.map(w => `<p class="small neg">${esc(w)}</p>`).join('')}
+    <details><summary class="muted">What changes</summary>${detail}</details>
+    ${pending ? `<div class="row">${c.holdout_after ? '' : '<button class="b" data-mact="check">Check held-out</button>'}<button class="b primary" data-mact="approve">Approve</button><button class="b" data-mact="reject">Reject</button></div>` : ''}</div>`;
+}
+async function loadMutate() {
+  try {
+    const cs = await api('/api/concepts');
+    $('#mconcepts').innerHTML = cs.filter(c => !c.id.endsWith('~')).map(c => `<option value="${esc(c.id)}">${esc(c.label)}</option>`).join('');
+    const r = await api('/api/mutate');
+    const last = r.applied[r.applied.length - 1];
+    $('#mlist').innerHTML = (last ? `<div class="row small">Last applied: ${esc(last.id)} by ${esc(last.approver)} <button class="b" id="mundo">Undo</button></div>` : '') +
+      (r.proposals.length ? r.proposals.map(mutateCard).join('') : '<p class="muted small">No proposals yet.</p>');
+  } catch (err) { fail($('#mlist'), err); }
+}
+async function mutateDo(fn) {
+  $('#mout').innerHTML = '<p class="muted">Working…</p>';
+  try { const r = await fn(); $('#mout').innerHTML = r ? `<p class="small">${esc(r)}</p>` : ''; } catch (err) { fail($('#mout'), err); }
+  loadMutate();
+}
+$('#mby').value = store.get('approver') || '';
+$('#mby').onchange = () => store.set('approver', $('#mby').value.trim());
+$('#mfind').onclick = () => mutateDo(async () => { const r = await api('/api/mutate/propose', {}); return `${r.proposals.length} proposals.`; });
+$('#mmerge').onclick = () => mutateDo(async () => { const a = $('#ma').value.trim(), b = $('#mb').value.trim();
+  await api('/api/mutate/merge', {ids: [a, b], opposite: $('#mopp').checked ? [b] : []}); });
+$('#msplit').onclick = () => mutateDo(async () => { await api('/api/mutate/split', {node: $('#ms').value.trim(), claude: $('#mclaude').checked}); });
+$('#mutate').addEventListener('click', e => {
+  if (e.target.id === 'mundo') return mutateDo(async () => { const r = await api('/api/mutate/undo', {approver: $('#mby').value.trim()});
+    await refresh(); return r.how === 'restored' ? `Undid ${r.id}.` : `Undid ${r.id}; run build again (cached, free) to take it out of the Mirror.`; });
+  const b = e.target.closest('[data-mact]'); if (!b) return;
+  const id = b.closest('[data-mid]').dataset.mid, act = b.dataset.mact;
+  if (act === 'approve' && !$('#mby').value.trim()) { $('#mout').innerHTML = '<p class="neg small">Type your name first: an approval records who approved it.</p>'; return; }
+  mutateDo(async () => {
+    const r = await api(`/api/mutate/${encodeURIComponent(id)}/${act}`, {approver: $('#mby').value.trim()});
+    if (act !== 'approve') return '';
+    if (r.status === 'applied') { await refresh(); return 'Applied. Undo takes it back.'; }
+    return r.status === 'stale' ? 'The Mirror changed since this was proposed, so it was recomputed. Review it and approve again.' : 'This no longer applies to the Mirror.';
+  });
+});
 
 // ---------- wiring ----------
 document.addEventListener('click', e => {
   const t = e.target.closest('[data-passage],[data-node],[data-edge],[data-holds]'); if (!t) return;
   if (t.dataset.passage) {
-    const box = t.closest('#causal') ? $('#edgeptext') : t.closest('#ask') ? $('#askp') : t.closest('#knowledge') ? $('#hout') : $('#ptext');
+    const box = t.closest('[data-q]') ? t.closest('[data-q]').querySelector('.qout') : t.closest('#causal') ? $('#edgeptext') : t.closest('#derange') ? $('#dptext') : t.closest('#ask') ? $('#askp') : t.closest('#knowledge') ? $('#hout') : t.closest('#mutate') ? $('#mout') : $('#ptext');
     showPassage(t.dataset.passage, box);
   } else if (t.dataset.node) showNode(t.dataset.node);
   else if (t.dataset.edge) { const [a, b] = t.dataset.edge.split('|'); tab('causal'); showEdge(a, b); }
   else if (t.dataset.holds) { const [s, r, o] = t.dataset.holds.split('|'); tab('knowledge'); setTimeout(() => checkHolds(s, r, o).catch(err => fail($('#hout'), err)), 0); }
 });
-document.querySelectorAll('nav button').forEach(b => b.onclick = () => tab(b.dataset.tab));
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => { tab(b.dataset.tab); if (b.dataset.tab === 'derange') loadDerange(); });
 document.querySelectorAll('#layers button').forEach(b => b.onclick = () => {
   document.querySelectorAll('#layers button').forEach(x => x.classList.remove('sel')); b.classList.add('sel'); layer = b.dataset.layer; drawGraph();
 });
@@ -463,7 +624,8 @@ async function refresh() {
   $('#stat').textContent = `${m.corpus.title} · ${m.passages} passages · ${m.concepts} concepts · ${m.stats.held} facts held, ${m.stats.inferred} inferred · ${m.judgments} causal judgments, ${m.causal ? m.causal.arrows : 0} arrows · Claude ${s.llm ? 'on' : 'off'}`;
   await drawGraph();
   causalData = null;
-  loadKnowledge(); loadCausal(); loadFace();
+  loadKnowledge(); loadCausal(); loadFace(); loadQuestions(); loadMutate();
+  derangeFor = null; if ($('#derange').classList.contains('on')) loadDerange();
 }
 refresh().catch(err => $('#stat').textContent = err.message);
 </script>

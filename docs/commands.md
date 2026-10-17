@@ -17,9 +17,12 @@ Commands that call Claude need `ANTHROPIC_API_KEY` in the local `.env` file. Eve
 |---|---|---|
 | `build` | Read the corpus and build the Mirror | Yes, about 2 calls per passage the first time; nothing for passages already cached |
 | `causal` | Re-fit the causal model with other settings | No |
+| `derange` | Find where the worldview rests on least, under what matters most | No |
 | `benchmark` | Test the causal fit on a subject whose model is known | No (`--claude`: yes) |
 | `serve` | Open the web app | No (the Ask tab makes 1 call per question) |
 | `ask` | Ask the Mirror a question from the command line | 1 call per question |
+| `mutate` | Merge or split concepts, preview what changes in both graphs, apply what you approve | No (`split --claude`: 1 call per 50 passages) |
+| `question` | Answer the Mirror's questions about what its graphs leave open | No (1 call per answer written in words) |
 | `transmutate` | Combine two built Mirrors and trim the result to what is strong; writes only when you approve | No (`--claude`: 1 call) |
 | `p1` | The paused Prototype 1 app | Some subcommands |
 
@@ -87,6 +90,21 @@ python -m androidmirror causal --corpus meditations --min-weight 2
 
 It prints the counts: judgments, arrows, claims that follow from the rest, denials that hold, and claims in tension.
 
+## derange
+
+Finds the weakest basis of the subject's worldview relative to what matters most in it, and prints the question each one raises. No Claude calls, and it never changes the Mirror. The web app's Derange tab shows the same list with the quotes.
+
+```powershell
+python -m androidmirror derange --corpus meditations
+```
+
+| Option | Meaning | Default |
+|---|---|---|
+| `--top N` | Findings to print per layer | 10 |
+| `--knockouts N` | Candidate supports to knock out and re-check, per layer. More is slower and finds more | 30 |
+
+The report is saved as `data/mirror/<corpus>/derange.json`; the web app uses it until the Mirror is rebuilt or re-fitted, then runs it again. On a large Mirror it can take a minute.
+
 ## benchmark
 
 Plants a 12-concept causal model in a synthetic subject who states pieces of it in every way the reader looks for, repeats some much more than others, quotes other people, and is sometimes misread. A good fit draws only the planted arrows and still entails every cause-effect pair.
@@ -129,6 +147,52 @@ python -m androidmirror ask "How does the Committee respond to inflation?" --cor
 
 Without a key it prints the facts it found instead of an answer.
 
+## mutate
+
+Merges concepts that are one ("wrath" and "anger", or "calm" as the opposite of "anger"), or splits one the subject uses in two senses, then re-evaluates their edges: every fact, causal judgment, value and mention moves with its passage, the knowledge base is re-run and the causal model re-fitted. Each proposal shows what would change; **nothing changes until you approve it.**
+
+```powershell
+python -m androidmirror mutate propose                           # candidates the Mirror points to, with previews
+python -m androidmirror mutate merge anger wrath                 # preview merging wrath into anger
+python -m androidmirror mutate merge anger calm --opposite calm  # calm is anger at -1
+python -m androidmirror mutate split pleasure                    # split along the evidence (called good and bad, ...)
+python -m androidmirror mutate split pleasure --sense "joy: joy, gladness" --sense "passion: pleasure, delight"
+python -m androidmirror mutate split pleasure --claude           # Claude reads the senses in the passages
+python -m androidmirror mutate show m-1a2b3c4d                   # the whole preview, with the held-out check
+python -m androidmirror mutate approve m-1a2b3c4d --by "your name"
+python -m androidmirror mutate undo
+```
+
+| Action | What it does |
+|---|---|
+| `propose [--limit 8]` | Looks for concepts the subject calls the same, that are each a kind of the other, or that play the same (or a mirror-image) causal role; and for concepts called both good and bad, or said both to raise and to lower one thing. Previews each one, without the held-out check so it stays quick |
+| `merge A B [--opposite B] [--into A] [--label "..."]` | Previews a merge. The concepts merge into the one read from the most passages unless `--into` says otherwise |
+| `split A [--sense "label: word, word" ...] [--claude]` | Previews a split. Passages are assigned by evidence, then by the words used for the concept in them, then to the first sense; the preview says how many went each way |
+| `show ID` | The whole preview, running the held-out check if it has not run yet |
+| `approve ID [--by NAME]` | Applies it to the Mirror. If the Mirror changed since the proposal, it is recomputed and shown again instead |
+| `reject ID` | Rejects it; `propose` will not bring it back |
+| `undo` | Takes back the last approved mutation |
+| `list` | Every proposal and its status |
+
+What a preview shows: facts combined, divided between senses, or that say nothing once merged ("wrath is the same as anger"); causal judgments between merged concepts, which say nothing once merged and are listed with their passages; the arrows at those concepts before and after; each judgment re-weighed with the ones it came from; changes elsewhere in the causal model; inconsistencies; and how many held-out claims the rest of the corpus restates or implies, and how many it contradicts, before and after. Warnings flag a merge the subject's own words argue against (they call one the contrary of the other, or a kind of the other).
+
+Approved mutations are kept in `data/mirror/<corpus>/mutations/` with who approved them and a copy of the Mirror from before, and `build` makes them again on every rebuild. Passages read for the first time after a split go to the first sense. The web app's Mutate tab does the same.
+
+## question
+
+The Question engine asks about what the Mirror's graphs leave open (judgments in tension, signs the passages disagree on, arrows that may be shortcuts, unconnected concepts, inconsistencies, unevaluated concepts, values urged both ways), most important first. Answer with an option's number, or in your own words if your key is set. Each answer becomes a proposal and shows what approving it would change; type your name to approve it, `n` to reject it, or Enter to leave it waiting. Nothing changes without an approval, and approving re-fits the causal model (free).
+
+```powershell
+python -m androidmirror question                          # 10 questions, one at a time
+python -m androidmirror question --kind tension --limit 5 # only judgments in tension
+python -m androidmirror question --list                   # only list them
+python -m androidmirror question --pending                # proposals waiting for approval
+python -m androidmirror question --approve 3fa9c1d2e0 --by "Android K"
+python -m androidmirror question --revoke 3fa9c1d2e0      # take an approved answer back out
+```
+
+Kinds: `tension`, `sign`, `open`, `weak`, `link`, `conflict`, `evaluate`, `want`, and `basis` (the weak bases in a current Derange report, `derange.json`, if there is one). Answers are kept in `data/mirror/<corpus>/answers.json` and survive a rebuild. The Questions tab of the web app does the same.
+
 ## transmutate
 
 Combines two built Mirrors into one, then trims it to the relationships and causes that are strong. It works in two steps, and nothing is written into `data/mirror/` until the second.
@@ -148,7 +212,7 @@ python -m androidmirror transmutate approve meditations fomc --keep 3 --keep 17
 
 Re-run `propose` as often as you like; it is free unless `--claude`, and replaces the previous proposal.
 
-**approve** writes the combined Mirror exactly as proposed to `data/mirror/meditations+fomc/`, where `serve` shows it in the Mirror menu like any other. `--keep N` (repeatable, by number or by id) spares a trim. Trimmed items are archived in `trimmed.json` in that folder, not deleted, and an earlier approval is moved to `history/`. If either source Mirror has been rebuilt since the proposal, approve refuses: propose again.
+**approve** writes the combined Mirror exactly as proposed to `data/mirror/meditations+fomc/`, where `serve` shows it in the Mirror menu like any other. `--keep N` (repeatable, by number or by id) spares a trim. Trimmed items are archived in `trimmed.json` in that folder, not deleted, and an earlier approval is moved to `history/`. Answers you approved in the Question engine come along: your rulings follow the concepts' new names, and your answers are never sampled out or trimmed. If either source Mirror has been rebuilt, or its answers have changed, since the proposal, approve refuses: propose again.
 
 Two Mirrors combined this way can be combined with a third. The web app has the same steps as routes (`POST /api/transmutate/propose`, `GET /api/transmutate?a=&b=`, `POST /api/transmutate/approve`) but no buttons yet.
 
