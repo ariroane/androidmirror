@@ -84,7 +84,10 @@ def test_store_views_and_api(tmp_path):
     face = client.get("/api/archetype").json()
     assert "archetype" in face
     r = client.post("/api/ask", json={"question": "what does gamma do?"}).json()
-    assert r["nodes"] == ["gamma"] and any("causal judgment" in f for f in r["facts"])
+    assert r["nodes"] == ["gamma"] and any("cause-and-effect claim" in f for f in r["facts"])
+    assert "passages" not in r and not any('"' in f for f in r["facts"])  # structures only, no corpus text
+    r = client.post("/api/ask", json={"question": "what does alpha do to epsilon?"}).json()
+    assert any("pathway: alpha -> gamma -> delta -> epsilon, so alpha lowers epsilon" in f for f in r["facts"])
 
 
 def test_no_mirror_built_yet(tmp_path):

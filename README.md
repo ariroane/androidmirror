@@ -106,7 +106,7 @@ The Causal tab lists every constraint with its status, the tensions, the pairs s
 - **Node:** what the concept is, its aliases and classes, stated facts with quotes, inferred facts with their rules, its arrows, every causal judgment about it with its status, and what the subject urges about it. Click a locator to read the passage and the judgments read from it.
 - **Knowledge:** "does it follow?" queries with proof trees, and the list of inconsistencies.
 - **Causal:** counts, the held-out check, Trace, the arrows, tensions, denials that hold, claims explained by a chain, values, reported views, and judgments about concepts outside the codebook.
-- **Ask:** the Oracle answers from stated and inferred facts, the subject's causal judgments and model, their values and the most relevant passages, and cites passages by locator.
+- **Ask:** the Oracle answers from the knowledge graph and the causal model only (stated facts and their relations, inferred facts with the rule and facts behind them, the subject's causal judgments, links, chains of links and values), never from the passages, and cites each item it uses as [K3] or [C2].
 - **Derange:** where the worldview rests on least, under what matters most (see below).
 - **Face:** the Major Arcana card the whole Mirror most resembles, drawn as a face. See [The face](#the-face).
 - **Mutate:** merge concepts that are one, or split one used in two senses. See [Mutate](#mutate-merging-and-splitting-concepts).

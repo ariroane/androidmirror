@@ -138,14 +138,14 @@ Open http://localhost:8000 (or your port). Stop it with Ctrl+C. The app reads th
 
 ## ask
 
-Asks the Mirror a question from the command line, answered from its facts, inferences, the subject's causal judgments and model, their values and the most relevant passages, with passages cited.
+Asks the Mirror a question from the command line, answered only from its knowledge graph and causal model (facts, inferences, the subject's causal judgments, links, chains of links and values), never from the passages, citing each item it uses as [K3] or [C2].
 
 ```powershell
 python -m androidmirror ask "What does Marcus think causes anger?"
 python -m androidmirror ask "How does the Committee respond to inflation?" --corpus fomc
 ```
 
-Without a key it prints the facts it found instead of an answer.
+Without a key it prints the items it found instead of an answer.
 
 ## mutate
 

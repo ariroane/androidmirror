@@ -514,11 +514,8 @@ $('#askbtn').onclick = async () => {
   try {
     const r = await api('/api/ask', {question: $('#question').value});
     cy && (cy.nodes().removeClass('hl'), r.nodes.forEach(id => cy.getElementById(id).addClass('hl')));
-    let ans = r.answer ? esc(r.answer) : '';
-    (r.passages || []).forEach(p => { ans = ans.split(`[${esc(p.locator)}]`).join(`[${loc(p.id, p.locator)}]`); });
-    out.innerHTML = (r.answer ? `<p style="white-space:pre-wrap">${ans}</p>` : '<p class="muted">Claude is off, so here is what the Mirror found.</p>') +
-      `<details ${r.answer ? '' : 'open'}><summary class="muted">${r.facts.length} facts and ${r.passages.length} passages used</summary><ul>${r.facts.map(f => `<li class="small">${esc(f)}</li>`).join('')}</ul>
-      ${r.passages.map(p => `<div class="small">${loc(p.id, p.locator)}</div>`).join('')}</details>
+    out.innerHTML = (r.answer ? `<p style="white-space:pre-wrap">${esc(r.answer)}</p>` : '<p class="muted">Claude is off, so here is what the Mirror found.</p>') +
+      `<details ${r.answer ? '' : 'open'}><summary class="muted">${r.facts.length} items from the knowledge graph (K) and cause-and-effect model (C) used</summary><ul>${r.facts.map(f => `<li class="small">${esc(f)}</li>`).join('')}</ul></details>
       ${(r.common_causes || []).length ? `<h4>Shared causes ${W()} never names</h4><p class="small muted">These ideas go together, but what ${W()} says about which drives which clashes, so the Mirror shows a cause ${W()} never names. Answering a question can settle it.</p>` +
         r.common_causes.map(b => `<div class="card small">${esc(b.a_label)} ↔ ${esc(b.b_label)}${b.settled ? ' <span class="muted">(settled by your answer)</span>' : ''}<div class="muted">From: ${b.claims.map(esc).join('; ')}</div>${b.questions.length ? `<div class="row">${b.questions.map(q => `<button class="b" data-settle="${esc(q)}">Settle it</button>`).join('')}</div>` : ''}</div>`).join('') : ''}<div id="askp"></div>`;
   } catch (err) { fail(out, err); }
