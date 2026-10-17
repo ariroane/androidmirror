@@ -39,7 +39,7 @@ Then, optionally, let Claude read between the lines as the subject (section "The
 ```powershell
 python -m androidmirror validate --corpus meditations    # about 3 calls per held-out situation (40 by default)
 python -m androidmirror fill --corpus meditations        # up to 1 call per situation, plus leak checks
-python -m androidmirror vignettes --corpus meditations   # 2 calls per vignette (6 per level, 6 variables: 216 calls)
+python -m androidmirror vignettes --corpus meditations   # 2 calls per vignette (6 per level, 6 variables: 144 calls)
 python -m androidmirror benchmark                        # free: the planted-model benchmark, offline
 ```
 
@@ -145,6 +145,8 @@ How much this helps depends on how good the grouping is: in the benchmark, exact
 - **Face:** the Major Arcana card the Mirror most resembles (from Prototype 1), now read from the new graphs.
 
 ## Command reference
+
+The full guide, with every option, examples, what each step costs and what to do when something goes wrong, is in [docs/commands.md](docs/commands.md). `python -m androidmirror <command> --help` lists a command's options.
 
 | Command | What it does |
 |---|---|
