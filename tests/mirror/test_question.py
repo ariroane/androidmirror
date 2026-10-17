@@ -217,3 +217,24 @@ def test_cli(built):
     Q.cli(root, limit=5, inp=lambda _: next(replies), out=lines.append)
     assert any("approved" in x for x in lines)
     assert constraint(root, "reaches|epsilon|gamma")["status"] == "retracted"
+
+
+def test_derange_findings_become_questions(built):
+    _, _, root = built
+    report = {"mirror_mtime": (root / "mirror.json").stat().st_mtime,
+              "causal": {"findings": [{"id": "cut:delta>epsilon", "strength": 6, "probe": "Is it so that delta lowers epsilon?",
+                                       "basis": [{"src": "delta", "dst": "epsilon", "constraint": "reaches|delta|epsilon",
+                                                  "text": "delta lowers epsilon (directly)", "evidence": []}],
+                                       "ends": [{"end": "epsilon"}]}]},
+              "conceptual": {"findings": [{"id": "fact:justice|is_a|virtue", "fact": "justice|is_a|virtue", "s": "justice",
+                                           "r": "is_a", "o": "virtue", "text": "justice is a virtue", "strength": 1,
+                                           "probe": "Is it so that justice is a virtue?", "evidence": [], "concepts": []}]}}
+    (root / "derange.json").write_text(json.dumps(report))
+    qs = [q for q in Q.questions(Mirror.load(root), limit=None) if q["kind"] == "basis"]
+    assert sorted(q["text"] for q in qs) == ["Is it so that delta lowers epsilon?", "Is it so that justice is a virtue?"]
+    q = next(q for q in qs if "delta" in q["text"])
+    p = Q.answer(Mirror.load(root), q["id"], "no")
+    Q.approve(root, p["id"], "Android K")
+    assert constraint(root, "reaches|delta|epsilon")["status"] == "retracted"
+    # a report made from an older Mirror is not used
+    assert not [q for q in Q.questions(Mirror.load(root), limit=None) if q["kind"] == "basis"]

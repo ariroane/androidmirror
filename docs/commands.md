@@ -142,7 +142,7 @@ python -m androidmirror question --approve 3fa9c1d2e0 --by "Android K"
 python -m androidmirror question --revoke 3fa9c1d2e0      # take an approved answer back out
 ```
 
-Kinds: `tension`, `sign`, `open`, `weak`, `link`, `conflict`, `evaluate`, `want`. Answers are kept in `data/mirror/<corpus>/answers.json` and survive a rebuild. The Questions tab of the web app does the same.
+Kinds: `tension`, `sign`, `open`, `weak`, `link`, `conflict`, `evaluate`, `want`, and `basis` (the weak bases in a current Derange report, `derange.json`, if there is one). Answers are kept in `data/mirror/<corpus>/answers.json` and survive a rebuild. The Questions tab of the web app does the same.
 
 ## p1
 

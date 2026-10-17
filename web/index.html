@@ -442,7 +442,7 @@ $('#frun').onclick = loadFace;
 $('#ffocus').onchange = loadFace;
 
 // ---------- questions ----------
-const QKIND = {tension:'judgments in tension', sign:'which direction', open:'direct or through', weak:'one passage only', link:'unconnected', conflict:'inconsistency', evaluate:'unevaluated', want:'more or less'};
+const QKIND = {tension:'judgments in tension', sign:'which direction', open:'direct or through', weak:'one passage only', link:'unconnected', conflict:'inconsistency', evaluate:'unevaluated', want:'more or less', basis:'weak basis (Derange)'};
 const PSTATUS = {proposed:'waiting for approval', approved:'approved', rejected:'rejected', revoked:'revoked', superseded:'replaced by a later answer'};
 function previewText(p) {
   const v = p.preview || {}, li = (h, xs) => xs && xs.length ? `<div class="small">${h}: ${xs.map(esc).join('; ')}</div>` : '';

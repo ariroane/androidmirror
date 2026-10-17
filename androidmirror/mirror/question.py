@@ -22,6 +22,11 @@ knowledge graph
 values
 - want: the subject urges more of something in some passages and less in others.
 
+from the Derange engine
+- basis: a weak basis Derange found (an arrow or fact said in few passages that
+  much of the important subgraphs rests on), read from its saved report
+  (derange.json) when that report was made from the Mirror as it is now.
+
 Each question is built from the structures alone (no Claude call), and each
 option lists the exact changes it would make. Answering never changes the
 Mirror: it records a proposal, with a preview of what the fit would do with
@@ -57,7 +62,7 @@ from .schema import EVALUATIONS, SELF, VARIABLE_KINDS
 from .store import Mirror
 
 BASE = {"tension": 3.0, "conflict": 3.0, "sign": 2.5, "open": 2.0, "want": 1.5, "link": 1.5, "weak": 1.2,
-        "evaluate": 0.8}
+        "evaluate": 0.8, "basis": 2.5}
 SKIP = {"key": "skip", "label": "Not sure / skip", "changes": []}
 KG_LINKS = {  # relation -> (ask about the pair which way round, what the relation hints)
     "requires": ("o", "s"), "opposes": ("s", "o"), "expresses": ("o", "s"), "accords_with": ("s", "o"),
@@ -383,10 +388,52 @@ class Asker:
                               v["more"] + v["less"]))
         return out
 
+    # ---------- from Derange ----------
+
+    def derange(self) -> list[dict[str, Any]]:
+        """Derange's findings as questions: is the thin basis really what the subject holds?"""
+        root = self.m.root
+        if root is None or not (root / "derange.json").exists():
+            return []
+        import json
+
+        rep = json.loads((root / "derange.json").read_text(encoding="utf-8"))
+        if rep.get("mirror_mtime") != (root / "mirror.json").stat().st_mtime:
+            return []  # made from an older Mirror: run Derange again
+        out = []
+        for f in (rep.get("causal") or {}).get("findings", []):
+            basis = [b for b in f.get("basis", []) if b.get("constraint") in self.m.constraint]
+            if not basis or any(self.m.constraint[b["constraint"]].get("pinned") for b in basis):
+                continue
+            said = "; ".join(b["text"] for b in basis)
+            opts = [{"key": "yes", "label": "Yes, it holds",
+                     "changes": [{"type": "ruling", "target": b["constraint"], "ruling": "affirm",
+                                  "says": f"{b['text']} (settled)"} for b in basis]},
+                    {"key": "no", "label": "No, that reads too much into the passages",
+                     "changes": [{"type": "ruling", "target": b["constraint"], "ruling": "retract",
+                                  "says": f"not: {b['text']}"} for b in basis]}]
+            about = [b["src"] for b in basis] + [b["dst"] for b in basis] + [h["end"] for h in f.get("ends", [])]
+            ev = [{k: e[k] for k in ("passage", "locator", "quote")} for b in basis for e in b.get("evidence", [])]
+            out.append(self.q("basis", f["id"], f.get("probe") or f"Does {self.subject} hold that {said}?", about, opts,
+                              f"Derange: much of what matters rests on {said}", ev, f.get("strength", 1)))
+        held = {fact_key(x["s"], x["r"], x["o"]) for x in self.m.facts if x["held"] and not x.get("retracted")}
+        for f in (rep.get("conceptual") or {}).get("findings", []):
+            if f.get("fact") not in held:
+                continue
+            opts = [{"key": "yes", "label": "Yes, it holds",
+                     "changes": [{"type": "fact", "s": f["s"], "r": f["r"], "o": f["o"], "says": f"{f['text']} (settled)"}]},
+                    {"key": "no", "label": "No, the subject does not hold it",
+                     "changes": [{"type": "retract_fact", "key": f["fact"], "says": f"no longer held: {f['text']}"}]}]
+            ev = [{k: e[k] for k in ("passage", "locator", "quote")} for e in f.get("evidence", [])]
+            out.append(self.q("basis", f["id"], f.get("probe") or f"Does {self.subject} hold that {f['text']}?",
+                              [f["s"], f["o"]] + [h["concept"] for h in f.get("concepts", [])], opts,
+                              f"Derange: much of what is held about it rests on {f['text']}", ev, f.get("strength", 1)))
+        return out
+
     def all(self) -> list[dict[str, Any]]:
         out = []
         for make in (self.tensions, self.signs, self.opens, self.weak, self.links, self.conflicts, self.evaluations,
-                     self.wants):
+                     self.wants, self.derange):
             out += sorted(make(), key=lambda q: -q["score"])[:MAX_PER_KIND]
         # most important first, but each further question of a kind already asked counts for less,
         # so a session does not spend itself on one kind

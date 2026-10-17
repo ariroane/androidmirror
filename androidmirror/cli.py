@@ -68,7 +68,7 @@ free: causal, benchmark (without --claude), serve. Full guide: docs/commands.md"
     qu = sub.add_parser("question", help="answer the Question engine's questions; answers become proposals you approve")
     qu.add_argument("--corpus", default="meditations")
     qu.add_argument("--limit", type=int, default=10, help="questions to ask (default 10)")
-    qu.add_argument("--kind", help="only one kind: tension, sign, open, weak, link, conflict, evaluate, want")
+    qu.add_argument("--kind", help="only one kind: tension, sign, open, weak, link, conflict, evaluate, want, basis")
     qu.add_argument("--list", action="store_true", help="only list the questions")
     qu.add_argument("--pending", action="store_true", help="list proposals waiting for approval")
     qu.add_argument("--approve", metavar="ID", help="approve a proposal (needs --by)")
