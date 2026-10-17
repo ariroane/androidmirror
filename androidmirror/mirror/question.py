@@ -125,6 +125,8 @@ class Asker:
             against = "; ".join(self.m.say(o) for o in others)
             how = {"cycle": "that would make a circle with", "denied": "that goes against the “makes no difference” claim",
                    "outweighed": "it is outweighed by"}.get(c.get("reason"), "it clashes with")
+            if c.get("reason") == "denied" and c.get("path"):  # the chain the claim would complete
+                against += f" (with it, the model would run {' → '.join(self.L(n) for n in c['path'])})"
             shared = bool(c.get("common_cause"))
             text = (f"{self.subject} says {said} ({_plural(c['weight'])}), but {how}: {against}. "
                     + (f"For now the Mirror shows {self.L(c['x'])} and {self.L(c['y'])} as driven by a shared cause "

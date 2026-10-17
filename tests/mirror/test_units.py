@@ -337,3 +337,18 @@ def test_a_ruling_settles_a_shared_cause_and_can_name_it():
     # a concept that reaches one end only through the other does not explain why they go together
     m3 = fit(base[1:] + [J("causes", "b", "a", scope="direct", p="s3"), {**ruling, "via": "z"}])
     assert link(m3, "a", "b")["named"] == "z" and not link(m3, "a", "b")["via"]
+
+
+def test_a_claim_ruled_out_by_a_denial_about_other_ideas_records_the_chain_it_would_complete():
+    # "thoughts make no difference to happiness" (3), thoughts -> acceptance and holiness -> happiness (2 each):
+    # acceptance -> holiness (1) would run thoughts -> acceptance -> holiness -> happiness
+    js = [J("independent", "thoughts", "happiness", sign=0, p=f"d{i}") for i in range(3)] + [
+        J("causes", "thoughts", "acceptance", scope="direct", p=f"a{i}") for i in range(2)] + [
+        J("causes", "holiness", "happiness", scope="direct", p=f"h{i}") for i in range(2)] + [
+        J("causes", "acceptance", "holiness", p="x")]
+    m = fit(js)
+    c = next(c for c in m["constraints"] if c["id"] == "reaches|acceptance|holiness")
+    assert c["reason"] == "denied" and c["conflicts"] == ["no_path|thoughts|happiness"]
+    assert c["path"] == ["thoughts", "acceptance", "holiness", "happiness"]
+    assert c["through"] == ["reaches|thoughts|acceptance", "reaches|holiness|happiness"]
+    assert link(m, "acceptance", "holiness")

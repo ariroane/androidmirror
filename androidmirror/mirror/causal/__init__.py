@@ -150,7 +150,13 @@ def fit(judgments: list[dict[str, Any]], settings: dict[str, Any] | None = None,
         for n in accepted_neg:
             target, skip = _target(n)
             if g.would_reach(n["x"], target, x, y, skip):
-                return {"reason": "denied", "conflicts": [n["id"]]}
+                # the chain the new arrow would complete, from the denial's cause to its effect, and the arrows on it
+                left = [x] if n["x"] == x else g.path(n["x"], x, skip)
+                right = [y] if y == target else g.path(y, target, skip)
+                if left is None or right is None:
+                    return {"reason": "denied", "conflicts": [n["id"]]}
+                return {"reason": "denied", "conflicts": [n["id"]], "path": left + right,
+                        "through": g.path_constraints(left) + g.path_constraints(right)}
         return None
 
     def add_edge(c: dict[str, Any], x: str, y: str, note: str | None = None) -> None:
