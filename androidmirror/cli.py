@@ -38,7 +38,7 @@ def main(argv: list[str] | None = None) -> None:
   build --corpus meditations              the whole corpus; cached passages cost nothing
   causal --min-weight 2                   re-fit the causal model with other settings, free
 
-free: causal, benchmark (without --claude), serve. Full guide: docs/commands.md""")
+free: causal, derange, benchmark (without --claude), serve. Full guide: docs/commands.md""")
     ap.add_argument("--data", type=Path, default=DATA, help="data directory (default: ./data)")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
@@ -52,6 +52,11 @@ free: causal, benchmark (without --claude), serve. Full guide: docs/commands.md"
     c.add_argument("--corpus", default="meditations")
     c.add_argument("--min-weight", type=int, help="fewest passages a judgment must be made in to count (default 1)")
     c.add_argument("--folds", type=int, help="blocks of passages for the held-out check (default 5)")
+
+    d = sub.add_parser("derange", help="find where the worldview rests on least, under what matters most (no Claude calls)")
+    d.add_argument("--corpus", default="meditations")
+    d.add_argument("--top", type=int, default=10, help="findings to print per layer (default 10)")
+    d.add_argument("--knockouts", type=int, help="candidate bases to knock out and re-check, per layer (default 30)")
 
     bm = sub.add_parser("benchmark", help="test the causal fit on a subject whose model we planted")
     bm.add_argument("--n", type=int, default=300, help="passages to generate (offline) or to have Claude write (--claude)")
@@ -115,6 +120,15 @@ free: causal, benchmark (without --claude), serve. Full guide: docs/commands.md"
         st, h = mirror["causal"]["stats"], mirror["causal"]["holdout"]
         print(f"{st['held_constraints']} judgments held by the subject, {st['arrows']} arrows ({st['open']} open), "
               f"{st['rejected']} in tension, {st['denials_held']} denials; held out: {h['positive']} {h['negative']}")
+    elif args.cmd == "derange":
+        from .mirror import derange
+
+        root = mirror_dir(args.data, CorpusSpec.load(args.corpus).id)
+        m = Mirror.load(root)
+        if m is None:
+            raise SystemExit("no Mirror built yet: python -m androidmirror build")
+        settings = {"knockouts": args.knockouts} if args.knockouts else None
+        derange.print_report(derange.report(root, m, settings), args.top)
     elif args.cmd == "benchmark":
         from .mirror import benchmark
 

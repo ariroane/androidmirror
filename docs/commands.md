@@ -17,6 +17,7 @@ Commands that call Claude need `ANTHROPIC_API_KEY` in the local `.env` file. Eve
 |---|---|---|
 | `build` | Read the corpus and build the Mirror | Yes, about 2 calls per passage the first time; nothing for passages already cached |
 | `causal` | Re-fit the causal model with other settings | No |
+| `derange` | Find where the worldview rests on least, under what matters most | No |
 | `benchmark` | Test the causal fit on a subject whose model is known | No (`--claude`: yes) |
 | `serve` | Open the web app | No (the Ask tab makes 1 call per question) |
 | `ask` | Ask the Mirror a question from the command line | 1 call per question |
@@ -87,6 +88,21 @@ python -m androidmirror causal --corpus meditations --min-weight 2
 | `--folds N` | Blocks of passages for the held-out check | 5 |
 
 It prints the counts: judgments, arrows, claims that follow from the rest, denials that hold, and claims in tension.
+
+## derange
+
+Finds the weakest basis of the subject's worldview relative to what matters most in it, and prints the question each one raises. No Claude calls, and it never changes the Mirror. The web app's Derange tab shows the same list with the quotes.
+
+```powershell
+python -m androidmirror derange --corpus meditations
+```
+
+| Option | Meaning | Default |
+|---|---|---|
+| `--top N` | Findings to print per layer | 10 |
+| `--knockouts N` | Candidate supports to knock out and re-check, per layer. More is slower and finds more | 30 |
+
+The report is saved as `data/mirror/<corpus>/derange.json`; the web app uses it until the Mirror is rebuilt or re-fitted, then runs it again. On a large Mirror it can take a minute.
 
 ## benchmark
 

@@ -107,6 +107,7 @@ The Causal tab lists every constraint with its status, the tensions, the pairs s
 - **Knowledge:** "does it follow?" queries with proof trees, and the list of inconsistencies.
 - **Causal:** counts, the held-out check, Trace, the arrows, tensions, denials that hold, claims explained by a chain, values, reported views, and judgments about concepts outside the codebook.
 - **Ask:** the Oracle answers from stated and inferred facts, the subject's causal judgments and model, their values and the most relevant passages, and cites passages by locator.
+- **Derange:** where the worldview rests on least, under what matters most (see below).
 - **Face:** the Major Arcana card the whole Mirror most resembles, drawn as a face. See [The face](#the-face).
 - **Mutate:** merge concepts that are one, or split one used in two senses. See [Mutate](#mutate-merging-and-splitting-concepts).
 
@@ -134,6 +135,17 @@ An answer is a proposal, saved in `data/mirror/<corpus>/answers.json` with a pre
 
 The codebook decides what counts as one concept, and it can be wrong both ways: two words for one thing ("wrath", "anger"), a word and its opposite ("calm" is anger at −1), or one word for two things (the pleasure the subject calls good and the pleasure they call bad). The mutate engine finds such cases from the Mirror's own structure (the subject says two concepts are the same, each is a kind of the other, they play the same or a mirror-image causal role, one is called both good and bad or said both to raise and to lower one thing), or takes them from you, and re-evaluates the edges: everything read from each passage moves with it (signs turned around for an opposite), the knowledge base is re-run and the causal model re-fitted, so merged evidence is weighed together and a judgment between two merged concepts ("anger breeds wrath") is shown as saying nothing any more. Each proposal previews what changes in both graphs, including the held-out check, and **is applied only when you approve it**; it can be undone, and approved mutations are made again on every rebuild. Offline except `split --claude`, where Claude reads which sense each passage uses.
 
+## Derange: the weakest basis
+
+Some of what the subject holds is said in forty passages and some in one; some of it carries nothing else and some carries a whole account. Derange looks for little support under a lot of weight, and only reads: it never changes the Mirror.
+
+- **What matters most.** In the causal model, the subject's ends: what the values layer says they urge more or less of, and everything that acts on it. In the knowledge graph, the concepts the corpus is most about, and everything the subject holds about them, stated or inferred.
+- **The weakest basis.** Causal: for each thing that acts on an end, the minimum cut between them, each arrow's capacity being the passages that make it. Conceptual: the stated facts the proofs of those held facts rest on.
+- **Knock it out and look.** Each candidate is removed (the judgments or the fact behind it, whole) and the model re-fitted, or the knowledge re-derived, as a build would. What changes is what it was holding up: things that no longer act on an end or act on it with another sign, claims that stop following, inferred facts that stop following, arrows the subject's other words would draw instead. If the rest of the corpus carries it anyway, it is not reported.
+- **Score:** each important subgraph's share that falls, times its weight, per passage of support. Each finding ends in a question for the person, of the form: "Is it so that x lowers y? The subject says so in 1 passage, yet without it 7 of the 9 things that act on y would no longer act on it the same way."
+
+`python -m androidmirror derange` prints the list; the Derange tab shows it with the quotes.
+
 ## Command reference
 
 The full guide, with every option, examples, what each step costs and what to do when something goes wrong, is in [docs/commands.md](docs/commands.md). `python -m androidmirror <command> --help` lists a command's options.
@@ -144,6 +156,7 @@ The full guide, with every option, examples, what each step costs and what to do
 | `causal --corpus NAME [--min-weight 1] [--folds 5]` | Re-fit only the causal model. No Claude calls. |
 | `benchmark [--n 300] [--seeds 5] [--claude]` | The planted-subject benchmark. Offline and free unless `--claude`. |
 | `serve [--port 8000]` | The web app. |
+| `derange --corpus NAME [--top 10] [--knockouts 30]` | The weakest basis under what matters most. No Claude calls. |
 | `ask "question" [--corpus NAME]` | The Oracle from the command line. |
 | `mutate propose\|merge\|split\|show\|approve\|reject\|undo` | Merge or split concepts; previews, applied only on approval. Offline except `split --claude`. |
 | `question [--corpus NAME] [--limit 10] [--kind K] [--list]` | Answer the Question engine's questions; approve each proposal by typing your name. `--pending`, `--approve ID --by NAME`, `--reject ID`, `--revoke ID`. No Claude calls unless you answer in words. |
@@ -170,6 +183,7 @@ Splitters: `paragraphs` (one text file, short paragraphs merged), `documents` (a
 | `androidmirror/mirror/kg.py` | Knowledge base, rules, proofs, checks |
 | `androidmirror/mirror/judgments.py` | Causal judgments into constraints; values |
 | `androidmirror/mirror/causal/` | Fitting the graph to the constraints, Trace, the held-out check |
+| `androidmirror/mirror/derange.py` | Derange: the weakest basis under the most important subgraphs |
 | `androidmirror/mirror/benchmark.py` | The planted-subject benchmark |
 | `androidmirror/mirror/build.py`, `store.py`, `ask.py` | The pipeline, the read views, the Oracle |
 | `androidmirror/mirror/mutate.py`, `mutate_api.py` | The mutate engine and its routes |
