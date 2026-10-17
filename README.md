@@ -120,6 +120,7 @@ The full guide, with every option, examples, what each step costs and what to do
 | `benchmark [--n 300] [--seeds 5] [--claude]` | The planted-subject benchmark. Offline and free unless `--claude`. |
 | `serve [--port 8000]` | The web app. |
 | `ask "question" [--corpus NAME]` | The Oracle from the command line. |
+| `transmutate propose A B [--claude] [--pair A=B] [--opposite A=B] [--drop C]` then `transmutate approve A B [--keep N]` | Combine two Mirrors and trim to what is strong. Writes nothing until approve. |
 | `p1 ...` | The paused Prototype 1 app (patch review, Refactorer, Breaker, Chainer, Evolver): [docs/prototype1.md](docs/prototype1.md). |
 
 ## Adding a corpus
@@ -145,6 +146,7 @@ Splitters: `paragraphs` (one text file, short paragraphs merged), `documents` (a
 | `androidmirror/mirror/causal/` | Fitting the graph to the constraints, Trace, the held-out check |
 | `androidmirror/mirror/benchmark.py` | The planted-subject benchmark |
 | `androidmirror/mirror/build.py`, `store.py`, `ask.py` | The pipeline, the read views, the Oracle |
+| `androidmirror/mirror/transmutate.py` | Transmutate: align, combine and fitness-trim two Mirrors |
 | `androidmirror/server.py`, `web/index.html` | The app |
 | `androidmirror/p1_*`, `refactor.py`, `breaker.py`, `chainer.py`, `evolver/` | Prototype 1, paused |
 

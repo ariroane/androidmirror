@@ -29,6 +29,16 @@ class Ask(BaseModel):
     corpus: str | None = None
 
 
+class Transmute(BaseModel):
+    a: str
+    b: str
+    claude: bool = False
+    pairs: list[str] = []  # "A=B"
+    opposites: list[str] = []  # "A=B": B's concept is the opposite of A's
+    drop: list[str] = []
+    keep: list[str] = []  # approve: trims to spare, by number or id
+
+
 def create_app(data_dir: Path | None = None) -> FastAPI:
     data_dir = data_dir or Path(os.environ.get("ANDROIDMIRROR_DATA", ROOT / "data"))
     app = FastAPI(title="Android Mirror")
@@ -135,5 +145,35 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
         m = get(corpus)
         return sorted(({"id": k, "label": v["label"], "kind": v["kind"], "support": v.get("support", 0)}
                        for k, v in m.nodes.items()), key=lambda r: -r["support"])
+
+    @app.get("/api/transmutate")
+    def transmutation(a: str, b: str) -> dict:
+        from .mirror import transmutate as tm
+
+        p = tm._read(tm.proposal_dir(data_dir, a, b) / "proposal.json")
+        if p is None:
+            raise HTTPException(404, f"no proposal to combine {a} and {b}")
+        return p
+
+    @app.post("/api/transmutate/propose")
+    def transmutate_propose(t: Transmute) -> dict:
+        """Only scores and saves a proposal: no Mirror is written until it is approved."""
+        from .mirror import transmutate as tm
+
+        try:
+            add = [tm.parse_pair(x) for x in t.pairs] + [tm.parse_pair(x, -1) for x in t.opposites]
+            return tm.propose(data_dir, t.a, t.b, t.claude, add, t.drop, log=lambda *_: None)
+        except (FileNotFoundError, RuntimeError, KeyError, ValueError, llm.LLMUnavailable) as e:
+            raise HTTPException(400, str(e)) from None
+
+    @app.post("/api/transmutate/approve")
+    def transmutate_approve(t: Transmute) -> dict:
+        from .mirror import transmutate as tm
+
+        try:
+            m = tm.approve(data_dir, t.a, t.b, t.keep, log=lambda *_: None)
+        except (FileNotFoundError, RuntimeError, KeyError) as e:
+            raise HTTPException(400, str(e)) from None
+        return {"built": m["meta"]["corpus"]["id"], "transmutation": m["meta"]["transmutation"]}
 
     return app
