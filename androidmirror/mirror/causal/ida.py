@@ -56,13 +56,14 @@ def possible_parent_sets(g: PDAG, x: str) -> list[list[str]]:
     return out
 
 
-def possible_effects(data: Data, g: PDAG, x: str, y: str, rows: list[int] | None = None) -> dict[str, Any]:
+def possible_effects(data: Data, g: PDAG, x: str, y: str, rows: list[int] | None = None,
+                     always: list[str] | None = None) -> dict[str, Any]:
     results = []
     for ps in possible_parent_sets(g, x):
         if y in ps:
             results.append({"effect": 0.0, "coverage": 1.0, "adjust": ps, "note": f"{y} is a parent of {x} here"})
         else:
-            results.append(adjusted_effect(data, x, y, ps, rows))
+            results.append(adjusted_effect(data, x, y, ps + list(always or []), rows))
     vals = [r["effect"] for r in results if r["effect"] is not None]
     summary: dict[str, Any] = {"x": x, "y": y, "members": results, "n_parent_sets": len(results)}
     if vals:

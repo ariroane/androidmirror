@@ -98,7 +98,7 @@ Discovery runs on stated + implied by default, and also on stated only and on ev
 
 **The subject's claims as background knowledge.** "x causes y" and "x so that y" become pins; "not x but y" and "whether or not x" are independence claims, tested against the situations and reported as agreeing or not. Claims grounded in explicit or temporal wording become pins (required orientations), strongest first. A pin is kept only if a DAG in the class still fits: it can orient a reversible edge, and Meek's rules carry it further, but it cannot reverse a compelled edge or create a collider the data did not find. Each claim is reported as agreeing with the data, applied, contradicted, or with **no link in the data** (the two variables are independent once others are accounted for).
 
-**Assumptions, stated in the app:** situations are the units; no hidden common causes; faithfulness; a value is missing for reasons unrelated to its level (the weakest one: the subject mentions what is salient). Neighbouring passages share themes, so resampling is done in blocks. The model describes the subject's writing, not their life. Temporal tiers are accepted: `python -m androidmirror causal --tiers tiers.json`.
+**Assumptions, stated in the app:** situations are the units; no hidden common causes beyond the topic, which the tests hold fixed; faithfulness; a value is missing for reasons unrelated to its level (the weakest one: the subject mentions what is salient). Neighbouring passages share themes, so resampling is done in blocks. The model describes the subject's writing, not their life. Temporal tiers are accepted: `python -m androidmirror causal --tiers tiers.json`.
 
 ## The subject transformation
 
@@ -116,11 +116,24 @@ Situations leave most values unknown, and the data alone orients few edges. Clau
 
 - **Situations, stated values only:** about 0.68 skeleton precision and 0.78 recall, and no compelled arrows. Mentions alone don't orient anything; that needs claims or vignettes.
 - **Plus stated claims:** about 4 right and 2 wrong arrows. **Plus vignettes:** about 4 right and 1 wrong.
-- **Nulls:** situations give no compelled arrows on either null; the old passage-as-row table gave 10 to 22 false arrows. But the topic-only null still leaves about 7 false skeleton links: topics that make several concepts salient together are not yet controlled for.
+- **Nulls:** situations give no compelled arrows on either null; the old passage-as-row table gave 10 to 22 false arrows. But where a topic's mood shifts several concepts at once, about 7 false links remain.
+- **Holding the topic fixed** (below): with the exact topic, those 7 false links drop to 2; with topics grouped from what each passage mentions (right for about 82% of passages), to 5. The planted model loses nothing either way.
 
 `benchmark --claude` has Claude write the passages from the planted situations and runs the real pipeline on them, so it also measures how accurately Claude reads levels. It costs about the same as building a corpus of that size.
 
+Most remaining false links in the planted model are mediated pairs (wrongdoing and cooperation, through judgment of harm and anger) where too few situations state all three for the test that would separate them. Filling values through the subject transformation targets exactly this; the benchmark does not measure it yet.
+
 Not built yet: FCI for hidden common causes, and missingness-aware PC (MVPC).
+
+## Holding the topic fixed
+
+What a passage is about (death, the court, other people's faults) can make several concepts come up together and colour their levels alike: a hidden common cause that shows up as links between concepts that don't affect each other in the subject's model. So each passage is grouped into a topic, and the topic joins discovery as a background variable:
+
+- **Grouping, without Claude.** Each passage is a bag of its words and the concepts coded in it (TF-IDF), grouped by k-means into about one topic per 60 passages (3 to 8). Every situation takes its passage's topic; a vignette takes the topic of the situation it was built on. `build --topics N` sets the number.
+- **In the tests.** The topic is a variable PC can condition on, in the first tier (nothing in a situation causes what its passage is about). Two concepts stay linked only if they still go together within a topic. Effects are estimated within topics too.
+- **Not in the model.** The topic is a rough stand-in, so it may test the subject's links but never orients them, and it is not drawn on the canvas. The Causal tab lists the links holding it fixed explained away, the concepts whose level depends on the topic, and the topics with their top words. `causal --topic off` turns it off for comparison.
+
+How much this helps depends on how good the grouping is: in the benchmark, exact topics remove most topic-made links, a grouping that is right for 82% of passages removes fewer. A sharper grouping (Claude naming each passage's topic in the situations pass) is the next step if the word-based one is too rough on the real corpus.
 
 ## The web app
 
@@ -135,8 +148,8 @@ Not built yet: FCI for hidden common causes, and missingness-aware PC (MVPC).
 
 | Command | What it does |
 |---|---|
-| `build --corpus NAME [--limit N] [--workers 6] [--model ID] [--no-situations]` | Code, consolidate, read situations, reason and discover. Needs the key. `--no-situations` treats each passage as one situation, from the open coding (cheaper, cruder). |
-| `causal --corpus NAME [--alpha] [--depth] [--max-vars] [--min-support] [--bootstrap] [--no-claims] [--tiers FILE] [--view stated\|implied\|all]` | Re-run only the causal layer. No Claude calls. |
+| `build --corpus NAME [--limit N] [--workers 6] [--model ID] [--no-situations] [--topics N]` | Code, consolidate, read situations, reason and discover. Needs the key. `--no-situations` treats each passage as one situation, from the open coding (cheaper, cruder). |
+| `causal --corpus NAME [--alpha] [--depth] [--max-vars] [--min-support] [--bootstrap] [--no-claims] [--tiers FILE] [--view stated\|implied\|all] [--topic on\|off]` | Re-run only the causal layer. No Claude calls. |
 | `validate --corpus NAME [--n 40]` | Score the subject transformation on held-out situations. |
 | `fill --corpus NAME [--leak-sample 30]` | Fill unknown values of trusted variables as the subject, with prior-leak checks. |
 | `vignettes --corpus NAME [--per-level 6] [--max-targets 6]` | Invented situations as interventions; their contribution is drawn in orange. |
@@ -164,6 +177,7 @@ Splitters: `paragraphs` (one text file, short paragraphs merged), `documents` (a
 | `androidmirror/mirror/codebook.py` | Consolidating labels into concepts |
 | `androidmirror/mirror/schema.py` | Kinds, relations and their logical properties |
 | `androidmirror/mirror/kg.py` | Knowledge base, rules, proofs, checks |
+| `androidmirror/mirror/topics.py` | Grouping passages into topics (TF-IDF, k-means) |
 | `androidmirror/mirror/situations.py` | Situations, evidence tiers, belief implications, views |
 | `androidmirror/mirror/subject.py` | The subject transformation: profile, retrieval, validation, fill, leak checks, vignettes |
 | `androidmirror/mirror/benchmark.py` | The planted-model benchmark |

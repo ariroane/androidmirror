@@ -15,6 +15,7 @@ TAG = re.compile(r"\[(v|s|c|n|m) ([^\]]+)\]")
 # the planted model: alpha -> gamma <- beta, gamma -> delta -> epsilon (negative), zeta on its own
 PARENTS = {"gamma": [("alpha", 1), ("beta", 1)], "delta": [("gamma", 1)], "epsilon": [("delta", -1)]}
 ORDER = ["alpha", "beta", "zeta", "gamma", "delta", "epsilon"]
+TOPIC_WORDS = ["grave dust corpse mortal ashes", "senate emperor council office law", "stars cosmos river flux sea"]
 
 
 def _level(score: float) -> int:
@@ -104,6 +105,7 @@ def sample_dag(n: int, seed: int = 1) -> list[dict[str, int]]:
 def write_corpus(folder: Path, n: int = 800, seed: int = 1, mention: float = 0.75) -> None:
     folder.mkdir(parents=True, exist_ok=True)
     rng = random.Random(seed + 1)
+    trng = random.Random(seed + 99)  # its own stream, so the topic words leave the rest of the corpus as it was
     for i, row in enumerate(sample_dag(n, seed)):
         tags = [f"[v {k} {v} state]" for k, v in row.items() if rng.random() < mention]
         if i % 50 == 0:
@@ -118,4 +120,5 @@ def write_corpus(folder: Path, n: int = 800, seed: int = 1, mention: float = 0.7
                      "[s cruelty is_a vice]", "[s vice opposes virtue]", "[n justice is_a good]",
                      "[s pleasure is_a good asserts epicurus]", "[s reason requires attention]",
                      "[s virtue requires reason]"]
-        (folder / f"{i:05d}.txt").write_text(f"# Doc {i}\ngroup: {i // 40}\npassage {i} " + " ".join(tags), encoding="utf-8")
+        words = " ".join(trng.sample(TOPIC_WORDS[i % 3].split(), 3))  # what the passage is about, unrelated to the levels
+        (folder / f"{i:05d}.txt").write_text(f"# Doc {i}\ngroup: {i // 40}\npassage {i} {words} " + " ".join(tags), encoding="utf-8")

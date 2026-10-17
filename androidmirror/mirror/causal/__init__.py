@@ -19,6 +19,13 @@ no longer pass for a dependence between two ideas.
 6. if there are vignettes, re-runs on corpus plus vignettes and records exactly
    what the vignettes changed, so the app can draw it in its own colour.
 
+If the situations carry a topic (what their passage is about, see topics.py),
+the topic joins every run as a background variable that comes first: PC can
+condition on it, so two concepts that only go together because their topic
+brings both stay unlinked, and no arrow can point into it. It is not a concept
+of the subject's, so it is kept out of the edge list; `topic` reports which
+concepts depend on the topic and which links it explains away.
+
 Nothing here calls Claude, so it can be re-run cheaply with other settings.
 """
 
@@ -38,8 +45,36 @@ from .selection import select
 
 DEFAULTS = {"alpha": 0.05, "max_depth": 3, "bootstrap": 20, "block": 5, "seed": 7, "claims_as_pins": True,
             "pin_bases": ["explicit", "temporal"], "tiers": [], "colliders": "majority", "view": sit.DEFAULT_VIEW,
-            "compare_views": True, "vignettes": True, "selection": SELECTION_DEFAULTS}
+            "compare_views": True, "vignettes": True, "topic": True, "selection": SELECTION_DEFAULTS}
 DO = "do:"
+TOPIC = sit.TOPIC
+
+
+def _pc(data: dict[str, list], variables: list[str], cfg: dict[str, Any], rows: list[int] | None = None) -> dict[str, Any]:
+    """PC over the variables, with the topic as a first-tier background variable when the data has one.
+
+    The topic's edges are oriented out of it as background knowledge (it is what a passage is about,
+    so nothing in a situation causes it), and the result is the CPDAG given that knowledge."""
+    if TOPIC not in data:
+        return pc(data, variables, cfg["alpha"], cfg["max_depth"], rows, cfg["colliders"])
+    found = pc(data, [*variables, TOPIC], cfg["alpha"], cfg["max_depth"], rows, cfg["colliders"])
+    full: PDAG = found["cpdag"]
+    keep = [v for v in variables if v != TOPIC]
+    g = PDAG(keep)  # the topic did its work in the tests; it is not a concept of the subject's
+    g.ambiguous = {a for a in full.ambiguous if TOPIC not in a[0] and a[1] != TOPIC}
+    # keep the colliders among the subject's concepts and redo Meek's rules without the topic: it is a rough
+    # stand-in for what a passage is about, so it may test the subject's links but should not orient them
+    for e in full.undirected | {frozenset(d) for d in full.directed}:
+        if TOPIC not in e:
+            g.undirected.add(e)
+    for d in full.directed:
+        w = full.why.get(d) or {}
+        if TOPIC not in d and w.get("rule") == "v-structure" and TOPIC not in w.get("collider", []):
+            g.orient(*d, w)
+    g.meek()
+    found["cpdag"] = g
+    found["topic_links"] = sorted(v for v in keep if full.adjacent(v, TOPIC))
+    return found
 
 
 def claim_pins(claims: list[dict[str, Any]], selected: set[str], bases: list[str],
@@ -103,7 +138,7 @@ def block_bootstrap(n: int, block: int, rng: random.Random) -> list[int]:
 
 def _run(data: dict[str, list], variables: list[str], cfg: dict[str, Any], pins: list[dict[str, Any]],
          bootstrap: bool) -> dict[str, Any]:
-    found = pc(data, variables, cfg["alpha"], cfg["max_depth"], colliders=cfg["colliders"])
+    found = _pc(data, variables, cfg)
     cpdag: PDAG = found["cpdag"]
     model, pin_report = apply_pins(cpdag, pins, found["removed"])
     stability = _bootstrap(data, variables, cfg) if bootstrap and cfg["bootstrap"] else {}
@@ -120,10 +155,13 @@ def discover(situations: list[dict[str, Any]], candidates: list[str], concepts: 
     for c in claims:
         claim_counts[c["cause"]] += c["support"]
         claim_counts[c["effect"]] += c["support"]
-    matrix, row_ids = sit.table(situations, candidates, cfg["view"])
+    matrix, row_ids = sit.table(situations, candidates, cfg["view"], topic=cfg["topic"])
+    topic_col = matrix.pop(TOPIC, None)
     report = select(matrix, concepts, claim_counts, cfg["selection"], cfg.get("variables"))
     variables = [r["id"] for r in report if r["status"] == "selected"]
     data = {v: matrix[v] for v in variables}
+    if topic_col is not None:
+        data[TOPIC] = topic_col
     result: dict[str, Any] = {"settings": cfg, "view": cfg["view"], "selection": report, "variables": variables,
                               "n_rows": len(row_ids), "row_ids": row_ids}
     if len(variables) < 2:
@@ -133,7 +171,7 @@ def discover(situations: list[dict[str, Any]], candidates: list[str], concepts: 
     pins, feedback = claim_pins(claims, set(variables), cfg["pin_bases"], stated_model) if cfg["claims_as_pins"] else ([], [])
     base_pins = list(pins)
     if cfg["tiers"]:
-        found0 = pc(data, variables, cfg["alpha"], cfg["max_depth"], colliders=cfg["colliders"])
+        found0 = _pc(data, variables, cfg)
         base_pins += tiers_to_pins(cfg["tiers"], found0["cpdag"])
     base_pins += [{**p, "source": "you", "support": 10**6} for p in cfg.get("pins", [])]
     run = _run(data, variables, cfg, base_pins, bootstrap=True)
@@ -150,6 +188,8 @@ def discover(situations: list[dict[str, Any]], candidates: list[str], concepts: 
         "independences": independence_checks(data, stated_model, set(variables), cfg["alpha"]),
         "coverage": {v: sum(1 for x in data[v] if x is not None) for v in variables},
     })
+    if TOPIC in data:
+        result["topic"] = _topic_report(data, variables, cfg, cpdag, run["found"])
     if cfg["compare_views"]:
         result["views"] = _compare_views(situations, variables, cfg, base_pins, model)
     if cfg["vignettes"] and any(s["origin"] == "vignette" for s in situations):
@@ -158,10 +198,31 @@ def discover(situations: list[dict[str, Any]], candidates: list[str], concepts: 
 
 
 def _edges_of(g: PDAG) -> dict[frozenset, tuple[str, str] | None]:
-    out: dict[frozenset, tuple[str, str] | None] = {e: None for e in g.undirected}
+    """The edges among the subject's concepts (the topic's edges are background, not part of the model)."""
+    out: dict[frozenset, tuple[str, str] | None] = {e: None for e in g.undirected if TOPIC not in e}
     for a, b in g.directed:
-        out[frozenset((a, b))] = (a, b)
+        if TOPIC not in (a, b):
+            out[frozenset((a, b))] = (a, b)
     return out
+
+
+def _topic_report(data, variables, cfg, cpdag: PDAG, found: dict[str, Any]) -> dict[str, Any]:
+    """Which concepts depend on the topic, and which links holding the topic fixed explains away."""
+    without = pc({v: data[v] for v in variables}, variables, cfg["alpha"], cfg["max_depth"], colliders=cfg["colliders"])
+    mine, theirs = set(_edges_of(cpdag)), set(_edges_of(without["cpdag"]))
+    removed = {frozenset(r["pair"]): r for r in found["removed"]}
+    support = found["edge_support"]
+    links = [{"variable": v, "test": (support.get("|".join(sorted((v, TOPIC)))) or {}).get("weakest")}
+             for v in found.get("topic_links", [])]
+    explained = []
+    for e in sorted(theirs - mine, key=sorted):
+        a, b = sorted(e)
+        r = removed.get(e) or {}
+        explained.append({"a": a, "b": b, "test": {k: r[k] for k in ("x", "y", "given", "g2", "df", "p", "n", "enough_data") if k in r},
+                          "via_topic": TOPIC in r.get("given", [])})
+    values = Counter(x for x in data[TOPIC] if x is not None)
+    return {"topics": len(values), "links": links, "explained": explained, "added": [sorted(e) for e in sorted(mine - theirs, key=sorted)],
+            "conflicts": found.get("topic_conflicts", [])}
 
 
 def _compare_views(situations, variables, cfg, pins, main_model: PDAG) -> dict[str, Any]:
@@ -169,8 +230,8 @@ def _compare_views(situations, variables, cfg, pins, main_model: PDAG) -> dict[s
     main = _edges_of(main_model)
     out = {}
     for view in sit.VIEWS:
-        data, rows = sit.table(situations, variables, view)
-        found = pc(data, variables, cfg["alpha"], cfg["max_depth"], colliders=cfg["colliders"])
+        data, rows = sit.table(situations, variables, view, topic=cfg["topic"])
+        found = _pc(data, variables, cfg)
         model, _ = apply_pins(found["cpdag"], pins, found["removed"])
         mine = _edges_of(model)
         out[view] = {"cells": sum(1 for v in variables for x in data[v] if x is not None), "rows": len(rows),
@@ -192,12 +253,12 @@ def _with_vignettes(situations, variables, cfg, pins, corpus_model: PDAG, claims
     """
     rows = [s for s in situations if s["origin"] in ("corpus", "vignette")]
     targets = sorted({s["target"] for s in rows if s["origin"] == "vignette" and s.get("target") in variables})
-    data, row_ids = sit.table(rows, variables, cfg["view"], origins=("corpus", "vignette"))
+    data, row_ids = sit.table(rows, variables, cfg["view"], origins=("corpus", "vignette"), topic=cfg["topic"])
     for t in targets:
         data[DO + t] = [1 if s.get("target") == t else 0 for s in rows]
     contexts = [DO + t for t in targets]
     allv = variables + contexts
-    found = pc(data, allv, cfg["alpha"], cfg["max_depth"], colliders=cfg["colliders"])
+    found = _pc(data, allv, cfg)
     vpins = list(pins) + tiers_to_pins([contexts, variables], found["cpdag"]) if contexts else list(pins)
     responses = []
     for t in targets:
@@ -213,15 +274,16 @@ def _with_vignettes(situations, variables, cfg, pins, corpus_model: PDAG, claims
                     vpins.append({"src": t, "dst": y, "source": "vignettes", "support": 1000,
                                   "text": f"setting {t} in vignettes moves {y} (p = {test.p:.4f})"})
     model, pin_report = apply_pins(found["cpdag"], vpins, found["removed"])
-    proj = PDAG(variables)  # the context variables have done their work; show only the subject's variables
+    keep = variables
+    proj = PDAG(keep)  # the context variables have done their work; show only the subject's variables
     for a, b in model.directed:
-        if a in variables and b in variables:
+        if a in keep and b in keep:
             proj.directed.add((a, b))
             if (a, b) in model.why:
                 proj.why[(a, b)] = model.why[(a, b)]
-    proj.undirected = {e for e in model.undirected if e <= set(variables)}
+    proj.undirected = {e for e in model.undirected if e <= set(keep)}
     dag = proj.extension() or []
-    sysdata = {v: data[v] for v in variables}
+    sysdata = {v: data[v] for v in keep + ([TOPIC] if TOPIC in data else [])}
     edges = _edge_table(sysdata, found["cpdag"], proj, dag, found["edge_support"], {}, claims)
     corpus_eff = {frozenset((e["a"], e["b"])): e for e in corpus_edges}
     return {"targets": targets, "n_vignettes": sum(1 for s in rows if s["origin"] == "vignette"), "rows": len(row_ids),
@@ -262,11 +324,13 @@ def _bootstrap(data: dict[str, list], variables: list[str], cfg: dict[str, Any])
     tally: dict[str, Counter] = defaultdict(Counter)
     for _ in range(cfg["bootstrap"]):
         rows = block_bootstrap(n, cfg["block"], rng)
-        g = pc(data, variables, cfg["alpha"], cfg["max_depth"], rows, cfg["colliders"])["cpdag"]
+        g = _pc(data, variables, cfg, rows)["cpdag"]
         for a, b in g.directed:
+            if TOPIC in (a, b):
+                continue
             tally["|".join(sorted((a, b)))][f"{a}>{b}"] += 1
             tally["|".join(sorted((a, b)))]["adjacent"] += 1
-        for e in g.undirected:
+        for e in [e for e in g.undirected if TOPIC not in e]:
             tally["|".join(sorted(e))]["undirected"] += 1
             tally["|".join(sorted(e))]["adjacent"] += 1
     runs = cfg["bootstrap"]
@@ -285,6 +349,8 @@ def _edge_table(data, cpdag: PDAG, model: PDAG, dag, support, stability, claims)
     rows = []
     for e in model.edges():
         a, b = e["src"], e["dst"]
+        if TOPIC in (a, b):
+            continue
         key = "|".join(sorted((a, b)))
         if e["directed"]:
             if (a, b) in cpdag.directed:
@@ -297,7 +363,7 @@ def _edge_table(data, cpdag: PDAG, model: PDAG, dag, support, stability, claims)
         else:
             status = "reversible"
         src, dst = (a, b) if (a, b) in dagset or not dag else (b, a)
-        eff = adjusted_effect(data, src, dst, sorted(dag_parents[src]))
+        eff = adjusted_effect(data, src, dst, sorted(dag_parents[src]) + ([TOPIC] if TOPIC in data else []))
         both = sum(1 for x, y in zip(data[a], data[b]) if x is not None and y is not None)
         rows.append({
             "a": a, "b": b, "directed": e["directed"], "status": status, "why": e.get("why"),
@@ -309,4 +375,6 @@ def _edge_table(data, cpdag: PDAG, model: PDAG, dag, support, stability, claims)
 
 
 def effects(data: dict[str, list], model: PDAG, x: str, y: str) -> dict[str, Any]:
-    return possible_effects(data, model, x, y)
+    """Possible effects of x on y; within topics when the data has them (the topic comes first, so adjusting
+    for it is always allowed)."""
+    return possible_effects(data, model, x, y, always=[TOPIC] if TOPIC in data else [])
