@@ -29,7 +29,17 @@ def main(argv: list[str] | None = None) -> None:
 
         return p1_main(argv[1:])
 
-    ap = argparse.ArgumentParser(prog="androidmirror", description="Android Mirror, Prototype 2")
+    ap = argparse.ArgumentParser(
+        prog="androidmirror", description="Android Mirror, Prototype 2",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""usual order:
+  build --corpus meditations --limit 30   a cheap trial (about 2 Claude calls per passage)
+  serve                                   the web app on http://localhost:8000
+  build --corpus meditations              the whole corpus; cached passages cost nothing
+  validate, fill, vignettes               optional: Claude reads between the lines as the subject
+  causal --alpha 0.01                     re-run discovery with other settings, free
+
+free: causal, benchmark (without --claude), serve. Full guide: docs/commands.md""")
     ap.add_argument("--data", type=Path, default=DATA, help="data directory (default: ./data)")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
@@ -44,10 +54,10 @@ def main(argv: list[str] | None = None) -> None:
 
     c = sub.add_parser("causal", help="re-run causal discovery on a built Mirror (no Claude calls)")
     c.add_argument("--corpus", default="meditations")
-    c.add_argument("--alpha", type=float)
-    c.add_argument("--depth", type=int, help="largest conditioning set")
-    c.add_argument("--max-vars", type=int)
-    c.add_argument("--min-support", type=int)
+    c.add_argument("--alpha", type=float, help="significance level of each test; lower means fewer, surer links (default 0.05)")
+    c.add_argument("--depth", type=int, help="most concepts a test may hold fixed at once (default 3)")
+    c.add_argument("--max-vars", type=int, help="most concepts in the causal graph (default 25)")
+    c.add_argument("--min-support", type=int, help="fewest situations a concept must be known in (default 8)")
     c.add_argument("--bootstrap", type=int, help="resamples for edge stability (0 to skip)")
     c.add_argument("--no-claims", action="store_true", help="do not use stated claims as background knowledge")
     c.add_argument("--topic", choices=["on", "off"], help="hold each passage's topic fixed in the tests (default on)")
