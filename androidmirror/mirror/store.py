@@ -10,13 +10,15 @@ from typing import Any
 import networkx as nx
 
 from ..ontology import GraphSnapshot
+from . import answers
 from .causal import explain, graph_of
 from .kg import KnowledgeBase, fact_key
 from .schema import EVALUATIONS, SELF, archetype_type
 
 
 class Mirror:
-    def __init__(self, data: dict[str, Any], passages: list[dict[str, Any]]) -> None:
+    def __init__(self, data: dict[str, Any], passages: list[dict[str, Any]], root: Path | None = None) -> None:
+        self.root = root
         self.meta = data["meta"]
         self.nodes: dict[str, dict[str, Any]] = data["nodes"]
         self.facts: list[dict[str, Any]] = data["facts"]
@@ -37,9 +39,9 @@ class Mirror:
         path = root / "mirror.json"
         if not path.exists():
             return None
-        data = json.loads(path.read_text(encoding="utf-8"))
-        passages = json.loads((root / "passages.json").read_text(encoding="utf-8"))
-        return cls(data, passages)
+        data = answers.overlay(json.loads(path.read_text(encoding="utf-8")), answers.load(root))
+        passages = json.loads((root / "passages.json").read_text(encoding="utf-8")) + data["answer_passages"]
+        return cls(data, passages, root)
 
     def label(self, nid: str) -> str:
         return self.nodes.get(nid, {}).get("label", nid)

@@ -20,6 +20,7 @@ Commands that call Claude need `ANTHROPIC_API_KEY` in the local `.env` file. Eve
 | `benchmark` | Test the causal fit on a subject whose model is known | No (`--claude`: yes) |
 | `serve` | Open the web app | No (the Ask tab makes 1 call per question) |
 | `ask` | Ask the Mirror a question from the command line | 1 call per question |
+| `question` | Answer the Mirror's questions about what its graphs leave open | No (1 call per answer written in words) |
 | `p1` | The paused Prototype 1 app | Some subcommands |
 
 ## The usual order
@@ -127,6 +128,21 @@ python -m androidmirror ask "How does the Committee respond to inflation?" --cor
 ```
 
 Without a key it prints the facts it found instead of an answer.
+
+## question
+
+The Question engine asks about what the Mirror's graphs leave open (judgments in tension, signs the passages disagree on, arrows that may be shortcuts, unconnected concepts, inconsistencies, unevaluated concepts, values urged both ways), most important first. Answer with an option's number, or in your own words if your key is set. Each answer becomes a proposal and shows what approving it would change; type your name to approve it, `n` to reject it, or Enter to leave it waiting. Nothing changes without an approval, and approving re-fits the causal model (free).
+
+```powershell
+python -m androidmirror question                          # 10 questions, one at a time
+python -m androidmirror question --kind tension --limit 5 # only judgments in tension
+python -m androidmirror question --list                   # only list them
+python -m androidmirror question --pending                # proposals waiting for approval
+python -m androidmirror question --approve 3fa9c1d2e0 --by "Android K"
+python -m androidmirror question --revoke 3fa9c1d2e0      # take an approved answer back out
+```
+
+Kinds: `tension`, `sign`, `open`, `weak`, `link`, `conflict`, `evaluate`, `want`. Answers are kept in `data/mirror/<corpus>/answers.json` and survive a rebuild. The Questions tab of the web app does the same.
 
 ## p1
 

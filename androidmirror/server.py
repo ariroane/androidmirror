@@ -16,6 +16,7 @@ from pydantic import BaseModel
 
 from . import archetypes, llm
 from .mirror import ask as oracle
+from .mirror import question
 from .mirror.build import mirror_dir
 from .mirror.corpus import SPECS
 from .mirror.store import Mirror
@@ -135,5 +136,7 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
         m = get(corpus)
         return sorted(({"id": k, "label": v["label"], "kind": v["kind"], "support": v.get("support", 0)}
                        for k, v in m.nodes.items()), key=lambda r: -r["support"])
+
+    app.include_router(question.routes(get))  # the Question engine: questions, answers, proposals to approve
 
     return app

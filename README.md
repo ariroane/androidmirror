@@ -107,7 +107,14 @@ The Causal tab lists every constraint with its status, the tensions, the pairs s
 - **Knowledge:** "does it follow?" queries with proof trees, and the list of inconsistencies.
 - **Causal:** counts, the held-out check, Trace, the arrows, tensions, denials that hold, claims explained by a chain, values, reported views, and judgments about concepts outside the codebook.
 - **Ask:** the Oracle answers from stated and inferred facts, the subject's causal judgments and model, their values and the most relevant passages, and cites passages by locator.
+- **Questions:** the Question engine. It asks what the graphs leave open, most important first: judgments in tension, signs the passages disagree on, arrows that may be shortcuts, single-passage arrows, unconnected concepts the knowledge graph relates, inconsistencies, unevaluated concepts and split values. Each option lists the exact changes it makes, and an answer only becomes a proposal with a preview of its effect; nothing changes until you approve it with your name, and an approved answer can be revoked. See [The Question engine](#the-question-engine).
 - **Face:** the Major Arcana card the Mirror most resembles (from Prototype 1), read from the new graphs.
+
+## The Question engine
+
+The corpus leaves parts of the subject's model open. The Question engine (`androidmirror/mirror/question.py`) finds them in the built structures, with no Claude call, and ranks them by how central the concepts are (passages that mention them plus passages behind their causal judgments) and how much evidence is on the line. Answer by picking an option, or in your own words if Claude is on (one call reads the answer into an option).
+
+An answer is a proposal, saved in `data/mirror/<corpus>/answers.json` with a preview: the arrows that would be added, removed or flipped, the judgments that would be settled differently, the evaluations and values that would change. Only approving it (with a name) adds it to the Mirror. Approved answers are a source of their own, shown as the passage "Answer": a new causal judgment, a ruling on one the corpus gives (affirmed constraints are fitted before any other; retracted ones keep their quotes but carry no weight; "directly" or "only through" settles an open arrow), a fact the subject holds, a fact that no longer enters inference, or a value. They are laid over the corpus-built Mirror on every load and fit, so a rebuild keeps them and revoking one undoes it.
 
 ## Command reference
 
@@ -120,6 +127,7 @@ The full guide, with every option, examples, what each step costs and what to do
 | `benchmark [--n 300] [--seeds 5] [--claude]` | The planted-subject benchmark. Offline and free unless `--claude`. |
 | `serve [--port 8000]` | The web app. |
 | `ask "question" [--corpus NAME]` | The Oracle from the command line. |
+| `question [--corpus NAME] [--limit 10] [--kind K] [--list]` | Answer the Question engine's questions; approve each proposal by typing your name. `--pending`, `--approve ID --by NAME`, `--reject ID`, `--revoke ID`. No Claude calls unless you answer in words. |
 | `p1 ...` | The paused Prototype 1 app (patch review, Refactorer, Breaker, Chainer, Evolver): [docs/prototype1.md](docs/prototype1.md). |
 
 ## Adding a corpus
@@ -145,6 +153,7 @@ Splitters: `paragraphs` (one text file, short paragraphs merged), `documents` (a
 | `androidmirror/mirror/causal/` | Fitting the graph to the constraints, Trace, the held-out check |
 | `androidmirror/mirror/benchmark.py` | The planted-subject benchmark |
 | `androidmirror/mirror/build.py`, `store.py`, `ask.py` | The pipeline, the read views, the Oracle |
+| `androidmirror/mirror/question.py`, `answers.py` | The Question engine; approved answers and how they amend a Mirror |
 | `androidmirror/server.py`, `web/index.html` | The app |
 | `androidmirror/p1_*`, `refactor.py`, `breaker.py`, `chainer.py`, `evolver/` | Prototype 1, paused |
 

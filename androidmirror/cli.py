@@ -65,6 +65,17 @@ free: causal, benchmark (without --claude), serve. Full guide: docs/commands.md"
     q.add_argument("question")
     q.add_argument("--corpus", default="meditations")
 
+    qu = sub.add_parser("question", help="answer the Question engine's questions; answers become proposals you approve")
+    qu.add_argument("--corpus", default="meditations")
+    qu.add_argument("--limit", type=int, default=10, help="questions to ask (default 10)")
+    qu.add_argument("--kind", help="only one kind: tension, sign, open, weak, link, conflict, evaluate, want")
+    qu.add_argument("--list", action="store_true", help="only list the questions")
+    qu.add_argument("--pending", action="store_true", help="list proposals waiting for approval")
+    qu.add_argument("--approve", metavar="ID", help="approve a proposal (needs --by)")
+    qu.add_argument("--reject", metavar="ID", help="reject a proposal")
+    qu.add_argument("--revoke", metavar="ID", help="take an approved answer back out")
+    qu.add_argument("--by", default="", help="your name, for --approve")
+
     sub.add_parser("p1", help="the paused Prototype 1 app: python -m androidmirror p1 --help")
 
     args = ap.parse_args(argv)
@@ -100,6 +111,26 @@ free: causal, benchmark (without --claude), serve. Full guide: docs/commands.md"
 
         print(f"Android Mirror on http://localhost:{args.port}  (Claude: {'on' if llm.available() else 'off, no key'})")
         uvicorn.run(create_app(args.data), host="127.0.0.1", port=args.port)
+    elif args.cmd == "question":
+        from .mirror import question
+
+        root = mirror_dir(args.data, CorpusSpec.load(args.corpus).id)
+        try:
+            if args.pending:
+                for p in question.proposals(root, "proposed"):
+                    print(f"{p['id']}  {p['question']}\n    answer: {p['answer']}\n    if approved: {p['preview']['summary']}")
+            elif args.approve:
+                question.approve(root, args.approve, args.by)
+                print("approved; the Mirror is re-fitted")
+            elif args.reject:
+                question.reject(root, args.reject)
+            elif args.revoke:
+                question.revoke(root, args.revoke)
+                print("revoked; the Mirror is re-fitted")
+            else:
+                question.cli(root, limit=args.limit, kind=args.kind, listing=args.list)
+        except (KeyError, ValueError) as e:
+            raise SystemExit(str(e)) from None
     elif args.cmd == "ask":
         m = Mirror.load(mirror_dir(args.data, CorpusSpec.load(args.corpus).id))
         if m is None:
