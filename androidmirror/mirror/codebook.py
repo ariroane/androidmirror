@@ -47,9 +47,8 @@ def collect_mentions(codings: dict[str, dict[str, Any]]) -> dict[str, dict[str, 
             if m.get("gloss") and len(rec["glosses"]) < 3:
                 rec["glosses"].append(m["gloss"])
             rec["passages"].add(pid)
-        # labels used in statements or claims but not listed as concepts
-        refs = [(s["subject"], s["object"]) for s in c.get("statements", [])] + \
-               [(x["cause"], x["effect"]) for x in c.get("causal_claims", [])]
+        # labels used in statements but not listed as concepts
+        refs = [(s["subject"], s["object"]) for s in c.get("statements", [])]
         for a, b in refs:
             for lab in (a, b):
                 n = norm(lab)

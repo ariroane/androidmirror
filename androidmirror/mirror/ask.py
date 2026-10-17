@@ -1,10 +1,10 @@
 """The Ask tab: find what the Mirror knows about a question, then let Claude answer with citations.
 
-The Oracle gets four kinds of context, each marked so it can say how it knows:
-stated facts (with a quote and locator), inferred facts (with the rule that
-derived them), the subject's causal claims, and what the causal model says
-about the same variables (compelled, reversible, or not linked in the data),
-plus the passages most about the question. The graph is open-world: what it
+The Oracle gets its context marked so it can say how it knows: stated facts
+(with a quote and locator), inferred facts (with the rule that derived them),
+the subject's causal judgments (with how many passages make them), the arrows
+of the subject's model they add up to (and the judgments in tension with it),
+what the subject urges, and the passages most about the question. The graph is open-world: what it
 lacks is "not found", never "the subject denies it".
 """
 
@@ -33,7 +33,7 @@ SYSTEM = """You are the voice of the Android Mirror: a reflection of {subject}'s
 Answer the question from that context, in plain modern English.
 - Cite passages by their locator in square brackets, e.g. [Book II, 1], for every claim you make.
 - Say how you know: "states" for stated facts, "it follows that" for inferred ones (name the rule if it helps), "urges" for prescriptions.
-- For causal questions, separate what the subject claims from what the corpus as data supports (compelled, reversible, or no link once other variables are accounted for).
+- For causal questions, separate what the subject says outright from what follows from their model (a chain of their own judgments), and say where their judgments are in tension. What the subject urges is what they want, not how things work.
 - If the context does not cover the question, say so. Missing is "not found", never "denied".
 List the locators you cited and the node ids you relied on."""
 
@@ -69,20 +69,19 @@ def context(m: Mirror, nodes: list[str], max_passages: int = 4) -> dict[str, Any
         for x in m.kb.query(s=nid)[:60] + m.kb.query(o=nid)[:60]:
             if x["status"] == "inferred":
                 lines.append(f"[inferred: {x['rule']}] {lab(x['s'])} {x['r']} {lab(x['o'])}")
-        for c in m.claims:
-            if nid in (c["cause"], c["effect"]):
-                e = c["evidence"][0]
-                verb = "raises" if c["sign"] > 0 else "lowers"
-                lines.append(f"[causal claim, {c['support']} passage(s)] {lab(c['cause'])} {verb} {lab(c['effect'])}"
-                             f" [{e['locator']}] \"{e['quote']}\"")
+        v = m.value_of.get(nid)
+        if v:
+            lines.append(f"[urges, {v['more']} passage(s) for more, {v['less']} for less] {lab(nid)}")
+    for c in m.causal.get("constraints", []):
+        if c["held"] and (c["x"] in nodes or c["y"] in nodes or c["z"] in nodes) and c["evidence"]:
+            e = next((x for x in c["evidence"] if x["held"]), c["evidence"][0])
+            state = {"arrow": "in the model", "follows": "follows from the model", "holds": "in the model",
+                     "rejected": f"in tension with stronger judgments ({c.get('reason')})"}.get(c["status"], c["status"])
+            lines.append(f"[causal judgment, {c['weight']} passage(s), {state}] {m.say(c)} [{e['locator']}] \"{e['quote']}\"")
     for e in m.causal.get("edges", []):
-        if e["a"] in nodes or e["b"] in nodes:
-            arrow = f"{lab(e['a'])} -> {lab(e['b'])}" if e["directed"] else f"{lab(e['a'])} - {lab(e['b'])}"
-            lines.append(f"[causal model: {e['status']}] {arrow}; adjusted effect {e['effect']}, "
-                         f"stable in {e['stability'].get('adjacent', '?')} of resamples")
-    for p in m.causal.get("pins", []):
-        if p["status"] == "no link in the data" and (p["src"] in nodes or p["dst"] in nodes):
-            lines.append(f"[causal model] the claim {lab(p['src'])} -> {lab(p['dst'])} has no link in the data")
+        if e["src"] in nodes or e["dst"] in nodes:
+            note = f"; may run only through {' -> '.join(lab(n) for n in e['open']['through'])}" if e["open"] else ""
+            lines.append(f"[subject's model] {lab(e['src'])} {'raises' if e['sign'] > 0 else 'lowers'} {lab(e['dst'])}{note}")
     lines = list(dict.fromkeys(lines))
     counts: Counter = Counter()
     for nid in nodes:

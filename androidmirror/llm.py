@@ -126,12 +126,14 @@ def _client():
 
 
 def _json_call(system: str, user: str, schema: dict[str, Any], effort: str = "medium",
-               max_tokens: int = 16000) -> dict[str, Any]:
+               max_tokens: int = 16000, cache_system: bool = False) -> dict[str, Any]:
+    """One structured call. `cache_system` marks the system prompt for prompt caching, for calls that repeat
+    a long system prompt (the same vocabulary for every passage)."""
     client = _client()
     response = client.messages.create(
         model=DEFAULT_MODEL,
         max_tokens=max_tokens,
-        system=system,
+        system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}] if cache_system else system,
         messages=[{"role": "user", "content": user}],
         output_config={"effort": effort, "format": {"type": "json_schema", "schema": schema}},
         # Server-side fallback: if a request is declined, the API retries it on

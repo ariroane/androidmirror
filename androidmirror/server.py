@@ -1,4 +1,4 @@
-"""HTTP API and web UI for Prototype 2 (served from web/index.html).
+"""HTTP API and web UI for the Mirror (served from web/index.html).
 
 Read-only over built Mirrors: build them with `python -m androidmirror build`.
 Every route takes an optional `corpus` (default: the first one built).
@@ -67,8 +67,8 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
     def meta(corpus: str | None = None) -> dict:
         m = get(corpus)
         return {**m.meta, "stats": m.kb.stats(), "variables": len(m.variables), "concepts": len(m.nodes),
-                "claims": len(m.claims), "class_size": m.causal.get("class_size"),
-                "situations": sum(1 for x in m.situations if x["origin"] == "corpus")}
+                "judgments": sum(1 for j in m.judgments if j["held"]), "causal": m.causal.get("stats"),
+                "values": len(m.values)}
 
     @app.get("/api/graph")
     def graph(layer: str = "kg", limit: int = 120, corpus: str | None = None) -> dict:
@@ -102,29 +102,18 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
         return get(corpus).causal_view()
 
     @app.get("/api/edge")
-    def edge(a: str, b: str, corpus: str | None = None) -> dict:
+    def edge(src: str, dst: str, corpus: str | None = None) -> dict:
         try:
-            return get(corpus).edge(a, b)
+            return get(corpus).edge(src, dst)
         except KeyError as e:
             raise missing(e) from None
 
-    @app.get("/api/effect")
-    def effect(x: str, y: str, corpus: str | None = None) -> dict:
+    @app.get("/api/explain")
+    def explain(x: str, y: str, corpus: str | None = None) -> dict:
         m = get(corpus)
-        if x not in m.variables or y not in m.variables:
-            raise HTTPException(400, "both ends must be causal variables")
-        return m.effect(x, y)
-
-    @app.get("/api/situation/{sid}")
-    def situation(sid: str, corpus: str | None = None) -> dict:
-        try:
-            return get(corpus).situation(sid)
-        except KeyError as e:
-            raise missing(e) from None
-
-    @app.get("/api/profile")
-    def profile(corpus: str | None = None) -> dict:
-        return get(corpus).profile()
+        if x not in m.nodes or y not in m.nodes:
+            raise HTTPException(400, "both ends must be concepts of the Mirror")
+        return m.explain(x, y)
 
     @app.post("/api/ask")
     def ask(a: Ask) -> dict:
