@@ -16,8 +16,9 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .. import llm
+from . import answers
 from . import codebook as cb
-from . import coding
+from . import coding, mutate
 from . import judgments as jd
 from .causal import fit, holdout, public
 from .corpus import CorpusSpec, Passage, fetch, split
@@ -155,9 +156,10 @@ def build(spec: CorpusSpec, data_dir: Path, coder: Any = None, limit: int | None
                  "passages": len(passages), "coded": len(codings), "read": len(readings), "prototype": 3},
         "passage_ids": [p.id for p in passages],
         "nodes": nodes, "facts": facts, "judgments": judgments, "unresolved": unresolved,
-        "values": jd.values(values),
+        "values": jd.values(values), "value_records": values,
         "causal": {"settings": settings or {}},
     }
+    mirror = mutate.replay(mirror, root, log)  # the mutations the user approved, made again on the new reading
     mirror = finalize(mirror, root, settings, log)
     st = mirror["causal"]["stats"]
     log(f"built: {len(nodes)} concepts, {len(facts)} facts, {st['held_judgments']} of the subject's causal judgments "
@@ -168,10 +170,12 @@ def build(spec: CorpusSpec, data_dir: Path, coder: Any = None, limit: int | None
 
 def finalize(mirror: dict[str, Any], root: Path, settings: dict[str, Any] | None = None,
              log: Callable[[str], None] = print) -> dict[str, Any]:
-    """Fit the causal model to the judgments and check it on held-out passages (no Claude calls)."""
+    """Fit the causal model to the judgments and check it on held-out passages (no Claude calls).
+
+    The fit includes the answers the user approved (answers.py); the held-out check is on the corpus alone."""
     old = (mirror.get("causal") or {}).get("settings", {})
     cfg = {**old, **(settings or {})}
-    model = fit(mirror["judgments"], cfg)
+    model = fit(answers.overlay(mirror, answers.load(root))["judgments"], cfg)
     mirror["causal"] = {**public(model), "holdout": holdout(mirror["judgments"], cfg)}
     _write(root / "mirror.json", mirror)
     return mirror

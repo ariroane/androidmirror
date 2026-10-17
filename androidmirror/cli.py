@@ -70,6 +70,37 @@ free: causal, derange, benchmark (without --claude), serve. Full guide: docs/com
     q.add_argument("question")
     q.add_argument("--corpus", default="meditations")
 
+    mu = sub.add_parser("mutate", help="merge or split concepts and re-evaluate both graphs; applies only what you approve",
+                        formatter_class=argparse.RawDescriptionHelpFormatter, epilog="""examples:
+  mutate propose                              find merges and splits the Mirror points to, with previews
+  mutate merge anger wrath                    preview merging wrath into anger
+  mutate merge anger calm --opposite calm     calm is anger's opposite: merged at -1
+  mutate split pleasure                       split along the evidence (called good and bad, ...)
+  mutate split pleasure --sense "joy: joy, gladness" --sense "pleasure: pleasure, delight"
+  mutate split pleasure --claude              Claude reads the senses (one call per 50 passages)
+  mutate approve m-1a2b3c4d                   apply it; mutate undo takes the last one back""")
+    mu.add_argument("action", choices=["propose", "list", "show", "merge", "split", "approve", "reject", "undo"])
+    mu.add_argument("args", nargs="*", help="concept ids (merge, split) or a proposal id (show, approve, reject)")
+    mu.add_argument("--corpus", default="meditations")
+    mu.add_argument("--into", help="merge: the concept the others merge into (default: the most read)")
+    mu.add_argument("--opposite", action="append", default=[], help="merge: a concept that is the other's opposite")
+    mu.add_argument("--label", help="merge: a new label for the merged concept")
+    mu.add_argument("--sense", action="append", default=[], help='split: "label: word, word" (its words in the corpus)')
+    mu.add_argument("--claude", action="store_true", help="split: have Claude read the senses")
+    mu.add_argument("--by", default="user (command line)", help="approve, reject, undo: who decides")
+    mu.add_argument("--limit", type=int, default=8, help="propose: how many candidates")
+
+    qu = sub.add_parser("question", help="answer the Question engine's questions; answers become proposals you approve")
+    qu.add_argument("--corpus", default="meditations")
+    qu.add_argument("--limit", type=int, default=10, help="questions to ask (default 10)")
+    qu.add_argument("--kind", help="only one kind: tension, sign, open, weak, link, conflict, evaluate, want, basis")
+    qu.add_argument("--list", action="store_true", help="only list the questions")
+    qu.add_argument("--pending", action="store_true", help="list proposals waiting for approval")
+    qu.add_argument("--approve", metavar="ID", help="approve a proposal (needs --by)")
+    qu.add_argument("--reject", metavar="ID", help="reject a proposal")
+    qu.add_argument("--revoke", metavar="ID", help="take an approved answer back out")
+    qu.add_argument("--by", default="", help="your name, for --approve")
+
     sub.add_parser("p1", help="the paused Prototype 1 app: python -m androidmirror p1 --help")
 
     args = ap.parse_args(argv)
@@ -114,9 +145,79 @@ free: causal, derange, benchmark (without --claude), serve. Full guide: docs/com
 
         print(f"Android Mirror on http://localhost:{args.port}  (Claude: {'on' if llm.available() else 'off, no key'})")
         uvicorn.run(create_app(args.data), host="127.0.0.1", port=args.port)
+    elif args.cmd == "mutate":
+        _mutate(args)
+    elif args.cmd == "question":
+        from .mirror import question
+
+        root = mirror_dir(args.data, CorpusSpec.load(args.corpus).id)
+        try:
+            if args.pending:
+                for p in question.proposals(root, "proposed"):
+                    print(f"{p['id']}  {p['question']}\n    answer: {p['answer']}\n    if approved: {p['preview']['summary']}")
+            elif args.approve:
+                question.approve(root, args.approve, args.by)
+                print("approved; the Mirror is re-fitted")
+            elif args.reject:
+                question.reject(root, args.reject)
+            elif args.revoke:
+                question.revoke(root, args.revoke)
+                print("revoked; the Mirror is re-fitted")
+            else:
+                question.cli(root, limit=args.limit, kind=args.kind, listing=args.list)
+        except (KeyError, ValueError) as e:
+            raise SystemExit(str(e)) from None
     elif args.cmd == "ask":
         m = Mirror.load(mirror_dir(args.data, CorpusSpec.load(args.corpus).id))
         if m is None:
             raise SystemExit("no Mirror built yet: python -m androidmirror build")
         r = oracle.ask(m, args.question)
         print(r["answer"] or "\n".join(r["facts"]))
+
+
+def _mutate(args: argparse.Namespace) -> None:
+    from .mirror import mutate
+
+    eng = mutate.Engine(mirror_dir(args.data, CorpusSpec.load(args.corpus).id))
+    a, rest = args.action, args.args
+    try:
+        if a == "propose":
+            found = eng.propose(args.limit)
+            for p in found:
+                print("\n".join(mutate.describe(p)) + "\n")
+            print(f"{len(found)} proposals; nothing has changed. mutate show ID adds the held-out check; "
+                  "mutate approve ID applies one" if found
+                  else "nothing to propose")
+        elif a == "list":
+            for p in eng.list():
+                print(f"{p['id']}  [{p['status']}]  {p['preview']['summary']}")
+        elif a == "show":  # with the held-out check, if it has not been run yet
+            p = eng.get(rest[0])
+            print("\n".join(mutate.describe(eng.check(rest[0]) if p["preview"]["causal"]["holdout_after"] is None else p)))
+        elif a == "merge":
+            print("\n".join(mutate.describe(eng.propose_merge(rest, args.into, args.opposite, args.label))))
+        elif a == "split":
+            senses = []
+            for s in args.sense:
+                label, _, words = s.partition(":")
+                senses.append({"label": label.strip(), "aliases": [w.strip() for w in words.split(",") if w.strip()]})
+            if args.claude and not llm.available():
+                raise SystemExit("--claude needs ANTHROPIC_API_KEY in your local .env")
+            print("\n".join(mutate.describe(eng.propose_split(rest[0], senses or None, claude=args.claude))))
+        elif a == "approve":
+            r = eng.approve(rest[0], args.by)
+            print({"applied": "applied.", "stale": "the Mirror changed since; recomputed, review it and approve again:",
+                   "invalid": "no longer applies:"}[r["status"]])
+            if r["status"] != "applied":
+                print("\n".join(mutate.describe(r["proposal"])))
+        elif a == "reject":
+            eng.reject(rest[0], args.by)
+            print("rejected; propose will not bring it back")
+        elif a == "undo":
+            r = eng.undo(args.by)
+            print(f"undid {r['id']}" + ("" if r["how"] == "restored" else
+                                         "; the Mirror was rebuilt since, so run build again (cached, free) to drop it"))
+    except IndexError:
+        raise SystemExit(f"mutate {a} needs {'concept ids' if a in ('merge', 'split') else 'a proposal id'}") from None
+    except (mutate.MutationError, FileNotFoundError, KeyError, llm.LLMUnavailable) as e:
+        raise SystemExit(f"mutate {a}: {e}") from None

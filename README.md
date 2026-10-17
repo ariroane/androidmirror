@@ -1,6 +1,6 @@
 # Android Mirror
 
-A reflective model of a subjective system (a person, a group, an institution) built only from its own words. Prototype 3 reads a whole corpus once and builds two linked structures over the same concepts:
+A reflective model of a subjective system (a person, a group, an institution) built from its own words (other data generating mechanisms in progress). Combines three knowledge structures - knowledge graphs for relational knowledge, causal graphs for observational knowledge, and language structures through Claude. Prototype 3 reads a whole corpus once and builds two linked structures over the same concepts:
 
 - **Descriptive ontology:** a knowledge graph with a schema and rules, so it can be reasoned over, not only browsed. Every answer it gives has a proof that bottoms out in quotes.
 - **Causal model:** the subject's *own* model of how things work, built only from the causal judgments the subject makes ("anger comes from opinion", "take away the opinion and the hurt is gone", "not the thing but your judgment of it disturbs you", "this makes no difference to that"). Each judgment becomes a constraint on a graph, and the graph is fitted to them. Nothing is inferred from how often ideas appear together, and Claude never answers as the subject.
@@ -108,7 +108,32 @@ The Causal tab lists every constraint with its status, the tensions, the pairs s
 - **Causal:** counts, the held-out check, Trace, the arrows, tensions, denials that hold, claims explained by a chain, values, reported views, and judgments about concepts outside the codebook.
 - **Ask:** the Oracle answers from stated and inferred facts, the subject's causal judgments and model, their values and the most relevant passages, and cites passages by locator.
 - **Derange:** where the worldview rests on least, under what matters most (see below).
-- **Face:** the Major Arcana card the Mirror most resembles (from Prototype 1), read from the new graphs.
+- **Face:** the Major Arcana card the whole Mirror most resembles, drawn as a face. See [The face](#the-face).
+- **Mutate:** merge concepts that are one, or split one used in two senses. See [Mutate](#mutate-merging-and-splitting-concepts).
+
+## The face
+
+The Face tab reads the whole Mirror, both the knowledge graph and the subject's causal model, and names the one Major Arcana card whose patterns it shows most strongly. It always reads the whole Mirror, never a single concept's neighbourhood. The code is `androidmirror/archetypes.py`; the cards are data in `data/archetypes_major_arcana.json`.
+
+1. **The graphs, in the cards' vocabulary.** Each concept gets a type from its kind and the subject's evaluation (an agent is a person, a disposition the subject calls good is a virtue, a bad one a vice, and so on), and each type falls in a class: AIM (virtues, values), ACT (practices), PASSION (vices, emotions), MIND (beliefs, concepts), AGENT (people) or WORLD (events, places). Held facts become relations grouped into families (LINEAGE, EMBODY, COMMIT, OPPOSE, PART), and the subject's causal arrows keep their sign, strength and whether they are open.
+2. **Each card is a few patterns.** A card is two or three small motifs of at most three nodes over those classes, families and signs, each with a weight and a plain-words description. The Hierophant, for example, is "a person who learned from someone who embodied an aim" plus "an aim someone embodied that raises another aim".
+3. **Counted against chance.** The matcher counts every motif in the Mirror, then counts it again in 200 shuffles that keep both graphs' shape but scatter node types across nodes and causal attributes across arrows. A motif scores only by how far it beats the shuffle (tanh of half its z-score, discounted when it occurs only once or twice), so a pattern doesn't win just because the Mirror is full of virtues or arrows. A card's score is the weighted mean of its motifs, between 0 and 1.
+4. **Reversed.** A card whose motifs make sense with the signs flipped (raises becomes lowers) is also scored that way; if the flipped reading is clearly stronger, the card is drawn reversed, upside down as in tarot.
+5. **Undecided.** If the best card scores under 0.45, or leads the next by less than 0.15, the tab shows a blank card back and names the two closest cards. A Mirror under three concepts is not read at all.
+6. **The drawing.** The winning card's face is a fixed expression stored with the card (eye openness, brow angle, mouth curve and opening, gaze, head tilt) under a small glyph of its emblem, so a face always means the same card. It is drawn fainter the narrower the margin.
+7. **Why this card.** Under the face are the motifs that matched, how often each was found, up to three examples with their quotes (click one to highlight those concepts on the canvas), the runners-up, every card's score, and any relation names the cards don't read yet.
+
+The reading is deterministic (a fixed shuffle seed), read-only, and makes no Claude calls. It is an interpretive vocabulary, not a validated psychological instrument: the narrow claim is that the Mirror contains this card's patterns more often than chance would predict, and the tab shows where. The full design is in the project's archetype face design note.
+
+## The Question engine
+
+The corpus leaves parts of the subject's model open. The Question engine (`androidmirror/mirror/question.py`) finds them in the built structures, with no Claude call, and ranks them by how central the concepts are (passages that mention them plus passages behind their causal judgments) and how much evidence is on the line. Answer by picking an option, or in your own words if Claude is on (one call reads the answer into an option).
+
+An answer is a proposal, saved in `data/mirror/<corpus>/answers.json` with a preview: the arrows that would be added, removed or flipped, the judgments that would be settled differently, the evaluations and values that would change. Only approving it (with a name) adds it to the Mirror. Approved answers are a source of their own, shown as the passage "Answer": a new causal judgment, a ruling on one the corpus gives (affirmed constraints are fitted before any other; retracted ones keep their quotes but carry no weight; "directly" or "only through" settles an open arrow), a fact the subject holds, a fact that no longer enters inference, or a value. They are laid over the corpus-built Mirror on every load and fit, so a rebuild keeps them and revoking one undoes it.
+
+## Mutate: merging and splitting concepts
+
+The codebook decides what counts as one concept, and it can be wrong both ways: two words for one thing ("wrath", "anger"), a word and its opposite ("calm" is anger at −1), or one word for two things (the pleasure the subject calls good and the pleasure they call bad). The mutate engine finds such cases from the Mirror's own structure (the subject says two concepts are the same, each is a kind of the other, they play the same or a mirror-image causal role, one is called both good and bad or said both to raise and to lower one thing), or takes them from you, and re-evaluates the edges: everything read from each passage moves with it (signs turned around for an opposite), the knowledge base is re-run and the causal model re-fitted, so merged evidence is weighed together and a judgment between two merged concepts ("anger breeds wrath") is shown as saying nothing any more. Each proposal previews what changes in both graphs, including the held-out check, and **is applied only when you approve it**; it can be undone, and approved mutations are made again on every rebuild. Offline except `split --claude`, where Claude reads which sense each passage uses.
 
 ## Derange: the weakest basis
 
@@ -133,6 +158,8 @@ The full guide, with every option, examples, what each step costs and what to do
 | `serve [--port 8000]` | The web app. |
 | `derange --corpus NAME [--top 10] [--knockouts 30]` | The weakest basis under what matters most. No Claude calls. |
 | `ask "question" [--corpus NAME]` | The Oracle from the command line. |
+| `mutate propose\|merge\|split\|show\|approve\|reject\|undo` | Merge or split concepts; previews, applied only on approval. Offline except `split --claude`. |
+| `question [--corpus NAME] [--limit 10] [--kind K] [--list]` | Answer the Question engine's questions; approve each proposal by typing your name. `--pending`, `--approve ID --by NAME`, `--reject ID`, `--revoke ID`. No Claude calls unless you answer in words. |
 | `p1 ...` | The paused Prototype 1 app (patch review, Refactorer, Breaker, Chainer, Evolver): [docs/prototype1.md](docs/prototype1.md). |
 
 ## Adding a corpus
@@ -159,6 +186,8 @@ Splitters: `paragraphs` (one text file, short paragraphs merged), `documents` (a
 | `androidmirror/mirror/derange.py` | Derange: the weakest basis under the most important subgraphs |
 | `androidmirror/mirror/benchmark.py` | The planted-subject benchmark |
 | `androidmirror/mirror/build.py`, `store.py`, `ask.py` | The pipeline, the read views, the Oracle |
+| `androidmirror/mirror/mutate.py`, `mutate_api.py` | The mutate engine and its routes |
+| `androidmirror/mirror/question.py`, `answers.py` | The Question engine; approved answers and how they amend a Mirror |
 | `androidmirror/server.py`, `web/index.html` | The app |
 | `androidmirror/p1_*`, `refactor.py`, `breaker.py`, `chainer.py`, `evolver/` | Prototype 1, paused |
 
