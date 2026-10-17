@@ -78,6 +78,7 @@ python -m androidmirror build --corpus fomc</pre>
       <button data-tab="causal">Causal</button>
       <button data-tab="ask">Ask</button>
       <button data-tab="face">Face</button>
+      <button data-tab="derange">Derange</button>
     </nav>
     <section id="node" class="on"><p class="muted">Click a node to see what it is, what the Mirror infers about it, and the passages it was built from.</p></section>
     <section id="knowledge"></section>
@@ -86,6 +87,7 @@ python -m androidmirror build --corpus fomc</pre>
       <div class="row"><input id="question" style="flex:1" placeholder="Ask the Mirror a question"><button class="b primary" id="askbtn">Ask</button></div>
       <div id="answer"></div>
     </section>
+    <section id="derange"><p class="muted">Where the subject's worldview rests on the least, under what matters most in it.</p></section>
     <section id="face">
       <p class="muted">The Major Arcana card the Mirror's two graphs most resemble, read from both its knowledge graph and the subject's causal model.</p>
       <div class="row"><select id="ffocus"></select><button class="b" id="frun">Read</button></div>
@@ -325,6 +327,44 @@ async function runExplain() {
   } catch (err) { fail(out, err); }
 }
 
+// ---------- derange ----------
+let derangeFor = null;
+async function loadDerange() {
+  const el = $('#derange');
+  if (derangeFor === corpus) return;
+  derangeFor = corpus;
+  el.innerHTML = '<p class="muted">Knocking out the thinnest supports and re-fitting (no Claude calls)…</p>';
+  try {
+    const d = await api('/api/derange');
+    Object.assign(labels, d.labels);
+    const n = (k, w) => `${k} ${w}${k === 1 ? '' : 's'}`;
+    const nodeLink = id => `<button class="link" data-node="${esc(id)}">${lbl(id)}</button>`;
+    const subTable = (rows, what) => rows.length ? `<table><tr><th>${what}</th><th>Weight</th><th>Size</th><th>Thinnest support</th></tr>${rows.map(r => `<tr class="click" data-node="${esc(r.id)}">
+      <td>${esc(r.label)}</td><td>${r.importance}</td><td>${r.size}</td><td class="${r.weakest && r.weakest.strength <= 1 ? 'neg' : ''}">${r.weakest ? n(r.weakest.strength, 'passage') : '<span class="muted">nothing single</span>'}</td></tr>`).join('')}</table>` : '<p class="muted">Nothing to look at yet.</p>';
+    const causalCard = f => `<div class="card"><div><b>${esc(f.probe)}</b></div>
+      <div class="small muted">Score ${f.score} · rests on ${n(f.strength, 'passage')}${f.basis.some(b => b.sign_conflict) ? ' · <span class="neg">also said the other way round</span>' : ''}${f.basis.some(b => b.open) ? ' · may run only through another path' : ''}</div>
+      ${f.basis.map(b => `<div class="small click" data-edge="${esc(b.src)}|${esc(b.dst)}">${lbl(b.src)} → ${lbl(b.dst)} <span class="${b.sign > 0 ? 'pos' : 'neg'}">${b.sign > 0 ? 'raises' : 'lowers'}</span> · ${n(b.weight, 'passage')}</div>`).join('')}
+      ${f.ends.map(h => `<div class="small">Under ${nodeLink(h.end)} (urged in ${n(h.importance, 'passage')}): ${h.lost_labels.length ? `${h.lost_labels.map(esc).join(', ')} would no longer act on it` : ''}${h.lost_labels.length && h.changed.length ? '; ' : ''}${h.changed.length ? `${h.changed.map(c => esc(c.label)).join(', ')} would act on it differently` : ''} <span class="muted">(${h.lost.length + h.changed.length} of ${h.of})</span></div>`).join('')}
+      ${f.claims_fall.length ? `<div class="small">Claims that would stop holding: ${f.claims_fall.map(esc).join('; ')}</div>` : ''}
+      ${f.now_drawn.length ? `<div class="small">Without it the model would draw ${f.now_drawn.map(esc).join(', ')} instead.</div>` : ''}
+      ${f.against.length ? `<div class="small neg">It outweighs: ${f.against.map(esc).join('; ')}</div>` : ''}
+      <details><summary class="small muted">Quotes</summary>${f.basis.flatMap(b => b.evidence).map(evidenceLine).join('')}</details></div>`;
+    const factCard = f => `<div class="card"><div><b>${esc(f.probe)}</b></div>
+      <div class="small muted">Score ${f.score} · rests on ${n(f.strength, 'passage')}${f.denied ? ' · <span class="neg">also denied</span>' : ''}${f.against.length ? ` · <span class="neg">${f.against.map(a => esc(a.replace(/_/g, ' '))).join(', ')}</span>` : ''}</div>
+      ${f.concepts.map(h => `<details><summary class="small">Under ${nodeLink(h.concept)}: ${h.n_lost} of ${h.of} held facts would stop following</summary>${h.lost.map(t => `<div class="small">${esc(t)}</div>`).join('')}</details>`).join('')}
+      ${f.evidence.map(quote).join('')}</div>`;
+    el.innerHTML = `<p>Every arrow and fact goes back to passages. Derange looks for little support under a lot of weight: it knocks out the thinnest support under what matters most (the subject's ends in the causal model, the concepts the corpus is most about), re-fits, and shows what would fall. It only reads; nothing here changes the Mirror. Each finding ends in the question it raises.</p>
+      <h4>Causal: the subject's ends</h4><p class="small muted">Weight: passages that urge more or less of it. Size: things that act on it in the subject's model. Thinnest support: the fewest passages whose loss would change how something acts on it.</p>
+      ${subTable(d.causal.subgraphs, 'End')}
+      ${d.causal.findings.map(causalCard).join('') || '<p class="muted">No single support holds up much of the causal model.</p>'}
+      <h4>Conceptual: the main concepts</h4><p class="small muted">Weight: passages that mention it. Size: facts the subject holds about it, stated or inferred.</p>
+      ${subTable(d.conceptual.subgraphs, 'Concept')}
+      ${d.conceptual.findings.map(factCard).join('') || '<p class="muted">No single fact holds up much of what is held.</p>'}
+      <div id="dptext"></div>
+      <p class="muted small">Score: the share of each important subgraph that falls, times its weight, per passage of support. ${d.stats.knocked_out} candidate supports were knocked out and re-checked; <code>python -m androidmirror derange</code> prints the same list.</p>`;
+  } catch (err) { derangeFor = null; fail(el, err); }
+}
+
 // ---------- ask ----------
 $('#askbtn').onclick = async () => {
   const out = $('#answer'); out.innerHTML = '<p class="muted">Thinking…</p>';
@@ -437,13 +477,13 @@ $('#ffocus').onchange = loadFace;
 document.addEventListener('click', e => {
   const t = e.target.closest('[data-passage],[data-node],[data-edge],[data-holds]'); if (!t) return;
   if (t.dataset.passage) {
-    const box = t.closest('#causal') ? $('#edgeptext') : t.closest('#ask') ? $('#askp') : t.closest('#knowledge') ? $('#hout') : $('#ptext');
+    const box = t.closest('#causal') ? $('#edgeptext') : t.closest('#derange') ? $('#dptext') : t.closest('#ask') ? $('#askp') : t.closest('#knowledge') ? $('#hout') : $('#ptext');
     showPassage(t.dataset.passage, box);
   } else if (t.dataset.node) showNode(t.dataset.node);
   else if (t.dataset.edge) { const [a, b] = t.dataset.edge.split('|'); tab('causal'); showEdge(a, b); }
   else if (t.dataset.holds) { const [s, r, o] = t.dataset.holds.split('|'); tab('knowledge'); setTimeout(() => checkHolds(s, r, o).catch(err => fail($('#hout'), err)), 0); }
 });
-document.querySelectorAll('nav button').forEach(b => b.onclick = () => tab(b.dataset.tab));
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => { tab(b.dataset.tab); if (b.dataset.tab === 'derange') loadDerange(); });
 document.querySelectorAll('#layers button').forEach(b => b.onclick = () => {
   document.querySelectorAll('#layers button').forEach(x => x.classList.remove('sel')); b.classList.add('sel'); layer = b.dataset.layer; drawGraph();
 });
@@ -464,6 +504,7 @@ async function refresh() {
   await drawGraph();
   causalData = null;
   loadKnowledge(); loadCausal(); loadFace();
+  derangeFor = null; if ($('#derange').classList.contains('on')) loadDerange();
 }
 refresh().catch(err => $('#stat').textContent = err.message);
 </script>

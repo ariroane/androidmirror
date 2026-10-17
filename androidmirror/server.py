@@ -16,6 +16,7 @@ from pydantic import BaseModel
 
 from . import archetypes, llm
 from .mirror import ask as oracle
+from .mirror import derange
 from .mirror.build import mirror_dir
 from .mirror.corpus import SPECS
 from .mirror.store import Mirror
@@ -114,6 +115,14 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
         if x not in m.nodes or y not in m.nodes:
             raise HTTPException(400, "both ends must be concepts of the Mirror")
         return m.explain(x, y)
+
+    @app.get("/api/derange")
+    def derange_(corpus: str | None = None) -> dict:
+        m = get(corpus)
+        if not hasattr(m, "derange"):
+            root = mirror_dir(data_dir, m.meta["corpus"]["id"])
+            m.derange = derange.saved(root) or derange.report(root, m)
+        return {**m.derange, "labels": {n: m.label(n) for n in m.nodes}}
 
     @app.post("/api/ask")
     def ask(a: Ask) -> dict:
