@@ -27,6 +27,11 @@ They become constraints on the subject's model:
 Only the subject's own judgments count (attribution self, register describes or
 urges). Reported and entertained views are kept and shown, never fitted.
 
+Answers the user approved through the Question engine (answers.py) arrive as
+judgments of their own (register "answers") and as rulings on a constraint.
+A constraint with an answer behind it is pinned: the fit takes it first. A
+retracted one stays on record with no weight.
+
 Values are kept apart: what the passage urges or praises ("be free of anger")
 says what the subject wants, not how things work (review recommendation R3).
 """
@@ -40,6 +45,7 @@ from . import codebook as cb
 from .coding import HELD_REGISTERS
 from .schema import EVALUATIONS, SELF
 
+ANSWERED = "answers"  # the register of a judgment the user gave in answer to a question
 POSITIVE = {"causes", "means_end", "intervention", "screens_off"}
 
 
@@ -111,6 +117,7 @@ def constraints(judgments: list[dict[str, Any]], exclude: set[str] | frozenset =
 
     Every judgment, held or not, is listed in the constraint it bears on; only held ones add weight."""
     groups: dict[tuple, dict[str, Any]] = {}
+    rulings = {j["target"]: j for j in judgments if j["kind"] == "ruling" and j["passage"] not in exclude}
 
     def add(key: tuple, j: dict[str, Any], sign: int | None, role: str) -> None:
         rec = groups.setdefault(key, {"type": key[0], "x": key[1], "y": key[2], "z": key[3] if len(key) > 3 else "",
@@ -127,6 +134,8 @@ def constraints(judgments: list[dict[str, Any]], exclude: set[str] | frozenset =
         if j["passage"] in exclude:
             continue
         k = j["kind"]
+        if k == "ruling":
+            continue
         if k == "screens_off":
             add(("reaches", j["y"], j["z"]), j, j["sign"], "y acts on z")
             add(("only_through", j["x"], j["y"], j["z"]), j, None, "x only through y")
@@ -150,6 +159,20 @@ def constraints(judgments: list[dict[str, Any]], exclude: set[str] | frozenset =
         rec["kinds"] = dict(rec["kinds"])
         rec["signs"] = {str(k): v for k, v in rec["signs"].items()}
         rec["held"] = rec["weight"] > 0
+        answers = [e for e in held if e["register"] == ANSWERED]
+        rec["pinned"] = bool(answers)
+        if answers and rec["type"] == "reaches":
+            rec["sign"] = answers[-1]["sign"] or rec["sign"]
+        r = rulings.get(rec["id"])
+        if r:
+            rec["ruling"] = {"ruling": r["ruling"], "passage": r["passage"], "locator": r["locator"], "quote": r["quote"]}
+            if r["ruling"] == "retract":
+                rec.update(weight=0, held=False, pinned=False, retracted=True)
+            else:
+                rec["pinned"] = True
+                rec["sign"] = r["sign"] or rec["sign"]
+                rec["direct"] = rec["direct"] or r["direct"]
+                rec["indirect"] = r["indirect"] and not r["direct"]
         out.append(rec)
     return sorted(out, key=lambda r: (-r["weight"], r["id"]))
 
