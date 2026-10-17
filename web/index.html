@@ -61,6 +61,7 @@
     <div id="layers">
       <button class="b sel" data-layer="kg">Knowledge graph</button>
       <button class="b" data-layer="causal">Causal model</button>
+      <button class="b" data-layer="pag">Hidden causes</button>
     </div>
     <div id="cy"></div>
     <div id="legend"></div>
@@ -148,6 +149,8 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt
 const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
 const store = { get(k){ try { return localStorage.getItem(k); } catch { return null; } }, set(k,v){ try { localStorage.setItem(k,v); } catch {} } };
 let corpus = null, cy = null, layer = 'kg', labels = {}, causalData = null;
+const pagOpts = {background: true, inseparable: false};
+const pagQuery = () => `background=${pagOpts.background}&inseparable=${pagOpts.inseparable}`;
 const q = () => corpus ? `corpus=${encodeURIComponent(corpus)}` : '';
 const api = async (path, body) => {
   const url = path + (path.includes('?') ? '&' : '?') + q();
@@ -220,10 +223,11 @@ let graphCache = null;
 async function drawGraph(keepPositions) {
   let g;
   if (keepPositions && graphCache && graphCache.layer === layer) g = graphCache;
-  else { try { g = graphCache = await api(`/api/graph?layer=${layer}`); } catch (err) { return; } }
+  else { try { g = graphCache = await api(`/api/graph?layer=${layer}${layer === 'pag' ? '&' + pagQuery() : ''}`); } catch (err) { return; } }
   g.nodes.forEach(n => labels[n.id] = n.label);
   const els = g.nodes.map(n => ({data:{id:n.id, label:n.label, ev:n.evaluation||'none', size:12 + Math.min(26, Math.sqrt(n.support||1) * 3), variable:n.variable ? 1 : 0, value:n.value || 0}}));
   g.edges.forEach(e => {
+    if (layer === 'pag') { els.push({data:{id:e.id, source:e.source, target:e.target, label:'', status:'pag', kind:e.kind, sm:e.marks[0], tm:e.marks[1], ins:e.inseparable ? 1 : 0, sign:0, w:e.kind === 'hidden_cause' ? 2 : 1.5}}); return; }
     if (layer === 'kg') { els.push({data:{id:e.id, source:e.source, target:e.target, label:relWord(e.rel, e.target), status:'kg', sign:0, w:1 + Math.min(4, Math.log2(1 + (e.support||1)))}}); return; }
     els.push({data:{id:e.id, source:e.source, target:e.target, label:String(e.weight), status:e.status, sign:e.sign, w:e.status === 'common_cause' ? 2 : 1 + Math.min(6, 1.5 * Math.log2(1 + e.weight))}});
   });
@@ -239,16 +243,22 @@ async function drawGraph(keepPositions) {
       {selector:'edge[sign = -1]', style:{'line-color':css('--neg'),'target-arrow-color':css('--neg'),'target-arrow-shape':'tee'}},
       {selector:'edge[status = "open"]', style:{'line-style':'dashed'}},
       {selector:'edge[status = "common_cause"]', style:{'line-style':'dotted','line-color':'#b05fd8','target-arrow-color':'#b05fd8','source-arrow-color':'#b05fd8','target-arrow-shape':'triangle','source-arrow-shape':'triangle','label':''}},
+      {selector:'edge[status = "pag"]', style:{'line-color':css('--line'),'source-arrow-shape':e => MARK_SHAPE[e.data('sm')],'target-arrow-shape':e => MARK_SHAPE[e.data('tm')],
+        'source-arrow-fill':e => e.data('sm') === 'circle' ? 'hollow' : 'filled','target-arrow-fill':e => e.data('tm') === 'circle' ? 'hollow' : 'filled','source-arrow-color':css('--line'),'target-arrow-color':css('--line'),'arrow-scale':1.2}},
+      {selector:'edge[kind = "hidden_cause"]', style:{'line-style':'dotted','line-color':'#b05fd8','source-arrow-color':'#b05fd8','target-arrow-color':'#b05fd8'}},
+      {selector:'edge[kind = "may_lead"], edge[kind = "open"]', style:{'line-color':'#d08a00','source-arrow-color':'#d08a00','target-arrow-color':'#d08a00'}},
+      {selector:'edge[ins = 1]', style:{'line-style':'dashed','opacity':0.6}},
       {selector:'.hl', style:{'border-width':4,'border-color':'#e0a800'}},
     ]});
     cy.on('tap', 'node', e => showNode(e.target.id()));
-    cy.on('tap', 'edge', e => { if (layer !== 'causal') return; tab('causal');
+    cy.on('tap', 'edge', e => { if (layer === 'pag') { tab('causal'); showPagEdge(e.target.data('source'), e.target.data('target')); return; }
+      if (layer !== 'causal') return; tab('causal');
       if (e.target.data('status') === 'common_cause') showCommon(e.target.id()); else showEdge(e.target.data('source'), e.target.data('target')); });
   }
   cy.elements().remove(); cy.add(els);
   if (pos && cy.nodes().every(n => pos[n.id()])) cy.layout({name:'preset', positions:n => pos[n.id()], fit:false}).run();
   else cy.layout({name:'cose', animate:false, randomize:true, nodeRepulsion:() => 500000, idealEdgeLength:() => 100, nodeOverlap:40, gravity:0.3, numIter:2500, padding:40}).run();
-  $('#legend').innerHTML = layer === 'kg'
+  $('#legend').innerHTML = layer === 'pag' ? PAG_LEGEND(g.valid) : layer === 'kg'
     ? `Dot colour: whether ${W()} calls it <span class="pos">good</span>, <span class="neg">bad</span> or indifferent (purple: more than one; grey: never says). Lines: facts ${W()} states as true${g.hidden ? `; ${g.hidden} less-connected ideas hidden` : ''}.`
     : `What ${W()} says causes what. <span class="pos">Green arrow</span>: more of one brings more of the other; <span class="neg">red bar</span>: brings less. Number and thickness: how many passages say it. Dashed: may work only by way of other steps. <span style="color:#b05fd8">Purple dotted, arrows at both ends</span>: the two go together, but what ${W()} says about which drives which clashes, so the Mirror shows a shared cause ${W()} never names. Double ring: something ${W()} wants <span class="pos">more</span> or <span class="neg">less</span> of.`;
 }
@@ -403,6 +413,7 @@ async function loadCausal() {
         <td>${esc(e.src_label)} → ${esc(e.dst_label)}</td><td class="${e.sign > 0 ? 'pos' : 'neg'}">${e.sign > 0 ? 'raises' : 'lowers'}</td><td>${e.weight}</td>
         <td class="small muted">${Object.keys(e.kinds).map(k => esc(KIND_WORD[k] || k)).join(', ')}${e.direct ? ', directly' : ''}${e.open ? `; may work only by way of ${e.open.labels.map(esc).join(' → ')}` : ''}${e.note ? '; ' + esc(e.note) : ''}</td></tr>`).join('')}</table>
       ${c.feedback.length ? `<p class="small">Each said to affect the other (the model can’t show circles): ${c.feedback.map(f => `${lbl(f.pair[0])} ⇄ ${lbl(f.pair[1])}`).join(', ')}</p>` : ''}
+      <div id="pagbox"></div>
       <h4>Shared causes ${W()} never names (${(c.common_causes || []).length})</h4><p class="small muted">Places where what ${W()} says about cause and effect clashes. The side with more passages stays in the model as a link; the other side is not thrown away: its two ideas are joined by a two-way link, meaning they go together because of something ${W()} never names. An answer in Questions, a merge or split in Mutate, or combining with another Mirror in Transmutate can resolve one.</p>
       ${(c.common_causes || []).map(commonCard).join('') || '<p class="muted">None.</p>'}
       ${by('rejected').filter(x => !x.common_cause).length ? `<h4>Claims outweighed (${by('rejected').filter(x => !x.common_cause).length})</h4>${by('rejected').filter(x => !x.common_cause).map(x => constraintCard(x)).join('')}` : ''}
@@ -417,7 +428,50 @@ async function loadCausal() {
     const nodes = Object.keys(c.labels);
     if (c.edges.length) { $('#ex').value = c.edges[0].src; $('#ey').value = c.edges[0].dst; }
     $('#ebtn').onclick = runExplain;
+    loadPag();
   } catch (err) { fail(el, err); }
+}
+
+// ---------- hidden-cause view (a PAG) ----------
+const MARK_SHAPE = {arrow:'triangle', tail:'none', circle:'circle'};
+const PAG_LEGEND = valid => `Every way the links can run, if each two-way link means something ${W()} never names drives both, keeping only what all of them agree on. Arrowhead: that end does not lead to the other. No mark: that end leads to the other (perhaps by way of other ideas). <span style="color:#d08a00">Orange, open circle</span>: could be either. <span style="color:#b05fd8">Purple dotted, arrowheads at both ends</span>: neither leads to the other; something unnamed drives both.${pagOpts.inseparable ? ' Faint dashed: a pair nothing can pull apart, which ' + W() + ' never links.' : ''}${valid ? '' : ' <span class="neg">Some pairs that nothing can pull apart are left out, so this is not yet a complete picture (see the Causal tab).</span>'}`;
+function pagText(e) {
+  const a = esc(lbl(e.a)), b = esc(lbl(e.b));
+  if (e.kind === 'leads_to') return e.marks[0] === 'tail' ? `${a} leads to ${b}` : `${b} leads to ${a}`;
+  if (e.kind === 'hidden_cause') return `${a} and ${b}: neither leads to the other; something unnamed drives both`;
+  if (e.kind === 'may_lead') { const [x, y] = e.marks[0] === 'circle' ? [a, b] : [b, a]; return `${y} does not lead to ${x}; ${x} may lead to ${y}, or something unnamed drives both`; }
+  return `${a} and ${b} are linked, but which way is open`;
+}
+async function loadPag() {
+  const box = $('#pagbox'); if (!box) return;
+  try {
+    const v = await api(`/api/pag?${pagQuery()}`);
+    Object.assign(labels, v.labels);
+    const st = v.stats, chain = p => p.map(n => esc(lbl(n))).join(' → ');
+    const open = v.edges.filter(e => e.kind === 'may_lead' || e.kind === 'open');
+    box.innerHTML = `<h4>Hidden-cause check</h4>
+      <p class="small">Reads each two-way link as something ${W()} never names driving both ideas, and asks what every cause-and-effect picture of that kind agrees on. Shown on the canvas as “Hidden causes”. This is a view only: the model itself does not change.</p>
+      <div class="row small"><label><input type="checkbox" id="pagbk" ${pagOpts.background ? 'checked' : ''}> Use the directions ${W()} states</label>
+      <label><input type="checkbox" id="pagins" ${pagOpts.inseparable ? 'checked' : ''}> Add pairs nothing can pull apart (${st.inseparable})</label></div>
+      <table><tr><td>Leads to</td><td>${st.leads_to || 0}</td><td class="small muted">one end leads to the other, perhaps by way of other ideas</td></tr>
+      <tr><td>Something unnamed drives both</td><td>${st.hidden_cause || 0}</td><td class="small muted">neither leads to the other</td></tr>
+      <tr><td>Could be either</td><td class="${open.length ? 'neg' : ''}">${open.length}</td><td class="small muted">the pictures disagree on at least one end</td></tr>
+      <tr><td>Two-way links that become “leads to”</td><td>${st.converted}</td><td class="small muted">a chain of links already runs from one to the other, so in this view the pair is drawn as one leading to the other</td></tr></table>
+      ${v.valid ? '' : `<p class="small neg">${st.inseparable} pairs of ideas can’t be pulled apart once two-way links are read as hidden causes, but ${W()} never links them, so they are left out. Until they are added, this is not a complete picture: some marks may be wrong. Tick the box above to add them.</p>`}
+      ${open.length ? `<details><summary class="small">Could be either (${open.length})</summary>${open.map(e => `<div class="small">${pagText(e)}</div>`).join('')}</details>` : ''}
+      ${v.converted.length ? `<details><summary class="small">Two-way links that become “leads to” (${v.converted.length})</summary>${v.converted.map(x => `<div class="small">${esc(lbl(x.src))} leads to ${esc(lbl(x.dst))}: ${chain(x.chain)}${x.also_arrow ? ` <span class="muted">(${W()} also says this directly)</span>` : ''}</div>`).join('')}</details>` : ''}
+      ${v.inseparable.length ? `<details><summary class="small">Pairs nothing can pull apart (${v.inseparable.length})</summary><p class="small muted">Each pair is tied by a run of ideas where links meet head-on, each leading on to one of the pair. Holding those ideas fixed opens the route through the hidden causes; leaving them free leaves the chain open. ${W()} never links these pairs; most are already joined by a chain of links.</p>${v.inseparable.map(x => `<div class="small">${esc(lbl(x.a))} and ${esc(lbl(x.b))}${x.marks[0] === 'tail' ? ` (${esc(lbl(x.a))} leads to ${esc(lbl(x.b))})` : x.marks[1] === 'tail' ? ` (${esc(lbl(x.b))} leads to ${esc(lbl(x.a))})` : ' <span class="neg">(not otherwise connected)</span>'}: tied by ${x.path.map(n => esc(lbl(n))).join(' · ')}</div>`).join('')}</details>` : ''}
+      <div id="pagout"></div>`;
+    $('#pagbk').onchange = e => { pagOpts.background = e.target.checked; loadPag(); if (layer === 'pag') drawGraph(); };
+    $('#pagins').onchange = e => { pagOpts.inseparable = e.target.checked; loadPag(); if (layer === 'pag') drawGraph(); };
+  } catch (err) { fail(box, err); }
+}
+async function showPagEdge(a, b) {
+  if (!causalData) await loadCausal();
+  const v = await api(`/api/pag?${pagQuery()}`), e = v.edges.find(x => x.a === a && x.b === b), out = $('#pagout');
+  if (!e || !out) return;
+  out.innerHTML = `<div class="card small"><b>${pagText(e)}</b>${e.inseparable ? `<p class="muted">${W()} never links these two; they are here because nothing can pull them apart.</p>` : ''}</div>`;
+  out.scrollIntoView({behavior:'smooth', block:'start'});
 }
 function commonCard(b) {
   const head = b.via ? `${esc(b.a_label)} and ${esc(b.b_label)}: ${esc(b.via_label)} drives both` : `${esc(b.a_label)} ↔ ${esc(b.b_label)}`;

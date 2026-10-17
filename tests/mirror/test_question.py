@@ -253,6 +253,11 @@ def test_a_shared_cause_can_be_settled_or_named(built):
     client = TestClient(create_app(root.parent.parent))
     g = client.get("/api/graph", params={"layer": "causal"}).json()
     assert {(e["source"], e["target"]) for e in g["edges"] if e["status"] == "common_cause"} == {("epsilon", "gamma")}
+    # in the hidden-cause view the link sits beside the chain gamma -> ... -> epsilon, so it reads "gamma leads to epsilon"
+    pv = client.get("/api/pag").json()
+    assert [(x["src"], x["dst"]) for x in pv["converted"]] == [("gamma", "epsilon")] and pv["labels"]["gamma"] == "gamma"
+    pg = client.get("/api/graph", params={"layer": "pag", "background": False}).json()
+    assert pg["edges"] and all(len(e["marks"]) == 2 for e in pg["edges"])
     view = client.get("/api/causal").json()["common_causes"][0]
     assert view["a_label"] == "epsilon" and view["claim_views"][0]["text"] == "epsilon raises gamma"
     r = client.post("/api/ask", json={"question": "what does gamma do?"}).json()

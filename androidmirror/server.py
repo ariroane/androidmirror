@@ -83,8 +83,9 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
                 "values": len(m.values)}
 
     @app.get("/api/graph")
-    def graph(layer: str = "kg", limit: int = 120, corpus: str | None = None) -> dict:
-        return get(corpus).graph(layer, limit)
+    def graph(layer: str = "kg", limit: int = 120, background: bool = True, inseparable: bool = False,
+              corpus: str | None = None) -> dict:
+        return get(corpus).graph(layer, limit, background, inseparable)
 
     @app.get("/api/node/{nid}")
     def node(nid: str, corpus: str | None = None) -> dict:
@@ -112,6 +113,10 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
     @app.get("/api/causal")
     def causal(corpus: str | None = None) -> dict:
         return get(corpus).causal_view()
+
+    @app.get("/api/pag")
+    def pag(background: bool = True, inseparable: bool = False, corpus: str | None = None) -> dict:
+        return get(corpus).pag(background, inseparable)
 
     @app.get("/api/edge")
     def edge(src: str, dst: str, corpus: str | None = None) -> dict:

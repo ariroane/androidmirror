@@ -12,6 +12,7 @@ import networkx as nx
 from ..ontology import GraphSnapshot
 from . import answers
 from .causal import explain, graph_of
+from .causal.pag import pag
 from .kg import KnowledgeBase, fact_key
 from .schema import EVALUATIONS, SELF, archetype_type
 
@@ -52,7 +53,14 @@ class Mirror:
 
     # ---------- the canvas ----------
 
-    def graph(self, layer: str = "kg", limit: int = 120) -> dict[str, Any]:
+    def graph(self, layer: str = "kg", limit: int = 120, background: bool = True,
+              inseparable: bool = False) -> dict[str, Any]:
+        if layer == "pag":
+            v = self.pag(background, inseparable)
+            nodes = [self._node_view(n) for n in v["nodes"]]
+            edges = [{"id": f"{e['a']}~{e['b']}", "source": e["a"], "target": e["b"], "marks": e["marks"],
+                      "kind": e["kind"], "inseparable": e["inseparable"]} for e in v["edges"]]
+            return {"layer": layer, "nodes": nodes, "edges": edges, "valid": v["valid"]}
         if layer == "causal":
             weight: Counter = Counter()
             for e in self.causal.get("edges", []):
@@ -200,6 +208,19 @@ class Mirror:
                 "tensions": c.get("tensions", []), "feedback": c.get("feedback", []), "isolated": c.get("isolated", []),
                 "values": [{**v, "label": self.label(v["concept"])} for v in self.values],
                 "unresolved": self.unresolved[:200], "n_unresolved": len(self.unresolved), "labels": labels}
+
+    def pag(self, background: bool = True, inseparable: bool = False) -> dict[str, Any]:
+        """The hidden-cause view of the causal model (a PAG), computed on demand; it never changes the model."""
+        cache = self.__dict__.setdefault("_pag", {})
+        if (background, inseparable) not in cache:
+            v = pag(self.causal, background, inseparable)
+            names = {n for e in v["edges"] for n in (e["a"], e["b"])}
+            v["nodes"] = sorted(names)
+            for x in v["converted"] + v["inseparable"]:
+                names |= set(x.get("chain", []) + x.get("path", []))
+            v["labels"] = {n: self.label(n) for n in names}
+            cache[(background, inseparable)] = v
+        return cache[(background, inseparable)]
 
     def edge(self, a: str, b: str) -> dict[str, Any]:
         e = next((x for x in self.causal.get("edges", []) if (x["src"], x["dst"]) == (a, b)), None)
