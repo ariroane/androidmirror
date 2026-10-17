@@ -6,7 +6,8 @@ relation names grouped into families, and signed causal edges. `match` counts
 every motif in a graph snapshot and compares the count with a null model that
 shuffles node types across nodes and causal edge attributes (sign, strength,
 confidence) across edges while keeping both graphs' shape. A card wins only if
-its patterns occur more than that shuffle would produce, and by a clear margin.
+its patterns occur more than that shuffle would produce; the top-scoring card is
+shown even when a runner-up is close.
 
 Read-only: this module takes a `GraphSnapshot` and never proposes or applies
 anything.
@@ -409,7 +410,7 @@ def match(snap: GraphSnapshot, focus: str | None = None, path: str | Path = DEFA
     scores.sort(key=lambda r: (-r["score"], r["card"]["n"]))
     top, second = scores[0], scores[1]
     margin = top["score"] - second["score"]
-    undecided = top["score"] < cfg["tau"] or margin < cfg["delta"]
+    undecided = top["score"] < cfg["tau"]  # a close runner-up doesn't matter: the top card is shown
 
     def card_info(r: dict[str, Any]) -> dict[str, Any]:
         c = r["card"]

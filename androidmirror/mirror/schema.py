@@ -47,11 +47,12 @@ RELATIONS: dict[str, dict] = {
     "is_a": {"gloss": "is a kind of / is an instance of / is evaluated as (object may be good, bad, indifferent)",
              "transitive": True, "family": "PART"},
     "part_of": {"gloss": "is a part or component of", "transitive": True, "family": "PART"},
-    "same_as": {"gloss": "is another name for", "symmetric": True, "transitive": True},
+    "same_as": {"gloss": "is another name for", "symmetric": True, "transitive": True, "family": "PART"},
     "opposes": {"gloss": "is the contrary of / works against", "symmetric": True, "inheritable": True,
                 "family": "OPPOSE"},
-    "requires": {"gloss": "cannot exist or happen without", "transitive": True, "inheritable": True},
-    "accords_with": {"gloss": "is in accordance with", "inheritable": True},
+    "requires": {"gloss": "cannot exist or happen without", "transitive": True, "inheritable": True,
+                 "family": "PART"},
+    "accords_with": {"gloss": "is in accordance with", "inheritable": True, "family": "EMBODY"},
     "expresses": {"gloss": "shows itself as / is a sign of", "family": "EMBODY"},
     "exemplifies": {"gloss": "(an agent) displays or embodies", "domain": {"agent"}, "family": "EMBODY"},
     "practices": {"gloss": "(an agent) carries out", "domain": {"agent"}, "family": "EMBODY"},
@@ -61,7 +62,7 @@ RELATIONS: dict[str, dict] = {
                "down_object": True},
     "rejects": {"gloss": "(an agent) repudiates, avoids", "domain": {"agent"}, "family": "OPPOSE",
                 "down_object": True},
-    "related_to": {"gloss": "escape hatch: any other link; keep the original wording"},
+    "related_to": {"gloss": "escape hatch: any other link; keep the original wording", "family": "ASSOCIATE"},
 }
 
 
