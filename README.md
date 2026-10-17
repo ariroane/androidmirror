@@ -84,6 +84,8 @@ The causal layer is not a model of the world, and not Claude's model of the subj
 
 The Causal tab lists every constraint with its status, the tensions, the pairs said in both directions, and the subject's values.
 
+**Hidden-cause view (a PAG).** Reading each two-way link as a hidden common cause makes the model a graph with hidden variables, and the *Hidden causes* layer shows its partial ancestral graph: every mark all such graphs agree on, with an open circle where they disagree (`androidmirror/mirror/causal/pag.py`). Two steps: the model is made ancestral (a two-way link beside a chain of arrows becomes an arrow, since one end already leads to the other), then FCI's orientation rules run on it, with the directions the subject's arrows imply and their held "makes no difference" claims fed in as background knowledge (a toggle). A valid PAG must also link every pair no set of ideas can separate; the subject never links these, so they are listed but left out unless you tick the box, and the view says it is incomplete until then. It is a view only: the fitted model, and *Trace*, are unchanged.
+
 **What it can answer.** *Trace* in the Causal tab answers "what does more x do to y, in the subject's model?" with the paths and the passages behind each step, or "makes no difference (the subject says so)", or "not said".
 
 **Does the rest of the corpus predict a passage?** The model is fitted with one contiguous block of passages held out at a time (5 blocks), and each held-out claim is checked: said elsewhere too, not said but follows from the rest, nothing bears on it, opposite sign, or contradicted. Claims that *follow* without being said are the evidence that the judgments form one model rather than a list.
