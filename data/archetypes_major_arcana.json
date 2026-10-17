@@ -11,10 +11,11 @@
   },
   "relation_families": {
     "LINEAGE": ["learned_from", "taught", "mentored_by", "mentored", "inherited_from", "studied_under", "influenced_by"],
-    "EMBODY": ["exemplifies", "embodies", "practices", "displays", "shows", "expresses"],
+    "EMBODY": ["exemplifies", "embodies", "practices", "displays", "shows", "expresses", "accords_with"],
     "COMMIT": ["values", "believes_in", "holds", "strives_for", "aspires_to", "commits_to", "seeks"],
     "OPPOSE": ["opposes", "rejects", "resists", "avoids", "contrasts_with", "counters"],
-    "PART": ["part_of", "includes", "is_a", "contains", "member_of"]
+    "PART": ["part_of", "includes", "is_a", "contains", "member_of", "requires", "same_as"],
+    "ASSOCIATE": ["related_to"]
   },
   "settings": {"tau": 0.45, "delta": 0.15, "null_samples": 200, "seed": 7},
   "cards": [

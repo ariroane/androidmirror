@@ -220,3 +220,10 @@ def test_focus_and_unclassified_relations():
 def test_tiny_graph_is_undecided():
     r = run(snap({"a": V}, background=False))
     assert r["undecided"] and r["archetype"] is None
+
+
+def test_mirror_relations_are_all_read():
+    from androidmirror.mirror.schema import RELATIONS
+    family_of = archetypes.load_set()["_family_of"]
+    assert [r for r in RELATIONS if r not in family_of] == []
+    assert all(family_of[r] == spec["family"] for r, spec in RELATIONS.items())

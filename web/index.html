@@ -78,9 +78,9 @@ python -m androidmirror build --corpus fomc</pre>
       <button data-tab="causal">Causal</button>
       <button data-tab="ask">Ask</button>
       <button data-tab="questions">Questions</button>
-      <button data-tab="face">Face</button>
       <button data-tab="derange">Derange</button>
       <button data-tab="mutate">Mutate</button>
+      <button data-tab="face">Face</button>
     </nav>
     <section id="node" class="on"><p class="muted">Click a node to see what it is, what the Mirror infers about it, and the passages it was built from.</p></section>
     <section id="knowledge"></section>
@@ -467,7 +467,7 @@ async function loadFace() {
     const a = r.archetype;
     drawFace(r.undecided ? null : a, 0.45 + 0.55 * Math.min(1, r.margin / 0.4));
     let html = !a ? '<p class="muted">Too little here to read yet.</p>'
-      : r.undecided ? `<h3>Undecided</h3><p class="muted">No card stands out clearly. Closest: ${cardName(a)} (${a.score}) and ${cardName(r.runners_up[0])} (${r.runners_up[0].score}).</p>`
+      : r.undecided ? `<h3>Undecided</h3><p class="muted">No card's patterns stand out from chance yet. Closest: ${cardName(a)} (${a.score}) and ${cardName(r.runners_up[0])} (${r.runners_up[0].score}).</p>`
       : `<h3>${cardName(a)}</h3><p>${esc(a.theme)}${a.reversed ? ', with the signs turned around' : ''}. <span class="muted">Score ${a.score}, ahead of the next card by ${r.margin}.</span></p>`;
     if (a && !r.undecided) {
       html += '<h4>Why this card</h4>' + (r.evidence.length ? r.evidence.map((e, i) => `<div class="card"><div>${esc(e.text)} <span class="muted">${e.layer}, ${e.count} found</span></div>` +
