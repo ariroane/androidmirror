@@ -88,7 +88,7 @@ python -m androidmirror causal --corpus meditations --min-weight 2
 | `--min-weight N` | Fewest distinct passages a judgment must be made in to be fitted. Raising it keeps only what the subject says repeatedly | 1 |
 | `--folds N` | Blocks of passages for the held-out check | 5 |
 
-It prints the counts: judgments, arrows, claims that follow from the rest, denials that hold, and claims in tension.
+It prints the counts: judgments, arrows, claims that follow from the rest, denials that hold, and claims in tension (and how many of those are drawn as shared causes, x ↔ y).
 
 ## derange
 
@@ -180,7 +180,7 @@ Approved mutations are kept in `data/mirror/<corpus>/mutations/` with who approv
 
 ## question
 
-The Question engine asks about what the Mirror's graphs leave open (judgments in tension, signs the passages disagree on, arrows that may be shortcuts, unconnected concepts, inconsistencies, unevaluated concepts, values urged both ways), most important first. Answer with an option's number, or in your own words if your key is set. Each answer becomes a proposal and shows what approving it would change; type your name to approve it, `n` to reject it, or Enter to leave it waiting. Nothing changes without an approval, and approving re-fits the causal model (free).
+The Question engine asks about what the Mirror's graphs leave open (judgments in tension, which the app draws as shared causes the subject never names, signs the passages disagree on, arrows that may be shortcuts, unconnected concepts, inconsistencies, unevaluated concepts, values urged both ways), most important first. Answer with an option's number, or in your own words if your key is set. Each answer becomes a proposal and shows what approving it would change; type your name to approve it, `n` to reject it, or Enter to leave it waiting. Nothing changes without an approval, and approving re-fits the causal model (free).
 
 ```powershell
 python -m androidmirror question                          # 10 questions, one at a time
@@ -207,7 +207,7 @@ python -m androidmirror transmutate approve meditations fomc --keep 3 --keep 17
 
 - **Aligned concepts:** pairs with the same name (label or alias), plus Claude's pairs by meaning with `--claude`, plus yours. `--pair A=B` says B's concept is A's; `--opposite A=B` says it is A's contrary, and every sign through it flips. `--drop CONCEPT` (or `--drop A=B`) leaves a pair out. Each concept is paired at most once. Unpaired concepts keep their Mirror's name as a prefix, such as `fomc:inflation`.
 - **Both Mirrors say:** causal claims made in both corpora.
-- **Tensions that come from combining:** places where the Mirrors disagree that neither has on its own: opposite signs, a cycle made of one Mirror's arrow and the other's chain, a claim one makes that the other denies, a concept one calls good and the other bad, a value one urges and the other avoids. The fit takes the better-supported side and keeps the other as "in tension".
+- **Tensions that come from combining:** places where the Mirrors disagree that neither has on its own: opposite signs, a cycle made of one Mirror's arrow and the other's chain, a claim one makes that the other denies, a concept one calls good and the other bad, a value one urges and the other avoids. The fit takes the better-supported side and keeps the other as "in tension", drawn as a shared cause (x ↔ y). The proposal also lists the shared causes combining resolves (a clash in one Mirror the other settles), creates, and trimming removes.
 - **Proposed trims, numbered:** fitness asks whether a reader of half the combined corpus would still come away with each item. Each sample keeps every passage with probability `--share` (default 0.5) and re-fits the model; a claim survives if the re-fitted model still has a path of the same sign, a denial if it still holds, a fact if any passage holding it was kept. What survives less often than `--keep-at` (default 0.6) is proposed for trimming: in practice, what is said in only one passage and not implied by anything else. A strong claim that the model rejects is kept, so the tension stays visible. Views the subject only reports or entertains are trimmed too.
 
 Re-run `propose` as often as you like; it is free unless `--claude`, and replaces the previous proposal.

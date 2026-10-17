@@ -33,7 +33,7 @@ SYSTEM = """You are the voice of the Android Mirror: a reflection of {subject}'s
 Answer the question from that context, in plain modern English.
 - Cite passages by their locator in square brackets, e.g. [Book II, 1], for every claim you make.
 - Say how you know: "states" for stated facts, "it follows that" for inferred ones (name the rule if it helps), "urges" for prescriptions.
-- For causal questions, separate what the subject says outright from what follows from their model (a chain of their own judgments), and say where their judgments are in tension. What the subject urges is what they want, not how things work.
+- For causal questions, separate what the subject says outright from what follows from their model (a chain of their own judgments), and say where their judgments are in tension. A two-way link (x <-> y) means x and y go together because of a cause the subject never names: changing x by itself does not change y. What the subject urges is what they want, not how things work.
 - If the context does not cover the question, say so. Missing is "not found", never "denied".
 List the locators you cited and the node ids you relied on."""
 
@@ -76,12 +76,22 @@ def context(m: Mirror, nodes: list[str], max_passages: int = 4) -> dict[str, Any
         if c["held"] and (c["x"] in nodes or c["y"] in nodes or c["z"] in nodes) and c["evidence"]:
             e = next((x for x in c["evidence"] if x["held"]), c["evidence"][0])
             state = {"arrow": "in the model", "follows": "follows from the model", "holds": "in the model",
-                     "rejected": f"in tension with stronger judgments ({c.get('reason')})"}.get(c["status"], c["status"])
+                     "rejected": "read as a shared cause the subject never names (it clashes with stronger judgments)"
+                     if c.get("common_cause") else f"outweighed by stronger judgments ({c.get('reason')})"}.get(c["status"], c["status"])
             lines.append(f"[causal judgment, {c['weight']} passage(s), {state}] {m.say(c)} [{e['locator']}] \"{e['quote']}\"")
     for e in m.causal.get("edges", []):
         if e["src"] in nodes or e["dst"] in nodes:
             note = f"; may run only through {' -> '.join(lab(n) for n in e['open']['through'])}" if e["open"] else ""
             lines.append(f"[subject's model] {lab(e['src'])} {'raises' if e['sign'] > 0 else 'lowers'} {lab(e['dst'])}{note}")
+    for b in m.causal.get("common_causes", []):
+        if b["a"] in nodes or b["b"] in nodes:
+            if b["via"]:
+                lines.append(f"[subject's model, settled by the user] {lab(b['a'])} and {lab(b['b'])} go together because "
+                             f"{lab(b['via'])} drives both; neither drives the other")
+            else:
+                lines.append(f"[subject's model] {lab(b['a'])} <-> {lab(b['b'])}: they go together, but neither drives the "
+                             "other; something the subject never names drives both"
+                             + (" (settled by the user)" if b["settled"] else " (their claims about the two clash)"))
     lines = list(dict.fromkeys(lines))
     counts: Counter = Counter()
     for nid in nodes:
@@ -92,12 +102,27 @@ def context(m: Mirror, nodes: list[str], max_passages: int = 4) -> dict[str, Any
                                                for p in passages]}
 
 
+def shared_causes(m: Mirror, nodes: list[str]) -> list[dict[str, Any]]:
+    """The two-way links the answer touches, each with the Question engine's question that can settle it."""
+    from .question import _qid  # the question about a clashing claim is keyed by the claim's id
+
+    out = []
+    for b in m.causal.get("common_causes", []):
+        if b["via"] or not ({b["a"], b["b"]} & set(nodes)):
+            continue
+        claims = [m.constraint[i] for i in b["claims"] if i in m.constraint]
+        out.append({"id": b["id"], "a_label": m.label(b["a"]), "b_label": m.label(b["b"]), "settled": b["settled"],
+                    "claims": [m.say(c) for c in claims],
+                    "questions": [] if b["settled"] else [_qid("tension", c["id"]) for c in claims]})
+    return out
+
+
 def ask(m: Mirror, question: str) -> dict[str, Any]:
     nodes = match_nodes(m, question)
     ctx = context(m, nodes)
     out: dict[str, Any] = {"question": question, "nodes": nodes, "facts": ctx["lines"],
                            "passages": [{"id": p["id"], "locator": p["locator"]} for p in ctx["passages"]],
-                           "answer": None, "citations": []}
+                           "answer": None, "citations": [], "common_causes": shared_causes(m, nodes)}
     if not ctx["lines"]:
         out["answer"] = "The Mirror has nothing on that yet."
         return out

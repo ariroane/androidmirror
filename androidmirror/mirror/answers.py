@@ -14,9 +14,12 @@ An approved answer is a source of its own, shown as the passage
 "answer:<proposal id>". Its changes are:
 
 - judgment {kind, x, y, z, sign, scope}: a causal judgment, as if a passage made it;
-- ruling {target, ruling: affirm | retract, sign?, direct?, indirect?}: a ruling on
-  a constraint the corpus gives. Affirmed constraints are fitted before any
-  other (the subject has settled them); retracted ones carry no weight;
+- ruling {target, ruling: affirm | retract | common_cause, sign?, direct?, indirect?, via?}:
+  a ruling on a constraint the corpus gives. Affirmed constraints are fitted
+  before any other (the subject has settled them); retracted ones carry no
+  weight; common_cause says neither end drives the other, something else
+  drives both (`via`, a concept, when the user names it): the claim is never
+  drawn as an arrow, only as a two-way link between its ends;
 - fact {s, r, o, neg}: a descriptive fact the subject holds;
 - retract_fact {key}: a fact that stays on record but no longer enters inference;
 - value {concept, direction}: what the subject wants more (1) or less (-1) of.
@@ -95,7 +98,8 @@ def overlay(mirror: dict[str, Any], book: dict[str, Any]) -> dict[str, Any]:
                 x, y, z = parts(ch["target"])
                 judgments.append({**base, "kind": "ruling", "target": ch["target"], "ruling": ch["ruling"],
                                   "x": x, "y": y, "z": z, "sign": ch.get("sign", 0), "scope": "unsaid",
-                                  "direct": bool(ch.get("direct")), "indirect": bool(ch.get("indirect")), "held": False})
+                                  "direct": bool(ch.get("direct")), "indirect": bool(ch.get("indirect")), "via": ch.get("via", ""),
+                                  "held": False})
             elif t == "fact":
                 if ch["s"] not in nodes or ch["o"] not in nodes:
                     continue

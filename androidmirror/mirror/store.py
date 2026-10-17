@@ -63,6 +63,11 @@ class Mirror:
                       "weight": e["weight"], "direct": e["direct"], "open": bool(e["open"]), "kinds": e["kinds"],
                       "status": "open" if e["open"] else "direct" if e["direct"] else "stated"}
                      for e in self.causal.get("edges", [])]
+            for b in self.causal.get("common_causes", []):  # two-way links: an unknown cause drives both ends
+                if not b["via"]:
+                    edges.append({"id": b["id"], "source": b["a"], "target": b["b"], "sign": 0, "weight": b["weight"],
+                                  "direct": False, "open": False, "kinds": {}, "status": "common_cause",
+                                  "settled": b["settled"]})
             return {"layer": layer, "nodes": nodes, "edges": edges}
         held = [f for f in self.facts if f["held"] and not f["neg"] and f["o"] not in EVALUATIONS]
         degree: dict[str, int] = {}
@@ -104,6 +109,8 @@ class Mirror:
                 "edges": [self._edge_view(e) for e in self.causal.get("edges", []) if nid in (e["src"], e["dst"])],
                 "constraints": [self._constraint_view(c) for c in self.causal.get("constraints", [])
                                 if nid in (c["x"], c["y"], c["z"])],
+                "common_causes": [self.common_view(b) for b in self.causal.get("common_causes", [])
+                                  if nid in (b["a"], b["b"], b["via"])],
             },
             "value": self.value_of.get(nid),
             "violations": [v for v in self.kb.violations if nid in json.dumps(v)],
@@ -130,6 +137,13 @@ class Mirror:
     def _edge_view(self, e: dict[str, Any]) -> dict[str, Any]:
         return {**e, "src_label": self.label(e["src"]), "dst_label": self.label(e["dst"]),
                 "open": {"through": e["open"]["through"], "labels": [self.label(n) for n in e["open"]["through"]]} if e["open"] else None}
+
+    def common_view(self, b: dict[str, Any]) -> dict[str, Any]:
+        """A two-way link with its labels, the claims behind it and the claims they ran into."""
+        views = lambda ids: [self._constraint_view(self.constraint[i]) for i in ids if i in self.constraint]  # noqa: E731
+        return {**b, "a_label": self.label(b["a"]), "b_label": self.label(b["b"]),
+                "via_label": self.label(b["via"]) if b["via"] else "", "named_label": self.label(b["named"]) if b["named"] else "",
+                "claim_views": views(b["claims"]), "conflict_views": views(b["conflicts"])}
 
     def passage(self, pid: str) -> dict[str, Any]:
         if pid not in self.passages:
@@ -175,9 +189,14 @@ class Mirror:
             for k in ("x", "y", "z"):
                 if x[k]:
                     labels[x[k]] = self.label(x[k])
+        for b in c.get("common_causes", []):
+            for n in (b["via"], b["named"]):
+                if n:
+                    labels[n] = self.label(n)
         return {"settings": c.get("settings"), "stats": c.get("stats"), "holdout": c.get("holdout"),
                 "edges": [self._edge_view(e) for e in c.get("edges", [])],
                 "constraints": [self._constraint_view(x) for x in c.get("constraints", [])],
+                "common_causes": [self.common_view(b) for b in c.get("common_causes", [])],
                 "tensions": c.get("tensions", []), "feedback": c.get("feedback", []), "isolated": c.get("isolated", []),
                 "values": [{**v, "label": self.label(v["concept"])} for v in self.values],
                 "unresolved": self.unresolved[:200], "n_unresolved": len(self.unresolved), "labels": labels}

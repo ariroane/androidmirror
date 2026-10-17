@@ -163,7 +163,8 @@ def build(spec: CorpusSpec, data_dir: Path, coder: Any = None, limit: int | None
     mirror = finalize(mirror, root, settings, log)
     st = mirror["causal"]["stats"]
     log(f"built: {len(nodes)} concepts, {len(facts)} facts, {st['held_judgments']} of the subject's causal judgments "
-        f"({len(unresolved)} outside the codebook), {st['arrows']} arrows, {st['rejected']} constraints in tension, "
+        f"({len(unresolved)} outside the codebook), {st['arrows']} arrows, {st['rejected']} constraints in tension "
+        f"({st.get('common_causes', 0)} drawn as shared causes), "
         f"{len(mirror['values'])} values")
     return mirror
 

@@ -47,7 +47,10 @@ def test_questions_come_from_what_the_structures_leave_open(built):
     assert {"tension", "evaluate", "link", "conflict"} <= kinds
     top = qs[0]
     assert top["kind"] == "tension" and "epsilon raises gamma" in top["text"] and top["evidence"]
-    assert [o["key"] for o in top["options"]] == ["this", "other", "neither", "skip"]
+    keys = [o["key"] for o in top["options"]]
+    assert keys[:3] == ["this", "other", "common"] and keys[-2:] == ["neither", "skip"]
+    # beta reaches epsilon only through gamma, so it is not offered as their shared cause
+    assert not [k for k in keys if k.startswith("via:")]
     assert all(o["changes"] for o in top["options"] if o["key"] != "skip")
     # the same Mirror asks the same questions, under the same ids
     assert [q["id"] for q in Q.questions(Mirror.load(root), limit=None)] == [q["id"] for q in qs]
@@ -190,7 +193,7 @@ def test_a_written_answer_is_read_by_claude(built, monkeypatch):
     monkeypatch.setattr(llm, "_json_call", fake)
     p = Q.answer(Mirror.load(root), q["id"], text="the loop is a slip of the pen")
     assert p["option"] == "neither" and p["note"] == "a slip of the pen" and p["status"] == "proposed"
-    assert seen["enum"] == ["this", "other", "neither", "skip"]
+    assert seen["enum"] == ["this", "other", "common", "neither", "skip"]
 
 
 def test_api(built):
@@ -212,7 +215,8 @@ def test_api(built):
 
 def test_cli(built):
     _, _, root = built
-    replies = iter(["3", "Android K", "", "q"])
+    keys = [o["key"] for o in Q.questions(Mirror.load(root), limit=1)[0]["options"]]
+    replies = iter([str(keys.index("neither") + 1), "Android K", "", "q"])
     lines = []
     Q.cli(root, limit=5, inp=lambda _: next(replies), out=lines.append)
     assert any("approved" in x for x in lines)
@@ -238,3 +242,37 @@ def test_derange_findings_become_questions(built):
     assert constraint(root, "reaches|delta|epsilon")["status"] == "retracted"
     # a report made from an older Mirror is not used
     assert not [q for q in Q.questions(Mirror.load(root), limit=None) if q["kind"] == "basis"]
+
+
+def test_a_shared_cause_can_be_settled_or_named(built):
+    _, _, root = built
+    m = Mirror.load(root)
+    link = next(b for b in m.causal["common_causes"] if {b["a"], b["b"]} == {"epsilon", "gamma"})
+    assert link["claims"] == ["reaches|epsilon|gamma"] and link["reasons"] == ["cycle"]
+    # the Ask tab names the link and the question that settles it
+    client = TestClient(create_app(root.parent.parent))
+    g = client.get("/api/graph", params={"layer": "causal"}).json()
+    assert {(e["source"], e["target"]) for e in g["edges"] if e["status"] == "common_cause"} == {("epsilon", "gamma")}
+    view = client.get("/api/causal").json()["common_causes"][0]
+    assert view["a_label"] == "epsilon" and view["claim_views"][0]["text"] == "epsilon raises gamma"
+    r = client.post("/api/ask", json={"question": "what does gamma do?"}).json()
+    asked = next(b for b in r["common_causes"] if b["id"] == link["id"])
+    q = ask(root, "tension")
+    assert asked["questions"] == [q["id"]] and any("<->" in f for f in r["facts"])
+    # "neither drives the other": the link stays, settled, and the claim is never drawn as an arrow
+    _, p = answer(root, "tension", "common", approve=False)
+    assert p["changes"][0]["ruling"] == "common_cause" and not p["changes"][0].get("via")
+    assert p["preview"]["common_settled"] == ["epsilon ↔ gamma"] and "confirmed" in p["preview"]["summary"]
+    Q.approve(root, p["id"], "Android K")
+    m = Mirror.load(root)
+    after = next(b for b in m.causal["common_causes"] if b["id"] == link["id"])
+    assert after["settled"] and not after["via"] and m.causal["stats"]["common_causes"] == 1
+    assert ("epsilon", "gamma") not in {(e["src"], e["dst"]) for e in m.causal["edges"]}
+    assert constraint(root, "reaches|epsilon|gamma")["reason"] == "settled"
+    assert not [q for q in Q.questions(m, limit=None) if q["kind"] == "tension" and "epsilon raises gamma" in q["text"]]
+
+
+def test_taking_one_side_resolves_a_shared_cause(built):
+    _, _, root = built
+    _, p = answer(root, "tension", "other", approve=False)
+    assert p["preview"]["common_removed"] == ["epsilon ↔ gamma"] and "resolved" in p["preview"]["summary"]

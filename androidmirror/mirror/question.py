@@ -5,7 +5,11 @@ not settle the model, and asks about each in turn, most important first:
 
 causal model
 - tension: a judgment the fit rejected (it would close a loop, break a
-  denial, or is outweighed); which side does the subject hold?
+  denial, or is outweighed); which side does the subject hold? A rejected
+  claim that would close a loop or break a denial is drawn as a two-way link
+  (a cause the subject never names drives both ends), so its question can
+  also settle that reading, or name the shared cause from the concepts the
+  model already has driving both ends;
 - sign: the subject says x raises y in some passages and lowers it in others;
 - open: an arrow the rest of the model also explains; direct, or only through?
 - weak: an arrow only one passage makes; does the subject really hold it?
@@ -56,7 +60,7 @@ from pydantic import BaseModel
 
 from .. import llm
 from . import answers
-from .causal import fit
+from .causal import drives_both, fit
 from .kg import KnowledgeBase, fact_key
 from .schema import EVALUATIONS, SELF, VARIABLE_KINDS
 from .store import Mirror
@@ -121,14 +125,26 @@ class Asker:
             against = "; ".join(self.m.say(o) for o in others)
             how = {"cycle": "that would make a circle with", "denied": "that goes against the “makes no difference” claim",
                    "outweighed": "it is outweighed by"}.get(c.get("reason"), "it clashes with")
+            shared = bool(c.get("common_cause"))
             text = (f"{self.subject} says {said} ({_plural(c['weight'])}), but {how}: {against}. "
-                    f"Which does {self.subject} hold?")
+                    + (f"For now the Mirror shows {self.L(c['x'])} and {self.L(c['y'])} as driven by a shared cause "
+                       f"{self.subject} never names. " if shared else "")
+                    + f"Which does {self.subject} hold?")
             opts = [{"key": "this", "label": said, "changes": [{"type": "ruling", "target": c["id"], "ruling": "affirm",
                                                                 "says": f"{said} (settled)"}]},
                     {"key": "other", "label": against,
                      "changes": [{"type": "ruling", "target": c["id"], "ruling": "retract", "says": f"not: {said}"}]
                      + [{"type": "ruling", "target": o["id"], "ruling": "affirm", "says": f"{self.m.say(o)} (settled)"}
                         for o in others]}]
+            if shared:
+                x, y = self.L(c["x"]), self.L(c["y"])
+                opts.append({"key": "common", "label": f"Neither drives the other: something else drives both {x} and {y}",
+                             "changes": [{"type": "ruling", "target": c["id"], "ruling": "common_cause",
+                                          "says": f"{x} and {y} share a cause; neither drives the other"}]})
+                for z in self.shared_causes(c["x"], c["y"]):
+                    opts.append({"key": f"via:{z}", "label": f"{self.L(z)} drives both {x} and {y}",
+                                 "changes": [{"type": "ruling", "target": c["id"], "ruling": "common_cause", "via": z,
+                                              "says": f"{self.L(z)} drives both {x} and {y}; neither drives the other"}]})
             if c.get("reason") == "cycle":
                 opts.append({"key": "neither", "label": "Neither: one of them is a misreading",
                              "changes": [{"type": "ruling", "target": c["id"], "ruling": "retract", "says": f"not: {said}"}]})
@@ -137,6 +153,13 @@ class Asker:
                               f"the model can't fit all of these claims from {self.subject} at once", ev,
                               c["weight"] + sum(o["weight"] for o in others)))
         return out
+
+    def shared_causes(self, x: str, y: str, limit: int = 3) -> list[str]:
+        """Concepts the model already has driving both x and y (each by a path that avoids the other), most important
+        first: candidates for their shared cause."""
+        g = self.m.graph_
+        both = [n for n in g.succ if drives_both(g, n, x, y)]
+        return sorted(both, key=lambda n: (-self.imp.get(n, 0), n))[:limit]
 
     def signs(self) -> list[dict[str, Any]]:
         out = []
@@ -521,6 +544,16 @@ def preview(root: Path, changes: list[dict[str, Any]], book: dict[str, Any] | No
         "arrows_removed": [f"{label(a)} {word(s)} {label(b)}" for (a, b), s in a0.items() if (a, b) not in a1],
         "arrows_flipped": [f"{label(a)} now {word(s)} {label(b)}" for (a, b), s in a1.items() if a0.get((a, b), s) != s],
     }
+    links = lambda s: {(b["a"], b["b"]): b for b in s["model"]["common_causes"]}  # noqa: E731
+    l0, l1 = links(before), links(after)
+    two = lambda k: f"{label(k[0])} ↔ {label(k[1])}"  # noqa: E731
+    drawn = lambda ls: {k for k, b in ls.items() if not b["via"]}  # noqa: E731
+    out["common_added"] = [two(k) for k in sorted(drawn(l1) - drawn(l0))]
+    out["common_removed"] = [two(k) for k in sorted(drawn(l0) - drawn(l1))]
+    out["common_named"] = [f"{label(b['via'])} drives both {label(k[0])} and {label(k[1])}"
+                           for k, b in sorted(l1.items()) if b["via"] and (k not in l0 or not l0[k]["via"])]
+    out["common_settled"] = [two(k) for k, b in sorted(l1.items())
+                             if b["settled"] and not b["via"] and not (k in l0 and l0[k]["settled"])]
     st0 = {c["id"]: c["status"] for c in before["model"]["constraints"]}
     out["judgments"] = [{"id": c["id"], "before": st0.get(c["id"], "new"), "after": c["status"]}
                         for c in after["model"]["constraints"] if st0.get(c["id"], "new") != c["status"]]
@@ -545,6 +578,14 @@ def _summary(p: dict[str, Any]) -> str:
     for k, w in (("arrows_added", "arrow added"), ("arrows_removed", "arrow removed"), ("arrows_flipped", "arrow flipped")):
         if p[k]:
             bits.append(_plural(len(p[k]), w))
+    if p.get("common_removed"):
+        bits.append(_plural(len(p["common_removed"]), "shared-cause link") + " resolved")
+    if p.get("common_named"):
+        bits.append(_plural(len(p["common_named"]), "shared cause") + " named")
+    if p.get("common_settled"):
+        bits.append(_plural(len(p["common_settled"]), "shared-cause link") + " confirmed")
+    if p.get("common_added"):
+        bits.append(_plural(len(p["common_added"]), "new shared-cause link"))
     if p["judgments"]:
         bits.append(_plural(len(p["judgments"]), "judgment") + " settled differently")
     if p["evaluations"]:
@@ -662,10 +703,11 @@ def routes(get: Any) -> Any:
             raise HTTPException(400, str(e)) from None
 
     @r.get("/api/questions")
-    def list_questions(limit: int = 20, kind: str | None = None, corpus: str | None = None) -> dict:
+    def list_questions(limit: int = 20, kind: str | None = None, id: str | None = None, corpus: str | None = None) -> dict:
         m = get(corpus)
         qs = questions(m, limit=None, kinds={kind} if kind else None)
-        return {"questions": qs[:limit], "total": len(qs), "counts": dict(Counter(q["kind"] for q in qs)),
+        shown = [q for q in qs if q["id"] == id] if id else qs[:limit]
+        return {"questions": shown, "total": len(qs), "counts": dict(Counter(q["kind"] for q in qs)),
                 "proposals": proposals(m.root)[::-1], "llm": llm.available()}
 
     @r.post("/api/questions/answer")

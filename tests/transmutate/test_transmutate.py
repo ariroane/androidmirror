@@ -219,3 +219,31 @@ def test_your_approved_answers_come_along(tmp_path):
     answers.save(root, book)
     with pytest.raises(RuntimeError, match="changed since"):
         tm.approve(data, "synthetic", "second", log=quiet)
+
+
+def test_the_proposal_says_which_shared_causes_combining_resolves_or_creates(built):
+    p = proposal(built)
+    sc = p["shared_causes"]
+    text = lambda k: [x["text"] for x in sc[k]]  # noqa: E731
+    # the second's arrow against the first's chain, and its claim against the first's denial
+    assert sorted(text("created")) == ["alpha ↔ epsilon", "alpha ↔ zeta"] and sorted(text("kept")) == sorted(text("created"))
+    # the first's own slip (epsilon raises gamma, said once) is trimmed away
+    assert text("resolved_by_trimming") == ["epsilon ↔ gamma"] and not sc["resolved"]
+    assert p["stats"]["combined"]["common_causes"] == 3 and p["stats"]["trimmed"]["common_causes"] == 2
+
+
+def test_combining_can_resolve_one_mirrors_shared_cause():
+    def j(x, y, p):
+        return {"kind": "causes", "x": x, "y": y, "z": "", "sign": 1, "passage": p, "locator": p, "quote": "q",
+                "register": "describes", "attribution": "self", "scope": "direct", "held": True}
+
+    # A: a -> b -> c (2 passages each) against c -> a (1): a <-> c. B says c -> a in 4 passages, so combined it holds
+    a = {"id": "A", "mirror": {"judgments": [j("a", "b", "1"), j("a", "b", "2"), j("b", "c", "3"), j("b", "c", "4"),
+                                             j("c", "a", "5")]}}
+    b = {"id": "B", "mirror": {"judgments": [j("c", "a", str(i)) for i in range(4)]}}
+    pairs = [{"a": n, "b": n, "polarity": 1} for n in "abc"]
+    combined = tm.fit([{**x, "passage": f"A:{x['passage']}"} for x in a["mirror"]["judgments"]]
+                      + [{**x, "passage": f"B:{x['passage']}"} for x in b["mirror"]["judgments"]])
+    sc = tm.shared_causes(a, b, pairs, combined, combined)
+    assert [(x["key"], x["sources"]) for x in sc["resolved"]] == [(["a", "c"], ["A"])]
+    assert [x["key"] for x in sc["created"]] == [["b", "c"]]  # a step of the chain gives way instead

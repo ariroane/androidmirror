@@ -225,7 +225,7 @@ async function drawGraph(keepPositions) {
   const els = g.nodes.map(n => ({data:{id:n.id, label:n.label, ev:n.evaluation||'none', size:12 + Math.min(26, Math.sqrt(n.support||1) * 3), variable:n.variable ? 1 : 0, value:n.value || 0}}));
   g.edges.forEach(e => {
     if (layer === 'kg') { els.push({data:{id:e.id, source:e.source, target:e.target, label:relWord(e.rel, e.target), status:'kg', sign:0, w:1 + Math.min(4, Math.log2(1 + (e.support||1)))}}); return; }
-    els.push({data:{id:e.id, source:e.source, target:e.target, label:String(e.weight), status:e.status, sign:e.sign, w:1 + Math.min(6, 1.5 * Math.log2(1 + e.weight))}});
+    els.push({data:{id:e.id, source:e.source, target:e.target, label:String(e.weight), status:e.status, sign:e.sign, w:e.status === 'common_cause' ? 2 : 1 + Math.min(6, 1.5 * Math.log2(1 + e.weight))}});
   });
   const evColor = {good:css('--pos'), bad:css('--neg'), indifferent:css('--mid'), conflicted:'#b05fd8', none:'#8a8a86'};
   const pos = keepPositions && cy ? Object.fromEntries(cy.nodes().map(n => [n.id(), {...n.position()}])) : null;
@@ -238,17 +238,19 @@ async function drawGraph(keepPositions) {
       {selector:'edge[sign = 1]', style:{'line-color':css('--pos'),'target-arrow-color':css('--pos')}},
       {selector:'edge[sign = -1]', style:{'line-color':css('--neg'),'target-arrow-color':css('--neg'),'target-arrow-shape':'tee'}},
       {selector:'edge[status = "open"]', style:{'line-style':'dashed'}},
+      {selector:'edge[status = "common_cause"]', style:{'line-style':'dotted','line-color':'#b05fd8','target-arrow-color':'#b05fd8','source-arrow-color':'#b05fd8','target-arrow-shape':'triangle','source-arrow-shape':'triangle','label':''}},
       {selector:'.hl', style:{'border-width':4,'border-color':'#e0a800'}},
     ]});
     cy.on('tap', 'node', e => showNode(e.target.id()));
-    cy.on('tap', 'edge', e => { if (layer === 'causal') { tab('causal'); showEdge(e.target.data('source'), e.target.data('target')); } });
+    cy.on('tap', 'edge', e => { if (layer !== 'causal') return; tab('causal');
+      if (e.target.data('status') === 'common_cause') showCommon(e.target.id()); else showEdge(e.target.data('source'), e.target.data('target')); });
   }
   cy.elements().remove(); cy.add(els);
   if (pos && cy.nodes().every(n => pos[n.id()])) cy.layout({name:'preset', positions:n => pos[n.id()], fit:false}).run();
   else cy.layout({name:'cose', animate:false, randomize:true, nodeRepulsion:() => 500000, idealEdgeLength:() => 100, nodeOverlap:40, gravity:0.3, numIter:2500, padding:40}).run();
   $('#legend').innerHTML = layer === 'kg'
     ? `Dot colour: whether ${W()} calls it <span class="pos">good</span>, <span class="neg">bad</span> or indifferent (purple: more than one; grey: never says). Lines: facts ${W()} states as true${g.hidden ? `; ${g.hidden} less-connected ideas hidden` : ''}.`
-    : `What ${W()} says causes what. <span class="pos">Green arrow</span>: more of one brings more of the other; <span class="neg">red bar</span>: brings less. Number and thickness: how many passages say it. Dashed: may work only by way of other steps. Double ring: something ${W()} wants <span class="pos">more</span> or <span class="neg">less</span> of.`;
+    : `What ${W()} says causes what. <span class="pos">Green arrow</span>: more of one brings more of the other; <span class="neg">red bar</span>: brings less. Number and thickness: how many passages say it. Dashed: may work only by way of other steps. <span style="color:#b05fd8">Purple dotted, arrows at both ends</span>: the two go together, but what ${W()} says about which drives which clashes, so the Mirror shows a shared cause ${W()} never names. Double ring: something ${W()} wants <span class="pos">more</span> or <span class="neg">less</span> of.`;
 }
 
 // ---------- judgments ----------
@@ -265,11 +267,11 @@ function judgmentText(j) {
 }
 const voice = e => e.held ? '' : ` <span class="pill">${esc(e.attribution !== 'self' ? 'quoting ' + e.attribution : REGISTER_WORD[e.register] || e.register)}</span>`;
 const evidenceLine = e => `<div class="small">${loc(e.passage, e.locator)} <span class="muted">${esc(KIND_WORD[e.kind] || e.kind)}</span>${voice(e)} <span class="q">“${esc(e.quote)}”</span></div>`;
-const STATUS_WORD = {arrow:'shown as a link', follows:'already covered by a chain of links', holds:'fits the model', rejected:'clashes with stronger claims', 'not used':'too few passages to count', retracted:'withdrawn by your answer'};
+const STATUS_WORD = {arrow:'shown as a link', follows:'already covered by a chain of links', holds:'fits the model', rejected:'outweighed by stronger claims', 'not used':'too few passages to count', retracted:'withdrawn by your answer'};
 function constraintCard(c, open) {
-  const why = c.status === 'rejected' ? `<div class="small neg">${c.reason === 'cycle' ? 'Would make a circle (A causes B causes A) with' : c.reason === 'denied' ? 'Ruled out by a “makes no difference” claim' : 'Outweighed by'}:${(c.conflicts || []).map(id => `<code>${esc(id.split('|').slice(1).map(lbl).join(' → '))}</code>`).join(', ')}</div>` : '';
+  const why = c.status === 'rejected' && c.reason !== 'settled' ? `<div class="small neg">${c.reason === 'cycle' ? 'Would make a circle (A causes B causes A) with' : c.reason === 'denied' ? 'Ruled out by a “makes no difference” claim' : 'Outweighed by'}:${(c.conflicts || []).map(id => `<code>${esc(id.split('|').slice(1).map(lbl).join(' → '))}</code>`).join(', ')}${c.common_cause ? `. So the Mirror shows ${lbl(c.x)} and ${lbl(c.y)} as sharing a cause ${W()} never names.` : ''}</div>` : '';
   const path = c.status === 'follows' && c.path ? `<div class="small">Through ${c.path.map(lbl).join(' → ')}.</div>` : '';
-  return `<div class="card"><div><b>${esc(c.text)}</b> <span class="small muted">${c.weight} passage${c.weight === 1 ? '' : 's'}${c.mentions > c.weight ? ` (said ${c.mentions} times)` : ''} · ${(c.status === 'not held' ? `not ${W()}’s own view` : esc(STATUS_WORD[c.status] || c.status))}${c.sign_conflict ? ' · <span class="neg">elsewhere said to have the opposite effect</span>' : ''}</span></div>
+  return `<div class="card"><div><b>${esc(c.text)}</b> <span class="small muted">${c.weight} passage${c.weight === 1 ? '' : 's'}${c.mentions > c.weight ? ` (said ${c.mentions} times)` : ''} · ${(c.status === 'not held' ? `not ${W()}’s own view` : c.common_cause ? (c.reason === 'settled' ? 'a shared cause, settled by your answer' : `clashes, so shown as a shared cause ${W()} never names`) : esc(STATUS_WORD[c.status] || c.status))}${c.sign_conflict ? ' · <span class="neg">elsewhere said to have the opposite effect</span>' : ''}</span></div>
     ${why}${path}<details ${open ? 'open' : ''}><summary class="small muted">Quotes (${c.n_evidence})</summary>${c.evidence.map(evidenceLine).join('')}</details></div>`;
 }
 
@@ -294,6 +296,7 @@ async function showNode(id) {
         ${f.evidence.slice(0, 3).map(e => e.passage === 'codebook' ? '<div class="small muted">built into the Mirror’s list of ideas</div>' : quote(e) + (e.modality && e.modality !== 'asserts' ? `<span class="small muted">${esc(MODALITY_WORD[e.modality] || e.modality)}${e.attribution && e.attribution !== 'self' ? ', quoting ' + esc(e.attribution) : ''}</span>` : '')).join('')}</div>`).join('') : '<p class="muted">None.</p>');
     if (n.inferred.length) h += `<h4>What follows by logic (${n.inferred.length})</h4><table>${n.inferred.map(x => `<tr class="click" data-holds="${esc(x.s)}|${esc(x.r)}|${esc(x.o)}"><td>${esc(x.s_label)} <i>${rel(x.r, x.o)}</i> ${esc(x.o_label)}</td><td class="muted small">${ruleText(x.rule)}</td></tr>`).join('')}</table>`;
     if (n.causal.edges.length) h += `<h4>Causes and effects, as ${W()} sees them</h4><table>${n.causal.edges.map(e => `<tr class="click" data-edge="${esc(e.src)}|${esc(e.dst)}"><td>${esc(e.src_label)} → ${esc(e.dst_label)}</td><td class="${e.sign > 0 ? 'pos' : 'neg'}">${e.sign > 0 ? 'raises' : 'lowers'}</td><td class="small muted">${e.weight} passage${e.weight === 1 ? '' : 's'}${e.open ? ' · may work only by way of ' + e.open.labels.map(esc).join(' → ') : ''}</td></tr>`).join('')}</table>`;
+    if ((n.causal.common_causes || []).length) h += `<h4>Shared causes ${W()} never names</h4>` + n.causal.common_causes.map(commonCard).join('');
     if (n.causal.constraints.length) h += `<h4>What ${W()} says it causes or is caused by (${n.causal.constraints.length})</h4>` + n.causal.constraints.slice(0, 30).map(c => constraintCard(c)).join('');
     if (n.violations.length) h += `<h4>Things that don’t fit together</h4>` + n.violations.map(v => `<div class="small neg"><b>${violationTitle(v.type)}.</b> ${violationWhy(v)}</div>`).join('');
     h += `<h4>Passages (${n.mentions.length})</h4>` + (n.mentions.slice(0, 60).map(m => `<div class="small">${loc(m.passage, m.locator)} <span class="q">“${esc(m.quote)}”</span></div>`).join('') || '<p class="muted">None.</p>');
@@ -375,7 +378,8 @@ async function loadCausal() {
       <table><tr><td>Cause-and-effect links</td><td>${st.arrows}</td><td class="small muted">${st.open} of them may work only by way of other steps</td></tr>
       <tr><td>Claims already covered by a chain</td><td>${st.follows}</td><td class="small muted">said outright, and also implied by other links (A raises B, B raises C, so A raises C)</td></tr>
       <tr><td>“No difference” claims that fit</td><td>${st.denials_held}</td><td class="small muted">“x makes no difference to y”, “not x but y”</td></tr>
-      <tr><td>Claims that clash</td><td class="${st.rejected ? 'neg' : ''}">${st.rejected}</td><td class="small muted">claims that would make a circle, or go against a stronger “no difference” claim</td></tr></table>
+      <tr><td>Shared causes never named</td><td class="${st.common_causes ? 'neg' : ''}">${st.common_causes ?? st.rejected}</td><td class="small muted">claims that clash (they would make a circle, or go against a stronger “no difference” claim), shown as a two-way link: something ${W()} never names drives both ideas</td></tr>
+      ${st.denials_outweighed ? `<tr><td>“No difference” claims outweighed</td><td>${st.denials_outweighed}</td><td class="small muted">said to make no difference, but stronger claims link them</td></tr>` : ''}</table>
       <h4>If one idea changes, what happens to another, as ${W()} sees it?</h4>
       <div class="row">More <select id="ex">${opts}</select> does what to <select id="ey">${opts}</select><button class="b primary" id="ebtn">Trace</button></div>
       <div id="eout"></div><div id="edgeout"></div>
@@ -392,20 +396,37 @@ async function loadCausal() {
         <td>${esc(e.src_label)} → ${esc(e.dst_label)}</td><td class="${e.sign > 0 ? 'pos' : 'neg'}">${e.sign > 0 ? 'raises' : 'lowers'}</td><td>${e.weight}</td>
         <td class="small muted">${Object.keys(e.kinds).map(k => esc(KIND_WORD[k] || k)).join(', ')}${e.direct ? ', directly' : ''}${e.open ? `; may work only by way of ${e.open.labels.map(esc).join(' → ')}` : ''}${e.note ? '; ' + esc(e.note) : ''}</td></tr>`).join('')}</table>
       ${c.feedback.length ? `<p class="small">Each said to affect the other (the model can’t show circles): ${c.feedback.map(f => `${lbl(f.pair[0])} ⇄ ${lbl(f.pair[1])}`).join(', ')}</p>` : ''}
-      <h4>Claims that clash (${by('rejected').length})</h4><p class="small muted">Places where what ${W()} says doesn’t fit together. The side with more passages stays in the model; the other side is listed here rather than thrown away.</p>
-      ${by('rejected').map(x => constraintCard(x)).join('') || '<p class="muted">None.</p>'}
+      <h4>Shared causes ${W()} never names (${(c.common_causes || []).length})</h4><p class="small muted">Places where what ${W()} says about cause and effect clashes. The side with more passages stays in the model as a link; the other side is not thrown away: its two ideas are joined by a two-way link, meaning they go together because of something ${W()} never names. An answer in Questions, a merge or split in Mutate, or combining with another Mirror in Transmutate can resolve one.</p>
+      ${(c.common_causes || []).map(commonCard).join('') || '<p class="muted">None.</p>'}
+      ${by('rejected').filter(x => !x.common_cause).length ? `<h4>Claims outweighed (${by('rejected').filter(x => !x.common_cause).length})</h4>${by('rejected').filter(x => !x.common_cause).map(x => constraintCard(x)).join('')}` : ''}
       <h4>“No difference” claims that fit (${by('holds').length})</h4>${by('holds').map(x => constraintCard(x)).join('') || '<p class="muted">None.</p>'}
       <details><summary><b>Claims already covered by a chain (${by('follows').length})</b></summary>${by('follows').map(x => constraintCard(x)).join('')}</details>
       <h4>What ${W()} wants more or less of (${c.values.length})</h4><p class="small muted">Kept apart from cause and effect: wanting something is not a claim about what it does.</p>
       <table>${c.values.slice(0, 60).map(v => `<tr class="click" data-node="${esc(v.concept)}"><td>${esc(v.label)}</td><td class="${v.direction > 0 ? 'pos' : v.direction < 0 ? 'neg' : ''}">${v.direction > 0 ? 'more' : v.direction < 0 ? 'less' : 'mixed'}</td><td class="small muted">${v.more} passages ask for more, ${v.less} for less</td></tr>`).join('')}</table>
       <details><summary class="muted">Views ${W()} mentions without endorsing (${by('not held').length})</summary>${by('not held').map(x => constraintCard(x)).join('')}</details>
       <details><summary class="muted">Claims about ideas the Mirror doesn’t track (${c.n_unresolved})</summary>${c.unresolved.map(u => `<div class="small">${esc(Object.values(u.labels).join(' / '))} <span class="muted">(${esc(u.missing.join(', '))} not tracked)</span> ${loc(u.passage, u.locator)}</div>`).join('')}</details>
-      <p class="muted small">How the model is built: claims said in the most passages go in first, and a “no difference” claim goes before a cause claim when they tie. A claim the model already implies adds nothing new. A claim ${W()} doesn’t call direct waits until the rest is in, since it may only mean an indirect effect. A claim that would make a circle, or go against a stronger “no difference” claim, goes under “Claims that clash”, with what it ran into. This is the picture ${W()}’s own words give: not a model of the world, and not Claude’s opinion of ${W()}. A link needs at least ${c.settings.min_weight} passage${c.settings.min_weight === 1 ? '' : 's'}; change this with <code>python -m androidmirror causal --min-weight 2</code>.</p>`;
+      <p class="muted small">How the model is built: claims said in the most passages go in first, and a “no difference” claim goes before a cause claim when they tie. A claim the model already implies adds nothing new. A claim ${W()} doesn’t call direct waits until the rest is in, since it may only mean an indirect effect. A claim that would make a circle, or go against a stronger “no difference” claim, becomes a two-way link under “Shared causes ${W()} never names”, with what it ran into: the one reading under which both sides can stand. This is the picture ${W()}’s own words give: not a model of the world, and not Claude’s opinion of ${W()}. A link needs at least ${c.settings.min_weight} passage${c.settings.min_weight === 1 ? '' : 's'}; change this with <code>python -m androidmirror causal --min-weight 2</code>.</p>`;
     el.innerHTML = h;
     const nodes = Object.keys(c.labels);
     if (c.edges.length) { $('#ex').value = c.edges[0].src; $('#ey').value = c.edges[0].dst; }
     $('#ebtn').onclick = runExplain;
   } catch (err) { fail(el, err); }
+}
+function commonCard(b) {
+  const head = b.via ? `${esc(b.a_label)} and ${esc(b.b_label)}: ${esc(b.via_label)} drives both` : `${esc(b.a_label)} ↔ ${esc(b.b_label)}`;
+  const why = b.via ? `Settled by your answer: neither drives the other; ${esc(b.via_label)}, which ${W()} already says drives both, explains why they go together.`
+    : b.settled ? `Settled by your answer: neither drives the other; something else drives both${b.named_label ? ` (you named ${esc(b.named_label)}, but the model doesn’t have it driving both)` : ''}.`
+    : `${WW()} says one drives the other, but that clashes with stronger claims. Read as: the two go together because of something ${W()} never names.`;
+  return `<div class="card"><div><b>${head}</b> <span class="small muted">${b.weight} passage${b.weight === 1 ? '' : 's'}</span></div><p class="small">${why}</p>
+    ${b.claim_views.map(x => constraintCard(x)).join('')}
+    ${b.conflict_views.length ? `<b class="small">What it clashes with</b>${b.conflict_views.map(x => constraintCard(x)).join('')}` : ''}</div>`;
+}
+async function showCommon(id) {
+  if (!causalData) await loadCausal();
+  const out = $('#edgeout'), b = (causalData.common_causes || []).find(x => x.id === id);
+  if (!out || !b) return;
+  out.innerHTML = commonCard(b);
+  out.scrollIntoView({behavior:'smooth', block:'start'});
 }
 async function showEdge(src, dst) {
   if (!causalData) await loadCausal();
@@ -431,10 +452,12 @@ async function runExplain() {
     const verdict = v === 'raises' ? `More ${xl} means <b class="pos">more</b> ${yl}.` : v === 'lowers' ? `More ${xl} means <b class="neg">less</b> ${yl}.`
       : v.startsWith('mixed') ? `More ${xl} has <b>mixed effects</b> on ${yl}: some routes raise it, some lower it.`
       : v.startsWith('makes no difference') ? `More ${xl} <b>makes no difference</b> to ${yl}, and ${W()} says so.`
+      : v.startsWith('makes no difference by itself') ? `More ${xl} <b>makes no difference by itself</b> to ${yl}: the two go together because of something ${W()} never names.`
       : v.startsWith('not said') ? `<b>Nothing</b> ${W()} says links ${xl} to ${yl}.` : `More ${xl}: <b>${esc(v)}</b> ${yl}.`;
     out.innerHTML = `<p>${verdict}</p>
       ${r.paths.map(p => `<div class="small">${p.labels.map(esc).join(' → ')} <span class="${p.sign > 0 ? 'pos' : 'neg'}">${p.sign > 0 ? 'raises' : 'lowers'}</span>${p.steps.some(s => s.open) ? ' <span class="muted">(through a step that may be indirect)</span>' : ''}</div>`).join('')}
       ${r.denial ? constraintCard(r.denial) : ''}
+      ${r.common_cause ? `<p class="small">${r.common_cause.via ? `${xl} and ${yl} share a cause: ${esc(lbl(r.common_cause.via))} drives both (settled by your answer).` : `${xl} and ${yl} are joined by a two-way link: something ${W()} never names drives both.`}</p>` : ''}
       ${r.reverse ? `<p class="small muted">As ${W()} sees it, ${yl} affects ${xl}, not the other way round.</p>` : ''}
       ${r.claims.filter(c => !r.denial || c.id !== r.denial.id).map(c => constraintCard(c)).join('')}`;
   } catch (err) { fail(out, err); }
@@ -488,10 +511,13 @@ $('#askbtn').onclick = async () => {
     (r.passages || []).forEach(p => { ans = ans.split(`[${esc(p.locator)}]`).join(`[${loc(p.id, p.locator)}]`); });
     out.innerHTML = (r.answer ? `<p style="white-space:pre-wrap">${ans}</p>` : '<p class="muted">Claude is off, so here is what the Mirror found.</p>') +
       `<details ${r.answer ? '' : 'open'}><summary class="muted">${r.facts.length} facts and ${r.passages.length} passages used</summary><ul>${r.facts.map(f => `<li class="small">${esc(f)}</li>`).join('')}</ul>
-      ${r.passages.map(p => `<div class="small">${loc(p.id, p.locator)}</div>`).join('')}</details><div id="askp"></div>`;
+      ${r.passages.map(p => `<div class="small">${loc(p.id, p.locator)}</div>`).join('')}</details>
+      ${(r.common_causes || []).length ? `<h4>Shared causes ${W()} never names</h4><p class="small muted">These ideas go together, but what ${W()} says about which drives which clashes, so the Mirror shows a cause ${W()} never names. Answering a question can settle it.</p>` +
+        r.common_causes.map(b => `<div class="card small">${esc(b.a_label)} ↔ ${esc(b.b_label)}${b.settled ? ' <span class="muted">(settled by your answer)</span>' : ''}<div class="muted">From: ${b.claims.map(esc).join('; ')}</div>${b.questions.length ? `<div class="row">${b.questions.map(q => `<button class="b" data-settle="${esc(q)}">Settle it</button>`).join('')}</div>` : ''}</div>`).join('') : ''}<div id="askp"></div>`;
   } catch (err) { fail(out, err); }
 };
 $('#question').onkeydown = e => { if (e.key === 'Enter') $('#askbtn').click(); };
+$('#answer').addEventListener('click', e => { const b = e.target.closest('[data-settle]'); if (b) { tab('questions'); loadQuestions(b.dataset.settle); } });
 
 // ---------- face ----------
 const GLYPHS = {  // small line drawings centred on (0,0), about 36px across
@@ -582,11 +608,11 @@ async function loadFace() {
 $('#frun').onclick = loadFace;
 
 // ---------- questions ----------
-const QKIND = {tension:'claims that clash', sign:'which direction', open:'direct or indirect', weak:'only one passage', link:'missing link', conflict:'doesn’t fit together', evaluate:'good or bad?', want:'more or less?', basis:'weak foundation (from Derange)'};
+const QKIND = {tension:'claims that clash (shared cause)', sign:'which direction', open:'direct or indirect', weak:'only one passage', link:'missing link', conflict:'doesn’t fit together', evaluate:'good or bad?', want:'more or less?', basis:'weak foundation (from Derange)'};
 const PSTATUS = {proposed:'waiting for approval', approved:'approved', rejected:'rejected', revoked:'revoked', superseded:'replaced by a later answer'};
 function previewText(p) {
   const v = p.preview || {}, li = (h, xs) => xs && xs.length ? `<div class="small">${h}: ${xs.map(esc).join('; ')}</div>` : '';
-  return `<div class="small"><b>If approved:</b> ${esc(v.summary || '')}</div>${li('Links added', v.arrows_added)}${li('Links removed', v.arrows_removed)}${li('Links whose effect flips', v.arrows_flipped)}${li('Good, bad or indifferent', v.evaluations)}${li('Wants more or less', v.values)}`;
+  return `<div class="small"><b>If approved:</b> ${esc(v.summary || '')}</div>${li('Shared causes resolved', v.common_removed)}${li('Shared cause named', v.common_named)}${li('Shared causes confirmed', v.common_settled)}${li('New shared causes', v.common_added)}${li('Links added', v.arrows_added)}${li('Links removed', v.arrows_removed)}${li('Links whose effect flips', v.arrows_flipped)}${li('Good, bad or indifferent', v.evaluations)}${li('Wants more or less', v.values)}`;
 }
 function proposalCard(p) {
   const acts = p.status === 'proposed' ? `<div class="row"><button class="b primary" data-pact="approve" data-pid="${esc(p.id)}">Approve</button><button class="b" data-pact="reject" data-pid="${esc(p.id)}">Reject</button></div>`
@@ -595,20 +621,23 @@ function proposalCard(p) {
     <div><b>${esc(p.answer)}</b>${p.note ? ` <span class="muted">(${esc(p.note)})</span>` : ''}</div>
     ${p.changes.map(c => `<div class="small">· ${esc(c.says || c.type)}</div>`).join('')}${p.status === 'proposed' ? previewText(p) : ''}${acts}</div>`;
 }
-async function loadQuestions() {
+async function loadQuestions(focus) {
   const el = $('#qlist'); el.innerHTML = '<p class="muted">Loading…</p>';
   try {
-    const kind = $('#qkind').value;
-    const r = await api(`/api/questions?limit=12${kind ? '&kind=' + kind : ''}`);
+    const kind = typeof focus === 'string' ? '' : $('#qkind').value;
+    focus = typeof focus === 'string' ? focus : '';
+    const r = await api(`/api/questions?limit=12${kind ? '&kind=' + kind : ''}${focus ? '&id=' + encodeURIComponent(focus) : ''}`);
     $('#qkind').innerHTML = `<option value="">All kinds (${r.total})</option>` + Object.entries(QKIND).map(([k, w]) => `<option value="${k}" ${k === kind ? 'selected' : ''}>${esc(w)}${r.counts[k] ? ` (${r.counts[k]})` : ''}</option>`).join('');
     el.innerHTML = r.questions.map(q => `<div class="card" data-q="${esc(q.id)}"><div class="small muted">${esc(QKIND[q.kind] || q.kind)} · ${esc(q.why)}</div>
       <div><b>${esc(q.text)}</b></div>${q.evidence.slice(0, 2).map(quote).join('')}
       <div class="row">${q.options.map(o => `<button class="b" data-qopt="${esc(o.key)}">${esc(o.label)}</button>`).join('')}</div>
-      ${r.llm ? `<div class="row"><input style="flex:1" placeholder="Or answer in your own words"><button class="b" data-qtext="1">Answer</button></div>` : ''}<div class="qout"></div></div>`).join('') || '<p class="muted">No open questions.</p>';
+      ${r.llm ? `<div class="row"><input style="flex:1" placeholder="Or answer in your own words"><button class="b" data-qtext="1">Answer</button></div>` : ''}<div class="qout"></div></div>`).join('') || (focus ? '<p class="muted">That question has been answered or no longer applies.</p>' : '<p class="muted">No open questions.</p>');
+    if (focus) el.innerHTML += '<p class="small"><button class="link" id="qall">Show all questions</button></p>';
     $('#plist').innerHTML = r.proposals.map(proposalCard).join('') || '<p class="muted">None yet.</p>';
   } catch (err) { fail(el, err); }
 }
 $('#questions').addEventListener('click', async e => {
+  if (e.target.id === 'qall') return loadQuestions();
   const b = e.target.closest('[data-qopt],[data-qtext],[data-pact]'); if (!b) return;
   try {
     if (b.dataset.pact) {
@@ -627,12 +656,12 @@ $('#questions').addEventListener('click', async e => {
     out.innerHTML = p.status === 'skipped' ? '<p class="muted">Skipped.</p>' : proposalCard(p);
   } catch (err) { const box = b.closest('[data-q]'); fail(box ? box.querySelector('.qout') : $('#plist'), err); }
 });
-$('#qkind').onchange = loadQuestions;
+$('#qkind').onchange = () => loadQuestions();
 $('#approver').value = store.get('approver') || '';
 
 // ---------- mutate ----------
 const MSOURCE = {same_as:'called the same thing', taxonomy_cycle:'each called a kind of the other', causal_twins:'same cause-and-effect role',
-  disjoint_evaluations:'called both good and bad', sign_conflict:'said both to increase and to decrease', user:'you asked for it'};
+  disjoint_evaluations:'called both good and bad', sign_conflict:'said both to increase and to decrease', common_cause:'claims that clash (shown as a shared cause)', user:'you asked for it'};
 const items = (xs, f) => xs.map(x => `<li class="small">${f(x)}</li>`).join('');
 function mutateCard(p) {
   const v = p.preview, k = v.kg, c = v.causal, pending = p.status === 'pending';
@@ -644,6 +673,7 @@ function mutateCard(p) {
     c.collapsed.length && `<h4>Cause-and-effect claims that become empty once merged</h4><ul>${items(c.collapsed, j => `${esc(j.text)} ${loc(j.passage, j.locator)}`)}</ul>`,
     `<h4>Links involving these ideas</h4><table><tr><th>Before</th><th>After</th></tr><tr><td>${c.edges_before.map(e => esc(e.text)).join('<br>') || '—'}</td><td>${c.edges_after.map(e => `${esc(e.text)} <span class="muted">${e.weight}</span>`).join('<br>') || '—'}</td></tr></table>`,
     c.constraints.length && `<h4>Claims, re-counted</h4><ul>${items(c.constraints, x => `${esc(x.text)} <span class="muted">${x.weight} passage${x.weight === 1 ? '' : 's'}, ${esc(STATUS_WORD[x.status] || x.status)}</span>${x.from.length > 1 ? ` ← ${x.from.map(y => esc(y.text)).join('; ')}` : ''}`)}</ul>`,
+    c.common_causes && (c.common_causes.resolved.length || c.common_causes.new.length) && `<h4>Shared causes never named</h4><p class="small">${c.common_causes.before} before, ${c.common_causes.after} after.</p><ul>${items(c.common_causes.resolved, x => `resolved: ${esc(x.text)}`)}${items(c.common_causes.new, x => `<span class="neg">new:</span> ${esc(x.text)}`)}</ul>`,
     (c.ripple.added.length || c.ripple.removed.length || c.ripple.status_changed.length) && `<h4>Elsewhere in the model</h4><ul>${items(c.ripple.added, e => `+ ${esc(e.text)}`)}${items(c.ripple.removed, e => `− ${esc(e.text)}`)}${items(c.ripple.status_changed, x => `${esc(x.text)}: ${esc(x.before)} → ${esc(x.after)}`)}</ul>`,
     `<h4>Things that don’t fit together</h4><p class="small">${k.violations_before.length} before, ${k.violations_after.length} after. Facts about them that follow by logic: ${k.inferred_before} → ${k.inferred_after}.</p>`,
     `<h4>Prediction test</h4><p class="small">Hidden claims, before: ${pct(c.holdout_before)}. After: ${pct(c.holdout_after)}.</p>`,
@@ -714,10 +744,11 @@ function tlist(title, xs, f, open) {
   return `<details ${open ? 'open' : ''}><summary><b>${esc(title)}</b> <span class="muted">(${xs.length})</span></summary>${xs.length ? `<ul>${items(xs, f)}</ul>` : '<p class="muted small">None.</p>'}</details>`;
 }
 const THOW = {'same label':'same name', alias:'alternate name', claude:'matched by Claude', you:'paired by you'};
-const TKIND = {cycle:'would make a circle', denied:'ruled out by a “no difference” claim', outweighed:'outweighed', sign:'opposite effects'};
+const TKIND = {cycle:'would make a circle, so shown as a shared cause', denied:'ruled out by a “no difference” claim, so shown as a shared cause', outweighed:'outweighed', sign:'opposite effects'};
 function transmutateView(p) {
   const s = p.stats, c = p.crossings;
-  const line = x => `${x.concepts} ideas, ${x.facts} facts, ${x.judgments} cause-and-effect claims, ${x.arrows} links, ${x.rejected} clashing`;
+  const line = x => `${x.concepts} ideas, ${x.facts} facts, ${x.judgments} cause-and-effect claims, ${x.arrows} links, ${x.common_causes ?? x.rejected} shared causes never named`;
+  const sc = p.shared_causes || {resolved:[], created:[], resolved_by_trimming:[], kept:[]}, two = x => `${esc(x.text)}${x.sources && x.sources.length ? ` <span class="muted">(in ${x.sources.map(esc).join(' and ')})</span>` : ''}`;
   const pairs = p.alignment.map(x => `<li class="small">${esc(p.b)}'s <b>${esc(x.b_label)}</b> ${x.polarity === 1 ? 'is' : '<span class="neg">is the opposite of</span>'} ${esc(p.a)}'s <b>${esc(x.a_label)}</b> <span class="muted">${esc(THOW[x.how] || x.how)}</span> <button class="link" data-tdrop="${esc(x.b)}">keep apart</button></li>`).join('');
   const tensions = [...c.causal.map(x => `${esc(x.text)}: <span class="neg">${esc(TKIND[x.kind] || x.kind)}</span>, ${esc(x.why)}`),
     ...c.kg.map(x => `${violationTitle(x.type)}: ${esc(x.text)}`),
@@ -728,6 +759,8 @@ function transmutateView(p) {
     <details open><summary><b>Ideas matched across the two</b> <span class="muted">(${p.alignment.length})</span></summary><ul>${pairs || '<li class="small muted">None.</li>'}</ul></details>
     ${tlist('Both Mirrors say', c.agreed, x => `${esc(x.text)} <span class="muted">${x.weight} passage${x.weight === 1 ? '' : 's'}, ${esc(STATUS_WORD[x.status] || x.status)}${x.sign_conflict ? ', but they disagree on whether it raises or lowers' : ''}</span>`)}
     ${tlist('Clashes created by combining', tensions, x => x, true)}
+    ${tlist('Shared causes resolved by combining', sc.resolved, two, sc.resolved.length > 0)}
+    ${tlist('Shared causes resolved by trimming', sc.resolved_by_trimming, two)}
     <h4>Suggested trims (${p.trims.length})</h4><p class="small muted">Each of these held up in fewer than ${Math.round(p.settings.keep * 100)}% of ${p.settings.samples} tests, each test using a random half of the passages. Tick any you want to keep.</p>
     <div class="row"><button class="b" id="tall">Keep all</button><button class="b" id="tnone">Keep none</button></div>
     <table>${p.trims.map(t => `<tr><td><input type="checkbox" data-tkeep="${t.n}"></td><td class="small"><span class="pill">${esc(t.what)}</span>${esc(t.text || t.id)}<div class="muted">${esc(t.why)}</div></td></tr>`).join('')}</table>
