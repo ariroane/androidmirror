@@ -499,7 +499,7 @@ def _summary(data: dict[str, Any], m: dict[str, Any], prev: dict[str, Any]) -> s
     hb, ha = c["holdout_before"], c["holdout_after"]
     if not hb or not ha:
         return f"{head}. Knowledge graph: {kg}. Cause and effect: {causal}. Prediction test not run yet."
-    return (f"{head}. Knowledge graph: {kg}. Cause and effect: {causal}. Prediction test, hidden claims the rest predicts: "
+    return (f"{head}. Knowledge graph: {kg}. Cause and effect: {causal}. Prediction test, claims the rest of the text predicts: "
             f"{hb['supported']:.0%} → {ha['supported']:.0%}, contradicted: {hb['contradicted']:.0%} → {ha['contradicted']:.0%}.")
 
 
