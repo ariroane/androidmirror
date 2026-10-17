@@ -21,7 +21,7 @@
   #empty { position:absolute; inset:0; display:none; align-items:center; justify-content:center; padding:24px; }
   #empty div { max-width:520px; }
   aside { width:460px; max-width:48vw; border-left:1px solid var(--line); background:var(--panel); display:flex; flex-direction:column; min-height:0; }
-  nav { display:flex; border-bottom:1px solid var(--line); }
+  nav { display:flex; flex-wrap:wrap; border-bottom:1px solid var(--line); }
   nav button { flex:1; border:0; background:none; padding:10px 4px; color:var(--quiet); cursor:pointer; font:inherit; }
   nav button.on { color:var(--ink); box-shadow: inset 0 -2px var(--accent); }
   section { display:none; padding:14px; overflow:auto; flex:1; }
@@ -80,6 +80,7 @@ python -m androidmirror build --corpus fomc</pre>
       <button data-tab="questions">Questions</button>
       <button data-tab="derange">Derange</button>
       <button data-tab="mutate">Mutate</button>
+      <button data-tab="transmutate">Transmutate</button>
       <button data-tab="face">Face</button>
     </nav>
     <section id="node" class="on"><p class="muted">Click a node to see what it is, what the Mirror infers about it, and the passages it was built from.</p></section>
@@ -112,6 +113,17 @@ python -m androidmirror build --corpus fomc</pre>
       <div class="row"><input id="ms" list="mconcepts" placeholder="concept" size="12"><label class="small"><input type="checkbox" id="mclaude"> Claude reads the senses</label><button class="b" id="msplit">Preview split</button></div>
       <div id="mout"></div>
       <div id="mlist"></div>
+    </section>
+    <section id="transmutate">
+      <p class="muted">Combine two Mirrors into one, then trim it to the relationships and causes a reader of half the corpus would still find. Nothing is written until you approve; what is trimmed is archived, not deleted.</p>
+      <div class="row"><select id="ta" title="First Mirror"></select><span>+</span><select id="tb" title="Second Mirror"></select></div>
+      <div class="row"><input id="tpairs" placeholder="pair: a_concept=b_concept, …" style="flex:1"></div>
+      <div class="row"><input id="topp" placeholder="opposites: a_concept=b_concept, …" style="flex:1"></div>
+      <div class="row"><input id="tdrop" placeholder="leave unpaired: b_concept, …" style="flex:1"></div>
+      <div class="row"><label class="small"><input type="checkbox" id="tclaude"> Claude pairs concepts by meaning (1 call)</label>
+        <button class="b primary" id="tpropose">Propose</button></div>
+      <div id="tout"></div>
+      <div id="tprop"></div>
     </section>
   </aside>
 </main>
@@ -594,6 +606,80 @@ $('#mutate').addEventListener('click', e => {
   });
 });
 
+// ---------- transmutate ----------
+let tproposal = null;
+const csv = id => $(id).value.split(',').map(x => x.trim()).filter(Boolean);
+const tpair = () => ({a: $('#ta').value, b: $('#tb').value});
+function tlist(title, xs, f, open) {
+  return `<details ${open ? 'open' : ''}><summary><b>${esc(title)}</b> <span class="muted">(${xs.length})</span></summary>${xs.length ? `<ul>${items(xs, f)}</ul>` : '<p class="muted small">None.</p>'}</details>`;
+}
+function transmutateView(p) {
+  const s = p.stats, c = p.crossings;
+  const line = x => `${x.concepts} concepts, ${x.facts} facts, ${x.judgments} judgments, ${x.arrows} arrows, ${x.rejected} in tension`;
+  const pairs = p.alignment.map(x => `<li class="small">${esc(p.b)}'s <b>${esc(x.b_label)}</b> ${x.polarity === 1 ? 'is' : '<span class="neg">is the opposite of</span>'} ${esc(p.a)}'s <b>${esc(x.a_label)}</b> <span class="muted">${esc(x.how)}</span> <button class="link" data-tdrop="${esc(x.b)}">leave unpaired</button></li>`).join('');
+  const tensions = [...c.causal.map(x => `${esc(x.text)}: <span class="neg">${esc(x.kind)}</span>, ${esc(x.why)}`),
+    ...c.kg.map(x => `${esc(String(x.type).replace(/_/g, ' '))}: ${esc(x.text)}`),
+    ...c.values.map(x => `${esc(x.text)}: urged ${Object.entries(x.by_source).map(([k, d]) => `${d > 0 ? 'more' : 'less'} by ${esc(k)}`).join(', ')}`)];
+  return `<div class="card"><h3>${esc(p.a)} + ${esc(p.b)}</h3><p class="small muted">Proposed ${esc(p.created)}</p>
+    <p class="small">Combined: ${line(s.combined)}.<br>After trimming: ${line(s.trimmed)}.</p>
+    ${s.arrows_new.length ? `<p class="small neg">Arrows that only appear after trimming: ${s.arrows_new.map(e => esc(e.replace('|', ' → '))).join(', ')}</p>` : ''}</div>
+    <details open><summary><b>Aligned concepts</b> <span class="muted">(${p.alignment.length})</span></summary><ul>${pairs || '<li class="small muted">None.</li>'}</ul></details>
+    ${tlist('Both Mirrors say', c.agreed, x => `${esc(x.text)} <span class="muted">${x.weight} passages, ${esc(x.status)}${x.sign_conflict ? ', they disagree on the sign' : ''}</span>`)}
+    ${tlist('Tensions that come from combining', tensions, x => x, true)}
+    <h4>Proposed trims (${p.trims.length})</h4><p class="small muted">Tick any to keep. Trims survived less than ${Math.round(p.settings.keep * 100)}% of ${p.settings.samples} half-corpus readings.</p>
+    <div class="row"><button class="b" id="tall">Keep all</button><button class="b" id="tnone">Keep none</button></div>
+    <table>${p.trims.map(t => `<tr><td><input type="checkbox" data-tkeep="${t.n}"></td><td class="small"><span class="pill">${esc(t.what)}</span>${esc(t.text || t.id)}<div class="muted">${esc(t.why)}</div></td></tr>`).join('')}</table>
+    <div class="row"><input id="tby" placeholder="Your name, to approve" style="flex:1"><button class="b primary" id="tapprove">Approve and write the combined Mirror</button></div>`;
+}
+async function loadTransmutate() {
+  try {
+    const s = await api('/api/status');
+    const keepA = $('#ta').value, keepB = $('#tb').value;
+    const opts = s.built.map(b => `<option>${esc(b)}</option>`).join('');
+    $('#ta').innerHTML = opts; $('#tb').innerHTML = opts;
+    $('#ta').value = keepA && s.built.includes(keepA) ? keepA : corpus;
+    $('#tb').value = keepB && s.built.includes(keepB) && keepB !== $('#ta').value ? keepB : (s.built.find(b => b !== $('#ta').value) || '');
+    await showTransmutation();
+  } catch (err) { fail($('#tprop'), err); }
+}
+async function showTransmutation() {
+  const {a, b} = tpair();
+  tproposal = null;
+  if (!a || !b || a === b) { $('#tprop').innerHTML = '<p class="muted small">Build at least two Mirrors, then pick two different ones.</p>'; return; }
+  const r = await fetch(`/api/transmutate?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`);
+  if (r.status === 404) { $('#tprop').innerHTML = '<p class="muted small">No proposal for these two yet. Propose one; it is free unless Claude pairs the concepts.</p>'; return; }
+  tproposal = await r.json();
+  $('#tprop').innerHTML = transmutateView(tproposal);
+  $('#tby').value = store.get('approver') || '';
+}
+async function transmutateDo(fn) {
+  $('#tout').innerHTML = '<p class="muted">Working… scoring fitness re-fits the model many times, so this can take a minute.</p>';
+  try { const r = await fn(); $('#tout').innerHTML = r ? `<p class="small">${r}</p>` : ''; } catch (err) { fail($('#tout'), err); }
+}
+const tpropose = extraDrop => transmutateDo(async () => {
+  const drop = [...csv('#tdrop'), ...(extraDrop ? [extraDrop] : [])];
+  if (extraDrop) $('#tdrop').value = drop.join(', ');
+  await api('/api/transmutate/propose', {...tpair(), pairs: csv('#tpairs'), opposites: csv('#topp'), drop, claude: $('#tclaude').checked});
+  await showTransmutation(); return 'Proposed. Nothing has been changed yet.';
+});
+$('#ta').onchange = $('#tb').onchange = () => showTransmutation().catch(err => fail($('#tprop'), err));
+$('#tpropose').onclick = () => tpropose();
+$('#transmutate').addEventListener('click', e => {
+  const t = e.target;
+  if (t.dataset.tdrop) return tpropose(t.dataset.tdrop);
+  if (t.id === 'tall' || t.id === 'tnone') { document.querySelectorAll('[data-tkeep]').forEach(x => x.checked = t.id === 'tall'); return; }
+  if (t.id !== 'tapprove') return;
+  const by = $('#tby').value.trim();
+  if (!by) { $('#tout').innerHTML = '<p class="neg small">Type your name first: an approval records who approved it.</p>'; return; }
+  store.set('approver', by);
+  const keep = [...document.querySelectorAll('[data-tkeep]:checked')].map(x => x.dataset.tkeep);
+  transmutateDo(async () => {
+    const r = await api('/api/transmutate/approve', {...tpair(), keep, approver: by});
+    corpus = r.built; store.set('corpus', corpus); await refresh();
+    return `Wrote <b>${esc(r.built)}</b>; it is now the Mirror shown. ${r.transmutation.trimmed} items archived in trimmed.json.`;
+  });
+});
+
 // ---------- wiring ----------
 document.addEventListener('click', e => {
   const t = e.target.closest('[data-passage],[data-node],[data-edge],[data-holds]'); if (!t) return;
@@ -604,7 +690,7 @@ document.addEventListener('click', e => {
   else if (t.dataset.edge) { const [a, b] = t.dataset.edge.split('|'); tab('causal'); showEdge(a, b); }
   else if (t.dataset.holds) { const [s, r, o] = t.dataset.holds.split('|'); tab('knowledge'); setTimeout(() => checkHolds(s, r, o).catch(err => fail($('#hout'), err)), 0); }
 });
-document.querySelectorAll('nav button').forEach(b => b.onclick = () => { tab(b.dataset.tab); if (b.dataset.tab === 'derange') loadDerange(); });
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => { tab(b.dataset.tab); if (b.dataset.tab === 'derange') loadDerange(); if (b.dataset.tab === 'transmutate') loadTransmutate(); });
 document.querySelectorAll('#layers button').forEach(b => b.onclick = () => {
   document.querySelectorAll('#layers button').forEach(x => x.classList.remove('sel')); b.classList.add('sel'); layer = b.dataset.layer; drawGraph();
 });

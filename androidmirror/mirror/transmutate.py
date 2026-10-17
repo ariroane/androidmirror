@@ -583,6 +583,7 @@ def propose(data_dir: Path, a_name: str, b_name: str, use_claude: bool = False, 
         },
     }
     root = proposal_dir(data_dir, a_name, b_name)
+    _annotate(proposal, mirror["nodes"])
     _write(root / "proposal.json", proposal)
     (root / "proposal.md").write_text(describe(proposal, mirror["nodes"]), encoding="utf-8")
     return proposal
@@ -657,6 +658,28 @@ def _say(nodes: dict[str, Any], cid: str) -> str:
     return f"{lx} acts on {_label(nodes, z[0])} only through {ly}"
 
 
+def _item_text(nodes: dict[str, Any], tid: str) -> str:
+    """A trim's id ("c:", "f:" or "n:") in words."""
+    kind, _, rest = tid.partition(":")
+    if kind == "f":
+        fs, fr, fo, *neg = rest.split("|")
+        return f"{_label(nodes, fs)} {fr.replace('_', ' ')} {_label(nodes, fo)}" + (" (denied)" if neg else "")
+    return _say(nodes, rest) if kind == "c" else _label(nodes, rest)
+
+
+def _annotate(p: dict[str, Any], nodes: dict[str, Any]) -> None:
+    """Words beside the ids, for the app."""
+    for t in p["trims"]:
+        t["text"] = _item_text(nodes, t["id"])
+    c = p["crossings"]
+    for x in c["agreed"] + c["causal"]:
+        x["text"] = _say(nodes, x["id"])
+    for x in c["kg"]:
+        x["text"] = "; ".join(_item_text(nodes, "f:" + k) for k in x.get("facts", []))
+    for x in c["values"]:
+        x["text"] = _label(nodes, x["concept"])
+
+
 def describe(p: dict[str, Any], nodes: dict[str, Any]) -> str:
     """The proposal in words, for the terminal and proposal.md."""
     s, c = p["stats"], p["crossings"]
@@ -687,13 +710,7 @@ def describe(p: dict[str, Any], nodes: dict[str, Any]) -> str:
     lines += ["", f"## Proposed trims ({len(p['trims'])})", "",
               "Spare any of these at approval with --keep N (repeatable). Trimmed items are archived, not deleted.", ""]
     for t in p["trims"]:
-        kind, _, rest = t["id"].partition(":")
-        if kind == "f":
-            fs, fr, fo, *neg = rest.split("|")
-            text = f"{_label(nodes, fs)} {fr} {_label(nodes, fo)}" + (" (denied)" if neg else "")
-        else:
-            text = _say(nodes, rest) if kind == "c" else _label(nodes, rest)
-        lines.append(f"{t['n']}. [{t['what']}] {text}: {t['why']}")
+        lines.append(f"{t['n']}. [{t['what']}] {_item_text(nodes, t['id'])}: {t['why']}")
     return "\n".join(lines) + "\n"
 
 

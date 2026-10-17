@@ -38,6 +38,7 @@ class Transmute(BaseModel):
     opposites: list[str] = []  # "A=B": B's concept is the opposite of A's
     drop: list[str] = []
     keep: list[str] = []  # approve: trims to spare, by number or id
+    approver: str = ""  # approve: who approved it
 
 
 def create_app(data_dir: Path | None = None) -> FastAPI:
@@ -180,7 +181,7 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
         from .mirror import transmutate as tm
 
         try:
-            m = tm.approve(data_dir, t.a, t.b, t.keep, log=lambda *_: None)
+            m = tm.approve(data_dir, t.a, t.b, t.keep, t.approver or "you", log=lambda *_: None)
         except (FileNotFoundError, RuntimeError, KeyError) as e:
             raise HTTPException(400, str(e)) from None
         return {"built": m["meta"]["corpus"]["id"], "transmutation": m["meta"]["transmutation"]}
