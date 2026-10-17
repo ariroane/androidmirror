@@ -86,6 +86,10 @@ def register(app: FastAPI, root_of: Callable[[str | None], Path]) -> None:
     def undo(b: Decide) -> dict:
         return run(lambda: engine(b.corpus).undo(b.approver or "user"))
 
+    @app.get("/api/mutate/words/{node}")
+    def words(node: str, corpus: str | None = None) -> dict:
+        return run(lambda: engine(corpus).words(node))
+
     @app.get("/api/mutate/{pid}")
     def one(pid: str, corpus: str | None = None) -> dict:
         return run(lambda: engine(corpus).get(pid))

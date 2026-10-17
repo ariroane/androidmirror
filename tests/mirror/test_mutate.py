@@ -268,3 +268,19 @@ def test_previews_fit_the_approved_answers_too(tmp_path):
     eng.approve(p["id"], "Android K")
     edges = {(e["src"], e["dst"]) for e in mirror(root)["causal"]["edges"]}
     assert ("wrath", "virtue") in edges
+
+
+def test_split_without_senses_says_what_to_give(tmp_path):
+    _, root = make(tmp_path)
+    eng = mutate.Engine(root)
+    w = eng.words("pleasure")
+    assert w["passages"] == 10 and {x["word"] for x in w["words"]} == {"joy", "pleasure"}
+    with pytest.raises(mutate.MutationError, match="Name at least two senses"):
+        eng.propose_split("anger")  # nothing in the Mirror splits anger by itself
+    p = eng.propose_split("anger", [{"label": "anger", "aliases": ["anger"]}, {"label": "fury", "aliases": ["fury"]}])
+    assert any("do not tell the passages apart" in x for x in p["preview"]["warnings"])
+    client = TestClient(create_app(tmp_path))
+    assert client.get("/api/mutate/words/pleasure").json()["label"] == "pleasure"
+    r = client.post("/api/mutate/split", json={"node": "pleasure", "senses": [
+        {"label": "joy", "aliases": ["joy"]}, {"label": "passion", "aliases": ["pleasure"]}]}).json()
+    assert [len(s["passages"]) for s in r["mutation"]["senses"]] == [5, 5]

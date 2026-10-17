@@ -464,11 +464,16 @@ def _warnings(data: dict[str, Any], m: dict[str, Any], prev: dict[str, Any], kb:
     else:
         default = next(s for s in m["senses"] if s["id"] == m["default"])
         n = m.get("basis", {}).get("default", 0)
-        if n:
-            out.append(f"{n} passage(s) gave no sign of their sense and went to the default, {default['label']}")
-        for s in m["senses"]:
-            if not s["passages"] and s["id"] != m["default"]:
-                out.append(f"no passage is assigned to {s['label']}")
+        full = [s for s in m["senses"] if s["passages"]]
+        if len(full) == 1:
+            out.append(f"every passage went to {full[0]['label']}: the words given do not tell the passages apart. Give "
+                       f"each sense words the corpus uses for it, or let Claude read the senses")
+        else:
+            if n:
+                out.append(f"{n} passage(s) gave no sign of their sense and went to the default, {default['label']}")
+            for s in m["senses"]:
+                if not s["passages"]:
+                    out.append(f"no passage is assigned to {s['label']}")
     if prev["values"]["lossy"]:
         out.append("this Mirror predates raw value records, so values were rebuilt from the evidence shown (rebuild to fix)")
     before, after = len(prev["kg"]["violations_before"]), len(prev["kg"]["violations_after"])
@@ -545,6 +550,14 @@ def _words(data: dict[str, Any], node: str) -> dict[str, set[str]]:
             if j.get(k) == node and j.get("labels", {}).get(k):
                 out[j["passage"]].add(cb.norm(j["labels"][k]))
     return out
+
+
+def words_used(data: dict[str, Any], node: str) -> list[tuple[str, int]]:
+    """The corpus words the concept was read from, with how many passages use each, most used first."""
+    count: Counter = Counter()
+    for ws in _words(data, node).values():
+        count.update(ws)
+    return count.most_common()
 
 
 def split(data: dict[str, Any], node: str, senses: list[dict[str, Any]], default: int = 0) -> dict[str, Any]:
@@ -797,6 +810,14 @@ class Engine:
     def applied(self) -> list[dict[str, Any]]:
         return self._read("applied.json", [])
 
+    def words(self, node: str) -> dict[str, Any]:
+        """What a split of `node` can go on: the words the corpus uses for it, and its passages."""
+        data, _ = self._mirror()
+        if node not in data["nodes"]:
+            raise MutationError(f"no concept {node!r} in this Mirror")
+        return {"node": node, "label": data["nodes"][node]["label"], "passages": len(passages_of(data, node)),
+                "words": [{"word": w, "passages": n} for w, n in words_used(data, node)]}
+
     def get(self, pid: str) -> dict[str, Any]:
         p = self.proposals().get(pid)
         if p is None:
@@ -876,7 +897,10 @@ class Engine:
         elif not senses:
             hit = next((c for c in candidates(data, 50) if c["mutation"]["type"] == "split" and c["mutation"]["node"] == node), None)
             if hit is None:
-                raise MutationError("give the senses (label and the words or passages for each), or ask Claude to read them")
+                used = ", ".join(f"{w} ({n})" for w, n in words_used(data, node)[:8]) or "only its own label"
+                raise MutationError(f"nothing in the Mirror splits {data['nodes'][node]['label']} by itself. Name at least two "
+                                    f"senses, each with the words the corpus uses for it (words used for it, with the "
+                                    f"passages using each: {used}), or let Claude read the senses")
             return self._store([self._record(data, base, hit["mutation"], hit["source"], hit["reason"], hit["score"])])[0]
         mut = split(data, node, senses)
         return self._store([self._record(data, base, mut, "user", reason, 0)])[0]

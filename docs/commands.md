@@ -176,7 +176,7 @@ python -m androidmirror mutate undo
 
 What a preview shows: facts combined, divided between senses, or that say nothing once merged ("wrath is the same as anger"); causal judgments between merged concepts, which say nothing once merged and are listed with their passages; the arrows at those concepts before and after; each judgment re-weighed with the ones it came from; changes elsewhere in the causal model; inconsistencies; and how many held-out claims the rest of the corpus restates or implies, and how many it contradicts, before and after. Warnings flag a merge the subject's own words argue against (they call one the contrary of the other, or a kind of the other).
 
-Approved mutations are kept in `data/mirror/<corpus>/mutations/` with who approved them and a copy of the Mirror from before, and `build` makes them again on every rebuild. Passages read for the first time after a split go to the first sense. The web app's Mutate tab does the same.
+Approved mutations are kept in `data/mirror/<corpus>/mutations/` with who approved them and a copy of the Mirror from before, and `build` makes them again on every rebuild. Passages read for the first time after a split go to the first sense. The web app's Mutate tab does the same: to split, type the concept and the tab lists the words the corpus uses for it, with how many passages use each; give each sense a name and its words, leave them empty to split along the evidence, or let Claude read them. A concept the corpus only ever calls by one word can't be split by words; let Claude read it.
 
 ## question
 
