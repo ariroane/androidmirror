@@ -380,12 +380,12 @@ async function loadCausal() {
       <div class="row">More <select id="ex">${opts}</select> does what to <select id="ey">${opts}</select><button class="b primary" id="ebtn">Trace</button></div>
       <div id="eout"></div><div id="edgeout"></div>
       ${h0.folds ? `<h4>Prediction test: can the rest of the text predict what a passage says?</h4>
-      <p class="small">The passages are split into ${h0.folds} groups. Each group is hidden in turn, the model is rebuilt from the other passages, and every claim in the hidden group is checked against that model. Green means the rest of the text predicted it; red means the rest says otherwise.</p>
-      <table><tr><th>Hidden cause-and-effect claims (${sum(P)})</th><th></th></tr>
+      <p class="small">This checks whether ${W()}’s claims hang together. The passages are split into ${h0.folds} groups. One group at a time is set aside, the model is rebuilt from the other passages only, and each claim in the set-aside group is compared with what that model expects. Green means the rest of the text already pointed to the claim; red means the rest points the other way.</p>
+      <table><tr><th>Cause-and-effect claims tested this way (${sum(P)})</th><th></th></tr>
         <tr><td>Also said elsewhere</td><td>${P.restated}</td></tr><tr><td>Not said elsewhere, but predicted by the rest</td><td class="pos">${P.follows}</td></tr>
         <tr><td>The rest says nothing about it</td><td>${P.new}</td></tr><tr><td>The rest predicts the opposite effect</td><td class="neg">${P['sign differs']}</td></tr>
         <tr><td>The rest has cause and effect the other way round</td><td class="neg">${P.contradicted}</td></tr>
-        <tr><th>Hidden “no difference” claims (${sum(N)})</th><th></th></tr><tr><td>Also said elsewhere</td><td>${N.restated}</td></tr><tr><td>The rest agrees</td><td>${N.consistent}</td></tr><tr><td>The rest says it does make a difference</td><td class="neg">${N.contradicted}</td></tr></table>
+        <tr><th>“No difference” claims tested this way (${sum(N)})</th><th></th></tr><tr><td>Also said elsewhere</td><td>${N.restated}</td></tr><tr><td>The rest agrees</td><td>${N.consistent}</td></tr><tr><td>The rest says it does make a difference</td><td class="neg">${N.contradicted}</td></tr></table>
       ${(h0.examples || []).length ? `<details><summary class="small">Examples</summary>${h0.examples.map(x => `<div class="small"><span class="${x.result === 'follows' ? 'pos' : 'neg'}">${esc(x.result)}</span>: ${esc(x.constraint.split('|').slice(1).map(lbl).join(' → '))} ${loc(x.passage, x.locator)} <span class="q">“${esc(x.quote)}”</span></div>`).join('')}</details>` : ''}` : ''}
       <h4>Links (${c.edges.length})</h4>
       <table><tr><th>Link</th><th></th><th>Passages</th><th>How it is said</th></tr>${[...c.edges].sort((a, b) => b.weight - a.weight).map(e => `<tr class="click" data-edge="${esc(e.src)}|${esc(e.dst)}">
@@ -646,7 +646,7 @@ function mutateCard(p) {
     c.constraints.length && `<h4>Claims, re-counted</h4><ul>${items(c.constraints, x => `${esc(x.text)} <span class="muted">${x.weight} passage${x.weight === 1 ? '' : 's'}, ${esc(STATUS_WORD[x.status] || x.status)}</span>${x.from.length > 1 ? ` ← ${x.from.map(y => esc(y.text)).join('; ')}` : ''}`)}</ul>`,
     (c.ripple.added.length || c.ripple.removed.length || c.ripple.status_changed.length) && `<h4>Elsewhere in the model</h4><ul>${items(c.ripple.added, e => `+ ${esc(e.text)}`)}${items(c.ripple.removed, e => `− ${esc(e.text)}`)}${items(c.ripple.status_changed, x => `${esc(x.text)}: ${esc(x.before)} → ${esc(x.after)}`)}</ul>`,
     `<h4>Things that don’t fit together</h4><p class="small">${k.violations_before.length} before, ${k.violations_after.length} after. Facts about them that follow by logic: ${k.inferred_before} → ${k.inferred_after}.</p>`,
-    `<h4>Prediction test</h4><p class="small">Hidden claims, before: ${pct(c.holdout_before)}. After: ${pct(c.holdout_after)}.</p>`,
+    `<h4>Prediction test</h4><p class="small">Claims checked against the rest of the text, before: ${pct(c.holdout_before)}. After: ${pct(c.holdout_after)}.</p>`,
   ].filter(Boolean).join('');
   return `<div class="card" data-mid="${esc(p.id)}"><div><span class="pill">${esc(p.status)}</span><span class="muted small">${esc(MSOURCE[p.source] || p.source.replace(/_/g, ' '))}</span></div>
     <p>${esc(v.summary)}</p><p class="small muted">${esc(p.reason)}</p>
