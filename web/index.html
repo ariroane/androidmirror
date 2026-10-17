@@ -95,8 +95,8 @@ python -m androidmirror build --corpus fomc</pre>
       <div id="plist"></div>
     </section>
     <section id="face">
-      <p class="muted">The Major Arcana card the Mirror's two graphs most resemble, read from both its knowledge graph and the subject's causal model.</p>
-      <div class="row"><select id="ffocus"></select><button class="b" id="frun">Read</button></div>
+      <p class="muted">The Major Arcana card the whole Mirror most resembles, read from both its knowledge graph and the subject's causal model.</p>
+      <div class="row"><button class="b" id="frun">Read again</button></div>
       <svg id="aface" viewBox="0 0 240 290" width="100%" style="max-width:300px"></svg>
       <div id="fcard"></div>
     </section>
@@ -410,13 +410,9 @@ function drawFace(card, opacity) {
 }
 const cardName = c => `${c.numeral} · ${esc(c.name)}${c.reversed ? ' (reversed)' : ''}`;
 async function loadFace() {
-  const sel = $('#ffocus'), keep = sel.value;
-  const nodes = Object.entries(labels).sort((a, b) => a[1].localeCompare(b[1]));
-  sel.innerHTML = '<option value="">Whole Mirror</option>' + nodes.map(([id, l]) => `<option value="${esc(id)}">Around ${esc(l)}</option>`).join('');
-  sel.value = labels[keep] ? keep : '';
   $('#fcard').innerHTML = '<p class="muted">Reading…</p>';
   try {
-    const r = await api('/api/archetype' + (sel.value ? `?focus=${encodeURIComponent(sel.value)}` : ''));
+    const r = await api('/api/archetype');
     const a = r.archetype;
     drawFace(r.undecided ? null : a, 0.45 + 0.55 * Math.min(1, r.margin / 0.4));
     let html = !a ? '<p class="muted">Too little here to read yet.</p>'
@@ -439,7 +435,6 @@ async function loadFace() {
   } catch (err) { fail($('#fcard'), err); }
 }
 $('#frun').onclick = loadFace;
-$('#ffocus').onchange = loadFace;
 
 // ---------- questions ----------
 const QKIND = {tension:'judgments in tension', sign:'which direction', open:'direct or through', weak:'one passage only', link:'unconnected', conflict:'inconsistency', evaluate:'unevaluated', want:'more or less', basis:'weak basis (Derange)'};

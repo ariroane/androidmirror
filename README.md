@@ -1,6 +1,6 @@
 # Android Mirror
 
-A reflective model of a subjective system (a person, a group, an institution) built only from its own words. Prototype 3 reads a whole corpus once and builds two linked structures over the same concepts:
+A reflective model of a subjective system (a person, a group, an institution) built from its own words (other data generating mechanisms in progress). Combines three knowledge structures - knowledge graphs for relational knowledge, causal graphs for observational knowledge, and language structures through Claude. Prototype 3 reads a whole corpus once and builds two linked structures over the same concepts:
 
 - **Descriptive ontology:** a knowledge graph with a schema and rules, so it can be reasoned over, not only browsed. Every answer it gives has a proof that bottoms out in quotes.
 - **Causal model:** the subject's *own* model of how things work, built only from the causal judgments the subject makes ("anger comes from opinion", "take away the opinion and the hurt is gone", "not the thing but your judgment of it disturbs you", "this makes no difference to that"). Each judgment becomes a constraint on a graph, and the graph is fitted to them. Nothing is inferred from how often ideas appear together, and Claude never answers as the subject.
@@ -107,8 +107,21 @@ The Causal tab lists every constraint with its status, the tensions, the pairs s
 - **Knowledge:** "does it follow?" queries with proof trees, and the list of inconsistencies.
 - **Causal:** counts, the held-out check, Trace, the arrows, tensions, denials that hold, claims explained by a chain, values, reported views, and judgments about concepts outside the codebook.
 - **Ask:** the Oracle answers from stated and inferred facts, the subject's causal judgments and model, their values and the most relevant passages, and cites passages by locator.
-- **Questions:** the Question engine. It asks what the graphs leave open, most important first: judgments in tension, signs the passages disagree on, arrows that may be shortcuts, single-passage arrows, unconnected concepts the knowledge graph relates, inconsistencies, unevaluated concepts, split values, and the weak bases a current Derange report found. Each option lists the exact changes it makes, and an answer only becomes a proposal with a preview of its effect; nothing changes until you approve it with your name, and an approved answer can be revoked. See [The Question engine](#the-question-engine).
-- **Face:** the Major Arcana card the Mirror most resembles (from Prototype 1), read from the new graphs.
+- **Face:** the Major Arcana card the whole Mirror most resembles, drawn as a face. See [The face](#the-face).
+
+## The face
+
+The Face tab reads the whole Mirror, both the knowledge graph and the subject's causal model, and names the one Major Arcana card whose patterns it shows most strongly. It always reads the whole Mirror, never a single concept's neighbourhood. The code is `androidmirror/archetypes.py`; the cards are data in `data/archetypes_major_arcana.json`.
+
+1. **The graphs, in the cards' vocabulary.** Each concept gets a type from its kind and the subject's evaluation (an agent is a person, a disposition the subject calls good is a virtue, a bad one a vice, and so on), and each type falls in a class: AIM (virtues, values), ACT (practices), PASSION (vices, emotions), MIND (beliefs, concepts), AGENT (people) or WORLD (events, places). Held facts become relations grouped into families (LINEAGE, EMBODY, COMMIT, OPPOSE, PART), and the subject's causal arrows keep their sign, strength and whether they are open.
+2. **Each card is a few patterns.** A card is two or three small motifs of at most three nodes over those classes, families and signs, each with a weight and a plain-words description. The Hierophant, for example, is "a person who learned from someone who embodied an aim" plus "an aim someone embodied that raises another aim".
+3. **Counted against chance.** The matcher counts every motif in the Mirror, then counts it again in 200 shuffles that keep both graphs' shape but scatter node types across nodes and causal attributes across arrows. A motif scores only by how far it beats the shuffle (tanh of half its z-score, discounted when it occurs only once or twice), so a pattern doesn't win just because the Mirror is full of virtues or arrows. A card's score is the weighted mean of its motifs, between 0 and 1.
+4. **Reversed.** A card whose motifs make sense with the signs flipped (raises becomes lowers) is also scored that way; if the flipped reading is clearly stronger, the card is drawn reversed, upside down as in tarot.
+5. **Undecided.** If the best card scores under 0.45, or leads the next by less than 0.15, the tab shows a blank card back and names the two closest cards. A Mirror under three concepts is not read at all.
+6. **The drawing.** The winning card's face is a fixed expression stored with the card (eye openness, brow angle, mouth curve and opening, gaze, head tilt) under a small glyph of its emblem, so a face always means the same card. It is drawn fainter the narrower the margin.
+7. **Why this card.** Under the face are the motifs that matched, how often each was found, up to three examples with their quotes (click one to highlight those concepts on the canvas), the runners-up, every card's score, and any relation names the cards don't read yet.
+
+The reading is deterministic (a fixed shuffle seed), read-only, and makes no Claude calls. It is an interpretive vocabulary, not a validated psychological instrument: the narrow claim is that the Mirror contains this card's patterns more often than chance would predict, and the tab shows where. The full design is in the project's archetype face design note.
 
 ## The Question engine
 

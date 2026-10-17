@@ -124,12 +124,9 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
             raise HTTPException(400, str(e)) from None
 
     @app.get("/api/archetype")
-    def archetype(focus: str | None = None, corpus: str | None = None) -> dict:
-        snap = get(corpus).snapshot()
-        try:
-            return archetypes.match(snap, focus=focus)
-        except KeyError:
-            raise HTTPException(404, f"no such node: {focus}") from None
+    def archetype(corpus: str | None = None) -> dict:
+        """The archetype the whole Mirror most resembles. Read-only."""
+        return archetypes.match(get(corpus).snapshot())
 
     @app.get("/api/concepts")
     def concepts(corpus: str | None = None) -> list[dict]:
