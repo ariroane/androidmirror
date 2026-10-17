@@ -211,6 +211,67 @@ def test_offline_benchmark_null_corpora_and_planted_model():
     assert r["null: topic also shifts levels"]["situations, stated"]["edges"] < r["null: topic also shifts levels"]["passage table"]["edges"]
     planted = r["planted model"]
     assert planted["+ stated claims"]["arrows_right"] > planted["+ stated claims"]["arrows_wrong"]
+    # holding the topic fixed removes links a topic's mood creates, and costs the planted model nothing
+    levels = r["null: topic also shifts levels"]
+    assert levels["+ topic (exact)"]["edges"] < levels["+ topic (grouped)"]["edges"] <= levels["situations, stated"]["edges"]
+    assert levels["+ topic (grouped)"]["compelled"] == 0 and levels["+ topic (grouped)"]["topic_purity"] > 0.7
+    assert planted["+ topic (grouped)"]["skeleton_recall"] >= planted["situations, stated"]["skeleton_recall"] - 0.05
+
+
+def test_g2_with_a_categorical_column():
+    import random
+    rng = random.Random(3)
+    topic, x, y = [], [], []
+    for _ in range(900):  # the topic shifts both x and y; within a topic they are independent
+        t = rng.choice(["death", "court", "self"])
+        shift = {"death": -1, "court": 1, "self": 0}[t]
+        topic.append(t)
+        x.append(max(-1, min(1, shift + rng.choice([-1, 0, 0, 1]))))
+        y.append(max(-1, min(1, shift + rng.choice([-1, 0, 0, 1]))))
+    data = {"x": x, "y": y, "topic": topic}
+    assert g2_test(data, "x", "y").p < 0.001
+    within = g2_test(data, "x", "y", ("topic",))
+    assert within.enough_data and within.p > 0.01
+    assert g2_test(data, "topic", "x").p < 0.001  # a categorical column can be tested itself
+
+
+def test_topics_group_passages_by_their_words():
+    import random
+    from androidmirror.mirror import topics as tp
+    rng = random.Random(5)
+    vocab = {"death": "grave dust corpse mortal ashes perish", "court": "senate emperor law council duty office",
+             "nature": "stars cosmos river flux element sea"}
+    texts, truth = [], []
+    for i in range(150):
+        t = rng.choice(list(vocab))
+        words = rng.sample(vocab[t].split(), 4) + rng.sample("soul mind reason virtue good".split(), 2)
+        texts.append(" ".join(words)); truth.append(t)
+    found = tp.cluster([tp.features(t, []) for t in texts], 3)
+    groups = {}
+    for lab, t in zip(found["labels"], truth):
+        groups.setdefault(lab, []).append(t)
+    purity = sum(max(g.count(t) for t in set(g)) for g in groups.values()) / len(truth)
+    assert found["k"] == 3 and purity > 0.9
+    assert tp.default_k(30) == 3 and tp.default_k(412) == 7 and tp.default_k(2000) == 8
+
+
+def test_discovery_holds_the_topic_fixed():
+    import random
+    from androidmirror.mirror.causal import discover
+    rng = random.Random(11)
+    sits = []
+    for i in range(900):  # no causation: the topic's mood shifts a, b and c together
+        t = rng.choice(["t1", "t2", "t3"])
+        shift = {"t1": -1, "t2": 1, "t3": 0}[t]
+        cells = {v: {"level": max(-1, min(1, shift + rng.choice([-1, 0, 0, 1]))), "tier": "stated"} for v in "abc"}
+        sits.append({"id": f"s{i}", "passage": f"{i}", "origin": "corpus", "topic": t, "cells": cells})
+    concepts = {v: {"label": v, "variable": True, "kind": "state"} for v in "abc"}
+    cfg = {"bootstrap": 0, "compare_views": False, "selection": {"min_support": 5}}
+    without = discover(sits, list("abc"), concepts, [], [], {**cfg, "topic": False})
+    within = discover(sits, list("abc"), concepts, [], [], cfg)
+    assert len(without["edges"]) == 3 and within["edges"] == []
+    assert {v["variable"] for v in within["topic"]["links"]} == set("abc")
+    assert len(within["topic"]["explained"]) == 3 and all(e["via_topic"] for e in within["topic"]["explained"])
 
 
 def test_codebook_folds_opposites():

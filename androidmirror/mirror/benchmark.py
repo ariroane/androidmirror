@@ -18,7 +18,10 @@ Methods compared (offline, no Claude):
   0 ("not engaged");
 - situations, stated: the current design, unmentioned variables unknown and
   each test using only the rows that state its variables;
-- + stated claims: the same, with the subject stating half of its model's
+- + topic: the same, holding the topic fixed in the tests (a first-tier
+  background variable), either grouped from what each passage mentions, as
+  the build does without Claude, or the exact topic (a ceiling);
+- + stated claims: the same (with the grouped topic), with the subject stating half of its model's
   arrows outright ("from this comes...") and one claim that is false, applied
   as background knowledge;
 - + vignettes: the same, plus vignettes from a perfect stand-in for the subject
@@ -36,6 +39,7 @@ import json
 import random
 from typing import Any, Callable
 
+from . import topics as tp
 from .causal.pc import pc
 
 VARIABLES = {  # in a causal order of the planted model
@@ -144,9 +148,22 @@ def score(found: dict[str, Any], truth: list[tuple[str, str, int]] | None, varia
     return out
 
 
-def _situations(written: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def grouped_topics(written: list[dict[str, Any]], seed: int = 7) -> list[str]:
+    """Topics the way the build finds them without Claude: passages grouped by what they mention."""
+    found = tp.cluster([tp.features("", w["mentioned"]) for w in written], len(TOPICS), seed)
+    return [f"t{lab + 1}" for lab in found["labels"]]
+
+
+def topic_purity(found: list[str], written: list[dict[str, Any]]) -> float:
+    """The share of passages whose grouped topic's majority true topic is their own."""
+    from collections import Counter
+    right = sum(Counter(w["topic"] for f2, w in zip(found, written) if f2 == f).most_common(1)[0][1] for f in set(found))
+    return round(right / len(written), 3)
+
+
+def _situations(written: list[dict[str, Any]], topics: list[str] | None = None) -> list[dict[str, Any]]:
     return [{"id": f"s{i}", "passage": f"{i:05d}", "locator": f"Note {i + 1}", "order": i, "origin": "corpus",
-             "kind": "actual", "description": w["topic"], "contrast": None,
+             "kind": "actual", "description": w["topic"], "contrast": None, "topic": topics[i] if topics else None,
              "cells": {v: {"level": w["state"][v], "tier": "stated", "quote": ""} for v in w["mentioned"]}}
             for i, w in enumerate(written)]
 
@@ -180,6 +197,9 @@ def _do(rng: random.Random, target: str, level: int) -> dict[str, int]:
 
 
 def _score_model(model, truth, variables) -> dict[str, Any]:
+    model = model.copy()
+    model.undirected = {e for e in model.undirected if e <= set(variables)}  # the topic's edges are background
+    model.directed = {d for d in model.directed if set(d) <= set(variables)}
     adj = {frozenset(e) for e in model.undirected} | {frozenset(d) for d in model.directed}
     t_adj = {frozenset((a, b)) for a, b, _ in truth if a in variables and b in variables} if truth else set()
     t_dir = {(a, b) for a, b, _ in truth} if truth else set()
@@ -201,7 +221,7 @@ def run_offline(n: int = 600, seeds: int = 3, alpha: float = 0.05, max_depth: in
 
     variables = [v for v in ORDER if v != "wrath"]  # the constitutive twin is left out, as selection would
     concepts = {v: {"label": v, "variable": True, "kind": "state"} for v in ORDER}
-    cfg = {"alpha": alpha, "max_depth": max_depth, "bootstrap": 0, "compare_views": False, "view": "implied",
+    cfg = {"alpha": alpha, "max_depth": max_depth, "bootstrap": 0, "compare_views": False, "view": "implied", "topic": True,
            "selection": {"min_support": 5, "max_vars": 25}, "variables": variables}
     report: dict[str, Any] = {"n": n, "seeds": seeds, "variables": len(variables), "results": {},
                               "vignettes": f"{targets} variables set low and high, {per_level} vignettes each"}
@@ -214,7 +234,13 @@ def run_offline(n: int = 600, seeds: int = 3, alpha: float = 0.05, max_depth: in
             results = {}
             for method, data in tables(written).items():
                 results[method] = score(pc({v: data[v] for v in variables}, variables, alpha, max_depth), truth, variables)
-            sits = _situations(written)
+            grouped = grouped_topics(written)
+            for method, labels in (("+ topic (grouped)", grouped), ("+ topic (exact)", [w["topic"] for w in written])):
+                r = discover(_situations(written, labels), variables, concepts, [], [], {**cfg, "vignettes": False})
+                results[method] = _score_model(PDAG.from_dict(r["cpdag"]), truth, variables) if "cpdag" in r else {}
+                if method == "+ topic (grouped)":
+                    results[method]["topic_purity"] = topic_purity(grouped, written)
+            sits = _situations(written, grouped)
             claimed = rng.sample(EDGES, len(EDGES) // 2) + [("tranquillity", "reason", 1)]  # one false claim
             stated_model = [{"kind": "causes", "x": a, "y": b, "z": "", "quote": "", "passage": "x", "locator": "x"}
                             for a, b, _ in claimed]

@@ -40,6 +40,7 @@ def main(argv: list[str] | None = None) -> None:
     b.add_argument("--model", help=f"Claude model for coding (default {llm.DEFAULT_MODEL})")
     b.add_argument("--no-situations", action="store_true",
                    help="skip the situations pass (one call per passage); use one rough situation per passage instead")
+    b.add_argument("--topics", type=int, help="how many topics to group passages into (0 for none; default about one per 60 passages)")
 
     c = sub.add_parser("causal", help="re-run causal discovery on a built Mirror (no Claude calls)")
     c.add_argument("--corpus", default="meditations")
@@ -49,6 +50,7 @@ def main(argv: list[str] | None = None) -> None:
     c.add_argument("--min-support", type=int)
     c.add_argument("--bootstrap", type=int, help="resamples for edge stability (0 to skip)")
     c.add_argument("--no-claims", action="store_true", help="do not use stated claims as background knowledge")
+    c.add_argument("--topic", choices=["on", "off"], help="hold each passage's topic fixed in the tests (default on)")
     c.add_argument("--tiers", type=Path, help="JSON list of lists of variable ids, earliest tier first")
     c.add_argument("--view", choices=["stated", "implied", "all"],
                    help="which cells count: stated only, stated + implied (default), or also usual levels and readings")
@@ -87,7 +89,8 @@ def main(argv: list[str] | None = None) -> None:
             raise SystemExit("building needs Claude: put ANTHROPIC_API_KEY in your local .env")
         if args.model:
             llm.DEFAULT_MODEL = args.model
-        build(spec, args.data, limit=args.limit, workers=args.workers, read_situations=not args.no_situations)
+        build(spec, args.data, limit=args.limit, workers=args.workers, read_situations=not args.no_situations,
+              n_topics=args.topics)
     elif args.cmd == "causal":
         settings: dict = {}
         if args.alpha is not None:
@@ -102,6 +105,8 @@ def main(argv: list[str] | None = None) -> None:
             settings["tiers"] = json.loads(args.tiers.read_text(encoding="utf-8"))
         if args.view:
             settings["view"] = args.view
+        if args.topic:
+            settings["topic"] = args.topic == "on"
         sel = {k: v for k, v in (("max_vars", args.max_vars), ("min_support", args.min_support)) if v is not None}
         if sel:
             settings["selection"] = sel

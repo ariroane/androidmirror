@@ -42,6 +42,9 @@ def test_build_recovers_the_equivalence_class(tmp_path):
     # the three evidence views are run side by side
     assert set(c["views"]) == {"stated", "implied", "all"}
     assert coder.calls["code"] == 800 and coder.calls["situations"] == 800
+    # passages are grouped into topics by their words, and the tests hold the topic fixed
+    assert mirror["topics"]["k"] >= 2 and all(s["topic"] for s in mirror["situations"])
+    assert "topic" in c and c["topic"]["topics"] >= 2
 
 
 def test_unmentioned_is_unknown_not_zero(tmp_path):

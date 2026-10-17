@@ -197,7 +197,8 @@ function situationCard(s, focus) {
   const head = s.origin === 'vignette'
     ? `<span class="pill vig">vignette</span>${s.based_on ? ` <span class="small muted">built on ${esc(s.based_on)}</span>` : ''}`
     : `${loc(s.passage, s.locator)} <span class="small muted">${esc(s.kind)}${s.contrast ? ', contrasted with ' + esc(s.contrast) : ''}</span>`;
-  return `<div class="card sit${s.origin === 'vignette' ? ' vigcard' : ''}"><div>${head}</div><div class="small">${esc(s.description)}</div>
+  const topic = s.topic ? ` <span class="pill" title="the topic its passage was grouped into">${esc(s.topic)}</span>` : '';
+  return `<div class="card sit${s.origin === 'vignette' ? ' vigcard' : ''}"><div>${head}${topic}</div><div class="small">${esc(s.description)}</div>
     <div>${cells.map(cellChip).join(' ')}</div>
     ${(s.tensions || []).length ? `<div class="small neg">Tension: ${s.tensions.map(t => `${lbl(t.variable)} is stated ${t.stated > 0 ? 'high' : t.stated < 0 ? 'low' : 'typical'}, but “${esc(t.why.text)}” says otherwise`).join('; ')}</div>` : ''}</div>`;
 }
@@ -332,6 +333,7 @@ async function loadCausal() {
       ${c.feedback_claims.length ? `<p class="small">Claimed in both directions (feedback): ${c.feedback_claims.map(f => `${lbl(f.pair[0])} ⇄ ${lbl(f.pair[1])}`).join(', ')}</p>` : ''}
       ${(c.ambiguous || []).length ? `<p class="small muted">Undecided colliders (the tests can't tell): ${c.ambiguous.map(a => (a.triple || a).map(lbl).join(' – ')).join('; ')}</p>` : ''}
       ${c.conflicts.length ? `<p class="small neg">${c.conflicts.map(x => x.note || `conflicting colliders on ${x.edge.map(lbl).join(' – ')}`).map(esc).join('; ')}</p>` : ''}`;
+    h += topicHtml(c);
     if (c.views && Object.keys(c.views).length > 1) h += `<h4>Does the answer depend on what counts as evidence?</h4>
       <table><tr><th>Evidence</th><th>Values</th><th>Edges</th><th>DAGs</th><th>Differs from the default</th></tr>${Object.entries(c.views).map(([k, v]) => `<tr${k === c.view ? ' style="font-weight:600"' : ''}><td>${esc(viewNames[k] || k)}</td><td>${v.cells.toLocaleString()}</td><td>${v.edges.length}</td><td>${size(v.class_size)}</td><td class="small">${k === c.view ? 'default' : v.only_here || v.missing_here ? `${v.only_here} more, ${v.missing_here} fewer` : 'same edges'}</td></tr>`).join('')}</table>
       <p class="small muted">Run <code>python -m androidmirror causal --view stated</code> (or implied, all) to switch.</p>`;
@@ -339,12 +341,24 @@ async function loadCausal() {
     h += `<h4>Variables (${sel.length} chosen of ${c.selection.length} candidates)</h4>
       <table>${sel.map(r => `<tr class="click" data-node="${esc(r.id)}"><td>${esc(r.label)}</td><td class="small muted">${esc(r.reason)}${c.typical && c.typical[r.id] ? `; usually ${c.typical[r.id].level > 0 ? 'high' : c.typical[r.id].level < 0 ? 'low' : 'typical'}` : ''}</td></tr>`).join('')}</table>
       <details><summary class="muted">Left out (${ex.length})</summary><table>${ex.map(r => `<tr class="click" data-node="${esc(r.id)}"><td>${esc(r.label)}</td><td class="small muted">${esc(r.reason)}</td></tr>`).join('')}</table></details>
-      <p class="muted small">Assumptions: situations are the units; each variable is low, typical or high in a situation, or unknown; no hidden common causes; faithfulness. This is the subject's model of how things work as their writing shows it, not a model of the world or of the subject's life. Neighbouring passages are not independent, so resampling is done in blocks.</p>`;
+      <p class="muted small">Assumptions: situations are the units; each variable is low, typical or high in a situation, or unknown; no hidden common causes beyond the topic, which the tests hold fixed; faithfulness. This is the subject's model of how things work as their writing shows it, not a model of the world or of the subject's life. Neighbouring passages are not independent, so resampling is done in blocks.</p>`;
     el.innerHTML = h;
     if ($('#ey').options.length > 1) $('#ey').selectedIndex = 1;
     $('#ebtn').onclick = runEffect;
     const pb = $('#profbtn'); if (pb) pb.onclick = loadProfile;
   } catch (err) { fail(el, err); }
+}
+function topicHtml(c) {
+  const t = c.topic;
+  if (!t) return `<h4>Topics</h4><p class="small muted">${c.topic_note === 'off' ? 'Not held fixed (run <code>causal --topic on</code> to turn it back on).' : 'No topics: ' + esc(c.topic_note || 'rebuild to group the passages by topic') + '.'}</p>`;
+  const link = e => `<button class="link" data-edge="${esc(e.a)}|${esc(e.b)}">${lbl(e.a)} — ${lbl(e.b)}</button>`;
+  return `<h4>Holding the topic fixed</h4>
+    <p class="small">Each passage is grouped into one of ${t.topics} topics by its words and the concepts coded in it, and every test can hold the topic fixed: two concepts are linked only if they still go together within a topic.</p>
+    ${t.explained.length ? `<p class="small"><b>${t.explained.length} link${t.explained.length === 1 ? '' : 's'} explained by topic</b> (they go away within topics): ${t.explained.map(e => `${lbl(e.a)} — ${lbl(e.b)}${e.test && e.test.p != null ? ` <span class="muted">(${pval(e.test)})</span>` : ''}`).join(', ')}.</p>` : '<p class="small">No link went away when the topic was held fixed.</p>'}
+    ${t.added.length ? `<p class="small muted">Only found within topics: ${t.added.map(([a, b]) => link({a, b})).join(', ')}.</p>` : ''}
+    ${t.links.length ? `<p class="small">Concepts whose level depends on the topic: ${t.links.map(x => esc(x.label)).join(', ')}.</p>` : ''}
+    <details><summary class="small">The topics</summary><table>${t.groups.map(g => `<tr><td>${esc(g.label)}</td><td>${g.size}</td><td class="small muted">${esc(g.terms.map(x => x.replace(/^@/, '')).join(', '))}</td></tr>`).join('')}</table>
+    <p class="small muted">Grouped without Claude, so the grouping is rough. In the benchmark, holding the exact topic fixed removed most links a topic's mood creates; a rough grouping removed fewer. Rebuild with <code>--topics N</code> to change how many, or turn it off with <code>causal --topic off</code>.</p></details>`;
 }
 function transformationHtml(tr, c) {
   const v = tr.validation, f = tr.fill, g = tr.vignettes;

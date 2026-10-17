@@ -1,7 +1,7 @@
 """Conditional independence test for discrete data: the G-squared (likelihood ratio) test.
 
 Each variable takes values in {-1, 0, 1} (low, typical, high), or None where the
-situation leaves it unknown. Unknown values are handled by test-wise deletion:
+situation leaves it unknown; a categorical column (the topic) takes any labels. Unknown values are handled by test-wise deletion:
 each test uses only the rows where all of its variables are known. The test
 sums G = 2 * sum O ln(O/E) over the strata of the conditioning set, with degrees
 of freedom counted from the levels actually seen in each stratum. As in pcalg's
@@ -36,10 +36,17 @@ class CITest:
                 "p": round(self.p, 4), "n": self.n, "enough_data": self.enough_data}
 
 
+def _encode(v: list) -> np.ndarray:
+    known = {x for x in v if x is not None}
+    if known <= {-1, 0, 1}:
+        return np.asarray([-1 if x is None else x + 1 for x in v], dtype=np.int64)
+    code = {x: i for i, x in enumerate(sorted(known, key=str))}  # a categorical column, such as the topic
+    return np.asarray([-1 if x is None else code[x] for x in v], dtype=np.int64)
+
+
 def as_arrays(data: Data) -> dict[str, np.ndarray]:
-    """Columns as small integer arrays (level + 1, unknown = -1), for fast counting."""
-    return {k: (v if isinstance(v, np.ndarray) else np.asarray([-1 if x is None else x + 1 for x in v], dtype=np.int64))
-            for k, v in data.items()}
+    """Columns as small integer arrays (level + 1, or a category's index; unknown = -1), for fast counting."""
+    return {k: (v if isinstance(v, np.ndarray) else _encode(v)) for k, v in data.items()}
 
 
 def g2_test(data: Data, x: str, y: str, s: tuple[str, ...] = (), rows=None) -> CITest:
@@ -56,11 +63,15 @@ def g2_test(data: Data, x: str, y: str, s: tuple[str, ...] = (), rows=None) -> C
         cols = {v: cols[v][known] for v in (x, y, *s)}
     if not len(cols[x]):
         return CITest(x, y, tuple(s), 0.0, 0, 1.0, 0, False)
+    size = {v: int(cols[v].max()) + 1 for v in (x, y, *s)}  # 3 for a level, more for a category
     strat = np.zeros(len(cols[x]), dtype=np.int64)
+    n_strata = 1
     for v in s:
-        strat = strat * 3 + cols[v]
-    cell = strat * 9 + cols[x] * 3 + cols[y]
-    counts = np.bincount(cell, minlength=9 * 3 ** len(s)).reshape(-1, 3, 3).astype(float)
+        strat = strat * size[v] + cols[v]
+        n_strata *= size[v]
+    kx, ky = size[x], size[y]
+    cell = strat * (kx * ky) + cols[x] * ky + cols[y]
+    counts = np.bincount(cell, minlength=n_strata * kx * ky).reshape(-1, kx, ky).astype(float)
     tot = counts.sum(axis=(1, 2))
     counts, tot = counts[tot > 0], tot[tot > 0]
     n = int(tot.sum())

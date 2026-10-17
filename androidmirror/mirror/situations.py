@@ -36,6 +36,7 @@ VIEWS = {
     "all": {"set", "stated", "implied", "defaulted", "reading"},
 }
 DEFAULT_VIEW = "implied"
+TOPIC = "topic"  # the column holding each situation's topic (what its passage is about), when there is one
 TYPICAL_MIN = 5  # stated values needed before a variable has a "usual level"
 TYPICAL_SHARE = 0.5
 
@@ -170,8 +171,10 @@ def add_defaults(situations: list[dict[str, Any]], typical: dict[str, dict[str, 
 
 
 def table(situations: list[dict[str, Any]], variables: list[str], view: str = DEFAULT_VIEW,
-          origins: tuple[str, ...] = ("corpus",)) -> tuple[dict[str, list], list[str]]:
-    """The situation-by-variable table for one view: known levels, None where unknown."""
+          origins: tuple[str, ...] = ("corpus",), topic: bool = False) -> tuple[dict[str, list], list[str]]:
+    """The situation-by-variable table for one view: known levels, None where unknown.
+
+    With `topic`, a "topic" column too, if the situations carry at least two topics."""
     tiers = VIEWS[view]
     rows = [s for s in situations if s["origin"] in origins]
     data = {v: [] for v in variables}
@@ -179,6 +182,8 @@ def table(situations: list[dict[str, Any]], variables: list[str], view: str = DE
         for v in variables:
             c = s["cells"].get(v)
             data[v].append(c["level"] if c and c["tier"] in tiers else None)
+    if topic and len({s.get("topic") for s in rows} - {None}) >= 2:
+        data[TOPIC] = [s.get("topic") for s in rows]
     return data, [s["id"] for s in rows]
 
 

@@ -23,6 +23,7 @@ from .. import llm
 from . import codebook as cb
 from . import coding
 from . import situations as sit
+from . import topics as tp
 from . import subject as subj
 from .causal import discover
 from .corpus import CorpusSpec, Passage, fetch, split
@@ -108,7 +109,7 @@ def _cached_map(items: list[Passage], path_of: Callable[[Passage], Path], fresh:
 
 
 def build(spec: CorpusSpec, data_dir: Path, coder: Any = None, limit: int | None = None, workers: int = 6,
-          read_situations: bool = True, settings: dict[str, Any] | None = None,
+          read_situations: bool = True, settings: dict[str, Any] | None = None, n_topics: int | None = None,
           log: Callable[[str], None] = print) -> dict[str, Any]:
     coder = coder or ClaudeCoder()
     root = mirror_dir(data_dir, spec.id)
@@ -139,6 +140,9 @@ def build(spec: CorpusSpec, data_dir: Path, coder: Any = None, limit: int | None
     support = Counter({cid: len(ps) for cid, ps in mentions.items()})
     candidates = [cid for cid, _ in support.most_common() if concepts.get(cid, {}).get("variable")][:MAX_CANDIDATES]
     cand_info = [{"id": c, "label": concepts[c]["label"], "gloss": concepts[c]["gloss"]} for c in candidates]
+
+    # topics: what each passage is about, from its words and coded concepts (no Claude calls)
+    _write(root / "topics.json", _topics(passages, codings, mentions, concepts, n_topics))
 
     # 4. situations: what each passage reasons about, and how the variables stand there
     if read_situations:
@@ -199,7 +203,9 @@ def finalize(mirror: dict[str, Any], root: Path, settings: dict[str, Any] | None
     kb = KnowledgeBase(mirror["nodes"], mirror["facts"])
     rules = sit.implications(kb, cset, labels)
     situations = json.loads(json.dumps(base["situations"]))
+    topics = _read(root / "topics.json") or {"passages": {}, "topics": []}
     for s in situations:
+        s["topic"] = topics["passages"].get(s["passage"])
         sit.propagate(s, rules)
     filled = _read(root / "fill.json")
     if filled:
@@ -213,7 +219,8 @@ def finalize(mirror: dict[str, Any], root: Path, settings: dict[str, Any] | None
     vig = _read(root / "vignettes.json")
     if vig:
         for v in vig["situations"]:
-            v = {**v, "cells": {k: c for k, c in v["cells"].items() if k in cset}}
+            v = {**v, "cells": {k: c for k, c in v["cells"].items() if k in cset},
+                 "topic": topics["passages"].get((v.get("based_on") or "").split(":")[0])}  # its source situation's topic
             sit.propagate(v, rules)
             situations.append(v)
     concepts = mirror["nodes"]
@@ -223,6 +230,7 @@ def finalize(mirror: dict[str, Any], root: Path, settings: dict[str, Any] | None
     mirror["stated_model"] = base["stated_model"]
     mirror["typical"] = {v: {**t, "label": labels.get(v, v)} for v, t in typical.items()}
     mirror["rules"] = len(rules)
+    mirror["topics"] = {"k": len(topics["topics"]), "topics": topics["topics"], "note": topics.get("note")}
     mirror["transformation"] = {"validation": _summary(_read(root / "validation.json")),
                                 "fill": {k: filled[k] for k in ("trusted", "prior_leak_rate", "leak_checks")} if filled else None,
                                 "vignettes": {k: vig[k] for k in ("targets", "trusted", "settings")} | {"n": len(vig["situations"])} if vig else None}
@@ -304,6 +312,22 @@ def _safe(sid: str) -> str:
 
 
 # ---------- assembling the pieces ----------
+
+
+def _topics(passages: list[Passage], codings: dict[str, Any], mentions: dict[str, dict[str, list]],
+            concepts: dict[str, Any], k: int | None) -> dict[str, Any]:
+    if k == 0 or len(passages) < 30:
+        return {"k": 0, "topics": [], "passages": {}, "note": "off" if k == 0 else "too few passages to group"}
+    k = k or tp.default_k(len(passages))
+    by_passage: dict[str, list[str]] = defaultdict(list)
+    for cid, ps in mentions.items():
+        for pid in ps:
+            by_passage[pid].append(cid)
+    found = tp.cluster([tp.features(p.text, by_passage.get(p.id, [])) for p in passages], k)
+    labels = {cid: c["label"] for cid, c in concepts.items()}
+    topics = [{**t, "name": f"t{t['id'] + 1}", "label": tp.label(t, labels)} for t in found["topics"]]
+    return {"k": found["k"], "topics": topics,
+            "passages": {p.id: f"t{lab + 1}" for p, lab in zip(passages, found["labels"])}}
 
 
 def _mentions(passages: list[Passage], codings: dict[str, Any], book: dict[str, Any]) -> dict[str, dict[str, list]]:

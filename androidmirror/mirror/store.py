@@ -28,6 +28,8 @@ class Mirror:
         self.stated_model: list[dict[str, Any]] = data.get("stated_model", [])
         self.typical: dict[str, Any] = data.get("typical", {})
         self.transformation: dict[str, Any] = data.get("transformation", {})
+        self.topics: dict[str, Any] = data.get("topics") or {"k": 0, "topics": []}
+        self.topic_label = {t["name"]: t["label"] for t in self.topics.get("topics", [])}
         self.causal: dict[str, Any] = data.get("causal", {})
         self.passage_ids: list[str] = data["passage_ids"]
         self.passages = {p["id"]: p for p in passages}
@@ -186,6 +188,10 @@ class Mirror:
         out["edges"] = [{**e, "a_label": self.label(e["a"]), "b_label": self.label(e["b"])} for e in c.get("edges", [])]
         out["removed"] = c.get("removed", [])[:200]
         out["labels"] = {v: self.label(v) for v in self.variables}
+        t = c.get("topic")
+        out["topic"] = {**t, "groups": self.topics.get("topics", []),
+                        "links": [{**x, "label": self.label(x["variable"])} for x in t["links"]]} if t else None
+        out["topic_note"] = None if t else (self.topics.get("note") or ("off" if c.get("settings", {}).get("topic") is False else None))
         return out
 
     def edge(self, a: str, b: str) -> dict[str, Any]:
@@ -224,11 +230,12 @@ class Mirror:
         return out
 
     def effect(self, x: str, y: str) -> dict[str, Any]:
-        data, _ = sit.table(self.situations, self.variables, self.view)
+        topic = bool(self.causal.get("topic"))
+        data, _ = sit.table(self.situations, self.variables, self.view, topic=topic)
         out = {"data_only": effects(data, self.cpdag, x, y), "with_pins": effects(data, self.model, x, y),
                "x_label": self.label(x), "y_label": self.label(y)}
         if self.vmodel is not None:
-            vdata, _ = sit.table(self.situations, self.variables, self.view, origins=("corpus", "vignette"))
+            vdata, _ = sit.table(self.situations, self.variables, self.view, origins=("corpus", "vignette"), topic=topic)
             out["with_vignettes"] = effects(vdata, self.vmodel, x, y)
         return out
 
@@ -242,7 +249,7 @@ class Mirror:
         if brief:
             cells = [c for c in cells if c["tier"] != "defaulted"] if only is None else cells
         return {k: x.get(k) for k in ("id", "passage", "locator", "origin", "kind", "description", "contrast", "target",
-                                      "based_on", "tensions")} | {"cells": cells}
+                                      "based_on", "tensions")} | {"cells": cells, "topic": self.topic_label.get(x.get("topic"))}
 
     def profile(self) -> dict[str, Any]:
         """What the subject transformation knows about the subject, and how well it did on held-out situations."""
