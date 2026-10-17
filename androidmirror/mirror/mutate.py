@@ -24,6 +24,12 @@ is the single path that writes mirror.json, and only for a proposal whose base
 is still the Mirror on disk (a stale one is recomputed and shown again).
 Approved mutations are replayed when the Mirror is rebuilt, and each one can be
 undone.
+
+The preview also says which two-way links (claims that clash, drawn as a cause
+the subject never names) a mutation resolves or creates, and the detector
+proposes splitting an end of such a link when the clashing claim and the
+claims it runs into use that end in different passages: two senses of one word
+can be what makes the subject's claims clash.
 """
 
 from __future__ import annotations
@@ -393,6 +399,17 @@ def compare(before: dict[str, Any], after: dict[str, Any], m: dict[str, Any], li
     ripple_edges = {"added": [eview(ea[k], lab_a) for k in ea if k not in eb and not set(k) & ta],
                     "removed": [eview(eb[k], lab_b) for k in eb if k not in ea and not set(k) & tb]}
     tens = lambda c, ids: sorted(t["id"] for t in c.get("tensions", []) if {t["x"], t["y"]} & ids)  # noqa: E731
+    # two-way links (a cause the subject never names drives both ends), matched across the mutation: a merged member
+    # is its merge, a sense is the concept it was split from
+    merged = {x["id"]: m["into"] for x in m["members"]} if m["type"] == "merge" else {}
+    sense_of = {s["id"]: m["node"] for s in m["senses"]} if m["type"] == "split" else {}
+    drawn = lambda c: [b for b in c.get("common_causes", []) if not b["via"]]  # noqa: E731
+    lb = {frozenset(merged.get(n, n) for n in (b["a"], b["b"])): b for b in drawn(cb_)}
+    la = {frozenset(sense_of.get(n, n) for n in (b["a"], b["b"])): b for b in drawn(ca)}
+    two = lambda b, lab: {"id": b["id"], "text": f"{lab(b['a'])} ↔ {lab(b['b'])}", "weight": b["weight"]}  # noqa: E731
+    common = {"before": len(lb), "after": len(la),
+              "resolved": [two(b, lab_b) for k, b in lb.items() if k not in la][:SHOW],
+              "new": [two(b, lab_a) for k, b in la.items() if k not in lb][:SHOW]}
 
     prev = {
         "kg": {
@@ -419,7 +436,7 @@ def compare(before: dict[str, Any], after: dict[str, Any], m: dict[str, Any], li
                                                            "sign": j["was"]["sign"]}, lab_b)}
                           for j in lineage["collapsed_judgments"]][:SHOW],
             "n_collapsed": len(lineage["collapsed_judgments"]),
-            "tensions_before": tens(cb_, tb), "tensions_after": tens(ca, ta),
+            "tensions_before": tens(cb_, tb), "tensions_after": tens(ca, ta), "common_causes": common,
             "ripple": {"status_changed": [{"text": say(sa[k], lab_a), "before": sb[k]["status"], "after": sa[k]["status"]}
                                           for k in sorted(ripple_ids)][:SHOW], **ripple_edges},
             "stats_before": cb_.get("stats"), "stats_after": ca.get("stats"),
@@ -493,6 +510,10 @@ def _summary(data: dict[str, Any], m: dict[str, Any], prev: dict[str, Any]) -> s
         head = f"Split {lab(m['node'])} into " + ", ".join(f"{s['label']} ({len(s['passages'])})" for s in m["senses"])
         kg = f"{k['facts_before']} facts become {k['facts_after']} ({k['n_divided']} divided between senses)"
     causal = f"links involving these ideas {len(c['edges_before'])} → {len(c['edges_after'])}"
+    cc = c.get("common_causes") or {}
+    if cc.get("resolved") or cc.get("new"):
+        causal += (f", shared-cause links {cc['before']} → {cc['after']} ({len(cc['resolved'])} resolved, "
+                   f"{len(cc['new'])} new)")
     ripple = len(c["ripple"]["added"]) + len(c["ripple"]["removed"]) + len(c["ripple"]["status_changed"])
     if ripple:
         causal += f", {ripple} change(s) elsewhere in the model"
@@ -701,8 +722,41 @@ def candidates(data: dict[str, Any], limit: int = 8) -> list[dict[str, Any]]:
         add(split(data, n, sides, default=0 if len(side[1]) >= len(side[-1]) else 1), "sign_conflict",
             f"the subject says {lab(c['x'])} raises {lab(c['y'])} in {len(side[1])} passage(s) and lowers it in "
             f"{len(side[-1])}: perhaps {lab(n)} is used in two senses", 1.5 + min(len(side[1]), len(side[-1])) / 5)
+    # 4. claims that clash, drawn as a shared cause: perhaps one end is used in two senses, one in the clashing claim
+    # and one in the claims it ran into, so splitting it lets both stand
+    cons = {k["id"]: k for k in (data.get("causal") or {}).get("constraints", [])}
+    for b in (data.get("causal") or {}).get("common_causes", []):
+        if b["via"] or b["settled"]:
+            continue
+        mine = [cons[i] for i in b["claims"] if i in cons]
+        theirs = [cons[i] for i in b["conflicts"] if i in cons]
+        held = lambda cs: {e["passage"] for c in cs for e in c["evidence"] if e["held"]}  # noqa: E731
+        for n in (b["a"], b["b"]):
+            if not ok(n):
+                continue
+            side_a = held(mine)
+            side_b = held(c for c in theirs if n in (c["x"], c["y"], c["z"])) - side_a
+            if not side_a or not side_b:
+                continue
+            claim, against = mine[0], next(c for c in theirs if n in (c["x"], c["y"], c["z"]))
+            sides = [{"label": f"{lab(n)} (as in: {_said(claim, lab)})", "gloss": f"{lab(n)} where the subject says "
+                      f"{_said(claim, lab)}", "passages": sorted(side_a)},
+                     {"label": f"{lab(n)} (as in: {_said(against, lab)})", "gloss": f"{lab(n)} where the subject says "
+                      f"{_said(against, lab)}", "passages": sorted(side_b)}]
+            add(split(data, n, sides, default=0 if len(side_a) >= len(side_b) else 1), "common_cause",
+                f"the claims about {lab(b['a'])} and {lab(b['b'])} clash, so the Mirror shows them sharing a cause the "
+                f"subject never names: perhaps {lab(n)} is used in two senses", 1.5 + min(len(side_a), len(side_b)) / 5)
+            break
     out.sort(key=lambda c: -c["score"])
     return out[:limit]
+
+
+def _said(c: dict[str, Any], lab: Callable[[str], str]) -> str:
+    if c["type"] == "reaches":
+        return f"{lab(c['x'])} {'raises' if c['sign'] > 0 else 'lowers'} {lab(c['y'])}"
+    if c["type"] == "no_path":
+        return f"{lab(c['x'])} makes no difference to {lab(c['y'])}"
+    return f"{lab(c['x'])} acts on {lab(c['z'])} only through {lab(c['y'])}"
 
 
 # ---------- reading senses with Claude ----------

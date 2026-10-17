@@ -296,3 +296,44 @@ def test_benchmark_with_a_written_corpus(tmp_path):
     r = benchmark.run_with_claude(tmp_path, n=120, writer=writer, coder=FakeCoder(), log=lambda *_: None)
     assert r["passages"] == 120 and r["reading_precision"] == 1.0 and r["reading_recall"] == 1.0
     assert r["fit"] == r["fit_on_perfect_reading"]
+
+
+def link(model, a, b):
+    return next((x for x in model["common_causes"] if {x["a"], x["b"]} == {a, b}), None)
+
+
+def test_claims_that_clash_become_a_shared_cause_with_no_directed_path():
+    # a loop: a -> b -> c is said more often than c -> a
+    js = [J("causes", "a", "b", scope="direct", p=f"p{i}") for i in range(2)] + [
+        J("causes", "b", "c", scope="direct", p=f"q{i}") for i in range(2)] + [J("causes", "c", "a", scope="direct", p="r")]
+    m = fit(js)
+    x = link(m, "a", "c")
+    assert x["claims"] == ["reaches|c|a"] and x["reasons"] == ["cycle"] and not x["via"] and not x["settled"]
+    assert x["conflicts"] == ["reaches|a|b", "reaches|b|c"]
+    assert next(c for c in m["constraints"] if c["id"] == "reaches|c|a")["common_cause"] == "a<->c"
+    assert arrows(m) == {("a", "b", 1), ("b", "c", 1)} and m["stats"]["common_causes"] == 1
+    # against a stronger "makes no difference", too; and the denial still holds
+    js2 = [J("independent", "d", "e", sign=0, p=f"d{i}") for i in range(2)] + [J("causes", "d", "e", p="c")]
+    m2 = fit(js2)
+    assert link(m2, "d", "e")["reasons"] == ["denied"] and status(m2)["no_path|d|e"] == "holds"
+    assert m2["nodes"] == ["d", "e"] and not m2["edges"]  # drawn though it has no arrow
+    assert explain(m2, "d", "e")["verdict"].startswith("makes no difference")  # the subject's denial comes first
+    # an outweighed denial is not a shared cause
+    m3 = fit([J("causes", "d", "e", p=f"c{i}") for i in range(3)] + js2[:2])
+    assert status(m3)["no_path|d|e"] == "rejected" and not m3["common_causes"]
+
+
+def test_a_ruling_settles_a_shared_cause_and_can_name_it():
+    base = [J("causes", "z", "a", scope="direct", p="s1"), J("causes", "z", "b", scope="direct", p="s2"),
+            J("causes", "a", "b", scope="direct", p="p")]
+    ruling = {**J("ruling", "a", "b", p="answer:1"), "target": "reaches|a|b", "ruling": "common_cause", "held": False,
+              "direct": False, "indirect": False, "via": ""}
+    m = fit(base + [ruling])
+    x = link(m, "a", "b")
+    assert ("a", "b", 1) not in arrows(m) and x["settled"] and not x["via"] and x["reasons"] == ["settled"]
+    assert explain(m, "a", "b")["verdict"].startswith("makes no difference by itself")
+    m2 = fit(base + [{**ruling, "via": "z"}])
+    assert link(m2, "a", "b")["via"] == "z" and m2["stats"]["common_causes"] == 0
+    # a concept that reaches one end only through the other does not explain why they go together
+    m3 = fit(base[1:] + [J("causes", "b", "a", scope="direct", p="s3"), {**ruling, "via": "z"}])
+    assert link(m3, "a", "b")["named"] == "z" and not link(m3, "a", "b")["via"]

@@ -132,7 +132,7 @@ free: causal, derange, benchmark (without --claude), serve. Full guide: docs/com
             raise SystemExit(str(e)) from None
         st, h = mirror["causal"]["stats"], mirror["causal"]["holdout"]
         print(f"{st['held_constraints']} judgments held by the subject, {st['arrows']} arrows ({st['open']} open), "
-              f"{st['rejected']} in tension, {st['denials_held']} denials; held out: {h['positive']} {h['negative']}")
+              f"{st['rejected']} in tension ({st.get('common_causes', 0)} drawn as shared causes), {st['denials_held']} denials; held out: {h['positive']} {h['negative']}")
     elif args.cmd == "derange":
         from .mirror import derange
 

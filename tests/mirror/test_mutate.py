@@ -284,3 +284,28 @@ def test_split_without_senses_says_what_to_give(tmp_path):
     r = client.post("/api/mutate/split", json={"node": "pleasure", "senses": [
         {"label": "joy", "aliases": ["joy"]}, {"label": "passion", "aliases": ["pleasure"]}]}).json()
     assert [len(s["passages"]) for s in r["mutation"]["senses"]] == [5, 5]
+
+
+def test_a_shared_cause_from_two_senses_is_found_and_resolved_by_a_split(tmp_path):
+    # heat raises fire (4 passages), fire raises smoke (4), and "smoke raises heat" (2) would close a loop:
+    # the Mirror shows heat <-> smoke, a shared cause never named; heat is used in two senses
+    folder = tmp_path / "corpus" / "loop"
+    folder.mkdir(parents=True)
+    for i in range(10):
+        t = [f"[v {c} 1 state]" for c in ("heat", "fire", "smoke")] if i < 2 else []
+        t.append("[j causes heat fire - 1 direct]" if i < 4 else "[j causes fire smoke - 1 direct]" if i < 8
+                 else "[j causes smoke heat - 1 direct]")
+        (folder / f"{i:05d}.txt").write_text(f"# Doc {i}\npassage {i} " + " ".join(t), encoding="utf-8")
+    build(CorpusSpec(id="loop", title="Loop", subject="Tester", splitter="documents"), tmp_path, coder=Coder(),
+          log=lambda *_: None)
+    root = mirror_dir(tmp_path, "loop")
+    links = mirror(root)["causal"]["common_causes"]
+    assert [(x["a"], x["b"], x["claims"]) for x in links] == [("heat", "smoke", ["reaches|smoke|heat"])]
+    eng = mutate.Engine(root)
+    found = [p for p in eng.propose() if p["source"] == "common_cause"]
+    assert found and found[0]["mutation"]["type"] == "split" and found[0]["mutation"]["node"] == "heat"
+    cc = found[0]["preview"]["causal"]["common_causes"]
+    assert cc["before"] == 1 and cc["after"] == 0 and [x["text"] for x in cc["resolved"]] == ["heat ↔ smoke"]
+    assert "shared-cause links 1 → 0" in found[0]["preview"]["summary"]
+    eng.approve(found[0]["id"], "Android K")
+    assert not mirror(root)["causal"]["common_causes"]

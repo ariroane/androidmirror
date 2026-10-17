@@ -165,9 +165,12 @@ def constraints(judgments: list[dict[str, Any]], exclude: set[str] | frozenset =
             rec["sign"] = answers[-1]["sign"] or rec["sign"]
         r = rulings.get(rec["id"])
         if r:
-            rec["ruling"] = {"ruling": r["ruling"], "passage": r["passage"], "locator": r["locator"], "quote": r["quote"]}
+            rec["ruling"] = {"ruling": r["ruling"], "passage": r["passage"], "locator": r["locator"], "quote": r["quote"],
+                             **({"via": r["via"]} if r.get("via") else {})}
             if r["ruling"] == "retract":
                 rec.update(weight=0, held=False, pinned=False, retracted=True)
+            elif r["ruling"] == "common_cause":  # neither drives the other: something else drives both
+                rec.update(pinned=False, common_cause=True, via=r.get("via") or "")
             else:
                 rec["pinned"] = True
                 rec["sign"] = r["sign"] or rec["sign"]

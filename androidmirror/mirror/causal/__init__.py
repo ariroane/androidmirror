@@ -17,6 +17,16 @@ much of that weight as it can:
    feedback loop or contradiction, and is reported as such, never hidden.
 3. A denial is taken if the graph so far satisfies it, and rejected (with the
    claims that outweigh it) if not.
+4. A claim rejected in step 2 (it would close a loop, or break a stronger
+   "makes no difference" claim) is not thrown away: its two ends are joined by
+   a two-way link, x <-> y, read as "something the subject never names drives
+   both". That is the one reading under which both the claim and what it ran
+   into can stand: the subject sees x and y move together, and the stronger
+   claims say x does not drive y. A two-way link adds no directed path, so it
+   can never make a loop or break a denial. The user can settle it (the Question
+   engine's "common cause" ruling, with the shared cause named or not); a
+   ruling that names a concept the model already has driving both ends replaces
+   the two-way link with that concept.
 
 Every arrow keeps the judgments behind it, so each edge in the app goes back
 to its quotes. An arrow added for an "overall" claim that the rest of the
@@ -116,11 +126,13 @@ def fit(judgments: list[dict[str, Any]], settings: dict[str, Any] | None = None,
         exclude: set[str] | frozenset = frozenset()) -> dict[str, Any]:
     cfg = {**DEFAULTS, **(settings or {})}
     allc = build_constraints(judgments, exclude)
-    used = [c for c in allc if c["weight"] >= cfg["min_weight"] or c.get("pinned")]
+    # a claim the user ruled a common cause is never drawn as an arrow, only as a two-way link (step 4)
+    settled = [c for c in allc if c.get("common_cause") and c["type"] == "reaches" and c["x"] != c["y"]]
+    used = [c for c in allc if (c["weight"] >= cfg["min_weight"] or c.get("pinned")) and not c.get("common_cause")]
     # what the user's answers settled comes first, then the corpus, strongest first
     used.sort(key=lambda c: (not c.get("pinned"), -c["weight"], RANK[c["type"]], -c["mentions"], c["id"]))
     g = Graph()
-    for c in used:
+    for c in used + settled:
         for n in (c["x"], c["y"], c["z"]):
             if n:
                 g.succ.setdefault(n, {})
@@ -214,6 +226,7 @@ def fit(judgments: list[dict[str, Any]], settings: dict[str, Any] | None = None,
         else:
             rec["open"] = {"through": through}
 
+    common = common_causes(g, used, settled, status)
     pairs = {(c["x"], c["y"]) for c in used if c["type"] == "reaches"}
     feedback = sorted({tuple(sorted((x, y))) for x, y in pairs if (y, x) in pairs})
     rows = []
@@ -223,20 +236,66 @@ def fit(judgments: list[dict[str, Any]], settings: dict[str, Any] | None = None,
                                           "sign_conflict", "held")}, **st, "evidence": c["evidence"][:12],
                      "n_evidence": len(c["evidence"]), "pinned": c.get("pinned", False), "ruling": c.get("ruling")})
     edges = g.edges()
-    nodes = sorted(n for n in g.succ if g.succ[n] or any(n in g.succ[m] for m in g.succ)) if edges else []
+    linked = {n for b in common if not b["via"] for n in (b["a"], b["b"])}
+    nodes = sorted(n for n in g.succ if g.succ[n] or any(n in g.succ[m] for m in g.succ) or n in linked) \
+        if edges or linked else []
     isolated = sorted(n for n in g.succ if n not in set(nodes))
     count = lambda s: sum(1 for r in rows if r["status"] == s)  # noqa: E731
     return {
         "settings": cfg, "nodes": nodes, "isolated": isolated, "edges": edges, "constraints": rows,
+        "common_causes": common,
         "tensions": [{"id": c["id"], "x": c["x"], "y": c["y"], "signs": c["signs"]} for c in allc if c["sign_conflict"]],
         "feedback": [{"pair": list(p), "status": [status.get(f"reaches|{p[0]}|{p[1]}", {}).get("status"),
                                                   status.get(f"reaches|{p[1]}|{p[0]}", {}).get("status")]} for p in feedback],
         "stats": {"judgments": len(judgments), "held_judgments": sum(1 for j in judgments if j["held"]),
                   "constraints": len(allc), "held_constraints": sum(1 for c in allc if c["held"]),
                   "arrows": len(edges), "open": sum(1 for e in edges if e["open"]), "follows": count("follows"),
-                  "rejected": count("rejected"), "denials_held": count("holds")},
+                  "rejected": count("rejected"), "denials_held": count("holds"),
+                  "common_causes": sum(1 for b in common if not b["via"]),
+                  "denials_outweighed": sum(1 for r in rows if r["status"] == "rejected" and r["type"] != "reaches")},
         "_graph": g, "_by_id": by_id,
     }
+
+
+def common_causes(g: Graph, used: list[dict[str, Any]], settled: list[dict[str, Any]],
+                  status: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    """Claims that clash (step 2's rejects) and those the user ruled a common cause, as two-way links between their ends.
+
+    One link per pair of concepts, carrying every claim behind it. `via` is the shared cause the user named, when the
+    model has it driving both ends; such a link is explained and not drawn. Each claim's status row gets the link's id."""
+    out: dict[tuple[str, str], dict[str, Any]] = {}
+
+    def link(c: dict[str, Any], reason: str) -> None:
+        a, b = sorted((c["x"], c["y"]))
+        rec = out.setdefault((a, b), {"id": f"{a}<->{b}", "a": a, "b": b, "claims": [], "weight": 0, "reasons": [],
+                                      "conflicts": [], "settled": False, "via": "", "named": ""})
+        rec["claims"].append(c["id"])
+        rec["weight"] += c["weight"]
+        rec["reasons"] = sorted(set(rec["reasons"]) | {reason})
+        rec["conflicts"] = list(dict.fromkeys(rec["conflicts"] + status[c["id"]].get("conflicts", [])))
+        status[c["id"]]["common_cause"] = rec["id"]
+
+    for c in used:
+        st = status.get(c["id"], {})
+        if c["type"] == "reaches" and st.get("status") == "rejected" and st.get("reason") in ("cycle", "denied") \
+                and c["x"] != c["y"]:
+            link(c, st["reason"])
+    for c in settled:
+        status[c["id"]] = {"status": "rejected", "reason": "settled", "conflicts": []}
+        link(c, "settled")
+        rec = out[tuple(sorted((c["x"], c["y"])))]
+        rec["settled"] = True
+        z = c.get("via") or ""
+        if z:
+            rec["named"] = z
+            if drives_both(g, z, c["x"], c["y"]):
+                rec["via"] = z
+    return sorted(out.values(), key=lambda r: (-r["weight"], r["id"]))
+
+
+def drives_both(g: Graph, z: str, x: str, y: str) -> bool:
+    """Is z a shared cause of x and y: a path to each that does not run through the other?"""
+    return z not in (x, y) and g.reaches(z, x, skip=y) and g.reaches(z, y, skip=x)
 
 
 def _target(c: dict[str, Any]) -> tuple[str, str | None]:
@@ -270,6 +329,8 @@ def explain(model: dict[str, Any], x: str, y: str) -> dict[str, Any]:
         for a, b in zip(p, p[1:])]} for p, s in sorted(paths, key=lambda ps: len(ps[0]))[:12]],
         "reverse": bool(g.signed_paths(y, x)), "denial": denial,
         "claims": [c for c in model.get("constraints", []) if {c["x"], c["y"]} == {x, y} or (c["type"] == "only_through" and {c["x"], c["z"]} == {x, y})]}
+    pair = tuple(sorted((x, y)))
+    out["common_cause"] = next((b for b in model.get("common_causes", []) if (b["a"], b["b"]) == pair), None)
     signs = {s for _, s in paths}
     if signs == {1}:
         out["verdict"] = "raises"
@@ -279,6 +340,8 @@ def explain(model: dict[str, Any], x: str, y: str) -> dict[str, Any]:
         out["verdict"] = "mixed: some paths raise it, some lower it"
     elif denial and denial["status"] == "holds":
         out["verdict"] = "makes no difference (the subject says so)"
+    elif out["common_cause"] and not out["common_cause"]["via"]:
+        out["verdict"] = "makes no difference by itself: they go together because of a cause the subject never names"
     else:
         out["verdict"] = "not said: the subject's judgments do not connect them"
     return out

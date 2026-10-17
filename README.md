@@ -79,7 +79,7 @@ The causal layer is not a model of the world, and not Claude's model of the subj
 **Fitting.** Constraints are taken strongest first, a denial before a claim on a tie:
 - a claim the graph already implies by a path of the same sign is marked *follows* and adds no arrow;
 - a claim the subject does not call direct waits until all the others are in, so an overall claim never becomes a shortcut arrow when the subject also gives the chain;
-- a claim that would close a loop, or break a stronger denial, is put *in tension*, with the constraints it ran into;
+- a claim that would close a loop, or break a stronger denial, is put *in tension*, with the constraints it ran into, and its two ends are joined by a two-way link (x ↔ y): something the subject never names drives both. That is the one reading under which the claim and what it ran into can both stand, and a two-way link adds no directed path, so it never makes a loop or breaks a denial. The Question engine can settle it (one side holds, or neither drives the other, naming the shared cause when the model already has it driving both), Mutate can split an end used in two senses, and Transmutate lists the links combining two Mirrors resolves or creates;
 - an arrow from an overall claim that the rest of the graph also explains is drawn dashed: the subject may mean only that.
 
 The Causal tab lists every constraint with its status, the tensions, the pairs said in both directions, and the subject's values.

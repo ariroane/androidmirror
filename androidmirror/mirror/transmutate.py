@@ -18,6 +18,10 @@ Three steps, and nothing is written into data/mirror/ until you approve:
    other as in tension. Disagreements that only appear once the two are put
    together (a cycle made of A's arrow and B's arrow, an evaluation A calls good
    and B calls bad) are listed separately, as are claims both Mirrors make.
+   A rejected claim that would close a loop or break a stronger denial is
+   drawn as a two-way link (a cause neither subject names drives both ends);
+   the proposal lists the links combining resolves (one Mirror's clash the
+   other settles), the ones it creates, and the ones trimming removes.
 3. Fitness. Would a reader of half the combined corpus still come away with
    this? Each passage is kept with probability `share`, the causal model is
    refitted on the kept passages, and a claim or denial survives a sample if
@@ -424,6 +428,27 @@ def crossings(mirror: dict[str, Any], model: dict[str, Any]) -> dict[str, Any]:
     return {"agreed": sorted(agreed, key=lambda r: -r["weight"]), "causal": causal, "kg": kg, "values": values}
 
 
+def shared_causes(a: dict[str, Any], b: dict[str, Any], pairs: list[dict[str, Any]], combined: dict[str, Any],
+                  trimmed: dict[str, Any]) -> dict[str, Any]:
+    """Two-way links (claims that clash, read as a cause neither subject names): which the combination resolves,
+    which it creates, and which the trimmed Mirror still has."""
+    ids = _Ids(a["id"], b["id"], pairs)
+    drawn = lambda model: {frozenset((x["a"], x["b"])): x for x in model.get("common_causes", []) if not x["via"]}  # noqa: E731
+    alone: dict[frozenset, dict[str, Any]] = {}
+    for side, src in (("a", a), ("b", b)):
+        m = src["mirror"]
+        own = fit(m["judgments"], (m.get("causal") or {}).get("settings"))
+        for x in drawn(own).values():
+            k = frozenset(ids.concept(side, n)[0] for n in (x["a"], x["b"]))
+            alone.setdefault(k, {"id": x["id"], "a": x["a"], "b": x["b"], "sources": []})["sources"].append(src["id"])
+    comb, trim = drawn(combined), drawn(trimmed)
+    row = lambda k, x: {"key": sorted(k), "weight": x.get("weight", 0), "sources": x.get("sources", [])}  # noqa: E731
+    return {"resolved": [row(k, x) for k, x in alone.items() if k not in comb],
+            "created": [row(k, x) for k, x in comb.items() if k not in alone],
+            "kept": [row(k, x) for k, x in trim.items()],
+            "resolved_by_trimming": [row(k, x) for k, x in comb.items() if k not in trim]}
+
+
 # ---------- 3. fitness ----------
 
 
@@ -570,13 +595,16 @@ def propose(data_dir: Path, a_name: str, b_name: str, use_claude: bool = False, 
         "a": a_name, "b": b_name, "settings": fit_["settings"],
         "alignment": alignment["pairs"], "dropped": alignment["dropped"],
         "crossings": crossings(mirror, model),
+        "shared_causes": shared_causes(a, b, alignment["pairs"], model, after),
         "trims": [{"n": i + 1, **t} for i, t in enumerate(sorted(cut, key=lambda t: ("cfn".index(t["id"][0]), -t["weight"], t["id"])))],
         "fitness": fit_["claims"],
         "stats": {
             "combined": {"concepts": len(mirror["nodes"]), "facts": len(mirror["facts"]),
-                         "judgments": len(mirror["judgments"]), **{k: model["stats"][k] for k in ("arrows", "rejected")}},
+                         "judgments": len(mirror["judgments"]),
+                         **{k: model["stats"][k] for k in ("arrows", "rejected", "common_causes")}},
             "trimmed": {"concepts": len(trimmed["nodes"]), "facts": len(trimmed["facts"]),
-                        "judgments": len(trimmed["judgments"]), **{k: after["stats"][k] for k in ("arrows", "rejected")}},
+                        "judgments": len(trimmed["judgments"]),
+                        **{k: after["stats"][k] for k in ("arrows", "rejected", "common_causes")}},
             "arrows_kept": len(before_arrows & {(e["src"], e["dst"], e["sign"]) for e in after["edges"]}),
             "arrows_new": [f"{e['src']}|{e['dst']}" for e in after["edges"]
                            if (e["src"], e["dst"], e["sign"]) not in before_arrows],
@@ -678,6 +706,9 @@ def _annotate(p: dict[str, Any], nodes: dict[str, Any]) -> None:
         x["text"] = "; ".join(_item_text(nodes, "f:" + k) for k in x.get("facts", []))
     for x in c["values"]:
         x["text"] = _label(nodes, x["concept"])
+    for rows in (p.get("shared_causes") or {}).values():
+        for x in rows:
+            x["text"] = " ↔ ".join(_label(nodes, n) for n in x["key"])
 
 
 def describe(p: dict[str, Any], nodes: dict[str, Any]) -> str:
@@ -686,10 +717,11 @@ def describe(p: dict[str, Any], nodes: dict[str, Any]) -> str:
     lines = [f"# Transmutation proposal: {p['a']} + {p['b']}", "",
              (f"Combined: {s['combined']['concepts']} concepts, {s['combined']['facts']} facts, "
               f"{s['combined']['judgments']} judgments, {s['combined']['arrows']} arrows, "
-              f"{s['combined']['rejected']} in tension."),
+              f"{s['combined']['rejected']} in tension, {s['combined'].get('common_causes', 0)} shared-cause links."),
              (f"After trimming: {s['trimmed']['concepts']} concepts, {s['trimmed']['facts']} facts, "
               f"{s['trimmed']['judgments']} judgments, {s['trimmed']['arrows']} arrows "
-              f"({s['arrows_kept']} of the combined arrows kept), {s['trimmed']['rejected']} in tension."), ""]
+              f"({s['arrows_kept']} of the combined arrows kept), {s['trimmed']['rejected']} in tension, "
+              f"{s['trimmed'].get('common_causes', 0)} shared-cause links."), ""]
     if s["arrows_new"]:
         lines += ["Arrows that only appear after trimming (a claim that followed through a weak path now stands alone): "
                   + ", ".join(_say(nodes, f"reaches|{e}") for e in s["arrows_new"]), ""]
@@ -707,6 +739,13 @@ def describe(p: dict[str, Any], nodes: dict[str, Any]) -> str:
     lines += [f"- {x['type'].replace('_', ' ')}: {', '.join(x.get('facts', []))}" for x in c["kg"]]
     lines += [f"- {_label(nodes, x['concept'])}: urged " + ", ".join(f"{'more' if d > 0 else 'less'} by {k}"
                                                                       for k, d in x["by_source"].items()) for x in c["values"]]
+    sc = p.get("shared_causes") or {}
+    lines += ["", "## Shared causes (claims that clash, read as a cause neither subject names)", ""]
+    for key, head in (("resolved", "resolved by combining"), ("created", "created by combining"),
+                      ("resolved_by_trimming", "resolved by trimming"), ("kept", "still shown after trimming")):
+        rows = sc.get(key, [])
+        lines.append(f"- {head} ({len(rows)})" + (": " + ", ".join(" ↔ ".join(_label(nodes, n) for n in x["key"])
+                                                                   for x in rows[:20]) if rows else ""))
     lines += ["", f"## Proposed trims ({len(p['trims'])})", "",
               "Spare any of these at approval with --keep N (repeatable). Trimmed items are archived, not deleted.", ""]
     for t in p["trims"]:
