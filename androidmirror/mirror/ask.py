@@ -6,6 +6,10 @@ the facts they follow from), the subject's causal judgments (with how many passa
 the subject's model, the chains of arrows between the ideas in the question, two-way links, and what the
 subject wants more or less of. Each item has a reference ([K3] for the knowledge graph, [C2] for the causal
 model) that the answer cites. The graph is open-world: what it lacks is "not found", never "the subject denies it".
+
+A second step then reads the answer against the same items and hypothesizes a couple of ways to use it: which
+idea to change (a lever), through which pathway of the subject's model, toward which outcome. These are
+hypotheses from the subject's own model, not evidence that the world works that way.
 """
 
 from __future__ import annotations
@@ -37,6 +41,28 @@ Answer the question from those items alone, in plain modern English. Do not quot
 - If the items do not cover the question, say so. Missing is "not found", never "denied".
 List the references you cited and the node ids you relied on."""
 
+USES_SCHEMA = {
+    "type": "object",
+    "properties": {"uses": {"type": "array", "items": {
+        "type": "object",
+        "properties": {"lever": {"type": "string"}, "outcome": {"type": "string"}, "how": {"type": "string"},
+                       "assumes": {"type": "string"}, "citations": {"type": "array", "items": {"type": "string"}}},
+        "required": ["lever", "outcome", "how", "assumes", "citations"],
+        "additionalProperties": False}}},
+    "required": ["uses"],
+    "additionalProperties": False,
+}
+
+USES_SYSTEM = """You turn an answer from the Android Mirror into hypotheses for action. The Mirror reflects how {subject} sees the world, built from the corpus "{title}". You see only its knowledge graph (items marked K), its causal model of how {subject} thinks things work (items marked C), and an answer already written from them.
+
+Propose two or three ways the answer could be used to drive real-world behavior or outcomes. For each:
+- lever: the idea someone would change, nudge or act on (an idea that appears in the items).
+- outcome: the result that should follow, and whether it should go up or down. Prefer outcomes {subject} wants more or less of, when the items say so.
+- how: the route, step by step, through the causal model's links and pathways, using the knowledge graph's relations (kinds, parts, needs, opposes) to say what else the lever reaches. Be concrete about who would act and what they would do.
+- assumes: what has to be true in the world for this to work, beginning with the fact that it rests on {subject}'s model. Name any clashing claims, two-way links (changing one side by itself does not move the other) or "makes no difference" claims that cut against it.
+- citations: the item references it rests on.
+Use only the items and the answer: no outside knowledge of {subject}, and no quoting the corpus. Do not use a two-way link as a lever, and do not route through a link the items mark as outweighed. If the items give no causal route, say so in "how" rather than inventing one."""
+
 def match_nodes(m: Mirror, question: str, limit: int = 6) -> list[str]:
     words = {w for w in re.findall(r"[a-z]+", question.lower()) if w not in STOP and len(w) > 2}
     scored = []
@@ -51,7 +77,7 @@ def match_nodes(m: Mirror, question: str, limit: int = 6) -> list[str]:
     return [nid for *_, nid in sorted(scored, reverse=True)[:limit]]
 
 
-def context(m: Mirror, nodes: list[str], max_pathways: int = 8) -> list[str]:
+def context(m: Mirror, nodes: list[str], max_pathways: int = 12) -> list[str]:
     """Numbered items from the knowledge graph (K) and the causal model (C) about the matched ideas. No corpus text."""
     lab = m.label
     kg: list[str] = []
@@ -103,12 +129,13 @@ def context(m: Mirror, nodes: list[str], max_pathways: int = 8) -> list[str]:
 
 
 def pathways(m: Mirror, nodes: list[str], limit: int) -> list[str]:
-    """Chains of two or more links in the subject's model: between the matched ideas, then onward from each."""
+    """Chains of two or more links in the subject's model: between the matched ideas, then onward from and into each."""
     lab = m.label
     vs = [n for n in nodes if n in m.variables]
     direct = {(e["src"], e["dst"]) for e in m.causal.get("edges", [])}
     pairs = [(x, y) for x in vs for y in vs if x != y]
-    pairs += [(x, y) for x in vs for y in m.variables if y not in vs]
+    pairs += [(x, y) for x in vs for y in m.variables if y not in vs]  # what the matched ideas lead to
+    pairs += [(y, x) for x in vs for y in m.variables if y not in vs]  # and what leads to them
     out: list[str] = []
     for x, y in pairs:
         if (x, y) in direct:
@@ -143,13 +170,23 @@ def ask(m: Mirror, question: str) -> dict[str, Any]:
     nodes = match_nodes(m, question)
     items = context(m, nodes)
     out: dict[str, Any] = {"question": question, "nodes": nodes, "facts": items, "answer": None, "citations": [],
-                           "common_causes": shared_causes(m, nodes)}
+                           "uses": [], "common_causes": shared_causes(m, nodes)}
     if not items:
         out["answer"] = "The Mirror has nothing on that yet."
         return out
     if llm.available():
         corpus = m.meta["corpus"]
         system = SYSTEM.replace("{subject}", corpus["subject"]).replace("{title}", corpus["title"])
-        r = llm._json_call(system, "Items:\n" + "\n".join(items) + f"\n\nQuestion: {question}", ANSWER_SCHEMA, effort="low")
+        listed = "Items:\n" + "\n".join(items)
+        r = llm._json_call(system, f"{listed}\n\nQuestion: {question}", ANSWER_SCHEMA, effort="low")
         out.update(answer=r["answer"], citations=r["citations"], nodes=r["nodes_used"] or nodes)
+        out["uses"] = uses(m, items, question, r["answer"])
     return out
+
+
+def uses(m: Mirror, items: list[str], question: str, answer: str) -> list[dict[str, Any]]:
+    """The second step: a couple of hypotheses for acting on the answer, routed through the subject's model."""
+    corpus = m.meta["corpus"]
+    system = USES_SYSTEM.replace("{subject}", corpus["subject"]).replace("{title}", corpus["title"])
+    user = "Items:\n" + "\n".join(items) + f"\n\nQuestion: {question}\n\nAnswer: {answer}"
+    return llm._json_call(system, user, USES_SCHEMA, effort="low")["uses"][:3]

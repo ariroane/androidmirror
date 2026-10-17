@@ -19,8 +19,8 @@ Commands that call Claude need `ANTHROPIC_API_KEY` in the local `.env` file. Eve
 | `causal` | Re-fit the causal model with other settings | No |
 | `derange` | Find where the worldview rests on least, under what matters most | No |
 | `benchmark` | Test the causal fit on a subject whose model is known | No (`--claude`: yes) |
-| `serve` | Open the web app | No (the Ask tab makes 1 call per question) |
-| `ask` | Ask the Mirror a question from the command line | 1 call per question |
+| `serve` | Open the web app | No (the Ask tab makes 2 calls per question) |
+| `ask` | Ask the Mirror a question from the command line | 2 calls per question |
 | `mutate` | Merge or split concepts, preview what changes in both graphs, apply what you approve | No (`split --claude`: 1 call per 50 passages) |
 | `question` | Answer the Mirror's questions about what its graphs leave open | No (1 call per answer written in words) |
 | `transmutate` | Combine two built Mirrors and trim the result to what is strong; writes only when you approve | No (`--claude`: 1 call) |
@@ -138,7 +138,7 @@ Open http://localhost:8000 (or your port). Stop it with Ctrl+C. The app reads th
 
 ## ask
 
-Asks the Mirror a question from the command line, answered only from its knowledge graph and causal model (facts, inferences, the subject's causal judgments, links, chains of links and values), never from the passages, citing each item it uses as [K3] or [C2].
+Asks the Mirror a question from the command line, answered only from its knowledge graph and causal model (facts, inferences, the subject's causal judgments, links, chains of links and values), never from the passages, citing each item it uses as [K3] or [C2]. A second call then suggests two or three ways to use the answer in the real world (an idea to change, the pathway it travels, the outcome it moves and what it assumes).
 
 ```powershell
 python -m androidmirror ask "What does Marcus think causes anger?"
