@@ -1,6 +1,6 @@
 # Android Mirror, Prototype 1 (paused)
 
-> Prototype 2 replaced this app; see the main [README](../README.md). Everything here still runs as `python -m androidmirror p1 <command>` and `python -m androidmirror p1 serve`.
+> Prototype 2, and then Prototype 3, replaced this app; see the main [README](../README.md). Everything here still runs as `python -m androidmirror p1 <command>` and `python -m androidmirror p1 serve`.
 
 A contextual generation engine: a reflective model the subjective operating frame of a person, persons, or system, built from their language.
 It combines works through a combination of three knowledge structures: Claude (through the Anthropic API) with two linked ontologies over the same nodes:

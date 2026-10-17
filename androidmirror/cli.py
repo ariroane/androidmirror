@@ -1,6 +1,6 @@
 """Command line: `python -m androidmirror <command>`.
 
-Prototype 2 commands build and serve a Mirror from a whole corpus. The paused
+The commands build and serve a Mirror from a whole corpus (Prototype 3). The paused
 Prototype 1 app (patch review and the four engines) is still available as
 `python -m androidmirror p1 <command>`.
 """
@@ -14,7 +14,7 @@ from pathlib import Path
 
 from . import llm
 from .mirror import ask as oracle
-from .mirror.build import build, mirror_dir, rediscover, run_step
+from .mirror.build import build, mirror_dir, refit
 from .mirror.corpus import CorpusSpec
 from .mirror.store import Mirror
 from .server import ROOT
@@ -30,14 +30,13 @@ def main(argv: list[str] | None = None) -> None:
         return p1_main(argv[1:])
 
     ap = argparse.ArgumentParser(
-        prog="androidmirror", description="Android Mirror, Prototype 2",
+        prog="androidmirror", description="Android Mirror, Prototype 3",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""usual order:
   build --corpus meditations --limit 30   a cheap trial (about 2 Claude calls per passage)
   serve                                   the web app on http://localhost:8000
   build --corpus meditations              the whole corpus; cached passages cost nothing
-  validate, fill, vignettes               optional: Claude reads between the lines as the subject
-  causal --alpha 0.01                     re-run discovery with other settings, free
+  causal --min-weight 2                   re-fit the causal model with other settings, free
 
 free: causal, benchmark (without --claude), serve. Full guide: docs/commands.md""")
     ap.add_argument("--data", type=Path, default=DATA, help="data directory (default: ./data)")
@@ -47,41 +46,17 @@ free: causal, benchmark (without --claude), serve. Full guide: docs/commands.md"
     b.add_argument("--corpus", default="meditations", help="a spec in data/corpora/ (meditations, fomc) or a JSON path")
     b.add_argument("--limit", type=int, help="only the first N passages (a cheap trial run)")
     b.add_argument("--workers", type=int, default=6, help="Claude calls in parallel")
-    b.add_argument("--model", help=f"Claude model for coding (default {llm.DEFAULT_MODEL})")
-    b.add_argument("--no-situations", action="store_true",
-                   help="skip the situations pass (one call per passage); use one rough situation per passage instead")
-    b.add_argument("--topics", type=int, help="how many topics to group passages into (0 for none; default about one per 60 passages)")
+    b.add_argument("--model", help=f"Claude model for reading (default {llm.DEFAULT_MODEL})")
 
-    c = sub.add_parser("causal", help="re-run causal discovery on a built Mirror (no Claude calls)")
+    c = sub.add_parser("causal", help="re-fit the subject's causal model on a built Mirror (no Claude calls)")
     c.add_argument("--corpus", default="meditations")
-    c.add_argument("--alpha", type=float, help="significance level of each test; lower means fewer, surer links (default 0.05)")
-    c.add_argument("--depth", type=int, help="most concepts a test may hold fixed at once (default 3)")
-    c.add_argument("--max-vars", type=int, help="most concepts in the causal graph (default 25)")
-    c.add_argument("--min-support", type=int, help="fewest situations a concept must be known in (default 8)")
-    c.add_argument("--bootstrap", type=int, help="resamples for edge stability (0 to skip)")
-    c.add_argument("--no-claims", action="store_true", help="do not use stated claims as background knowledge")
-    c.add_argument("--topic", choices=["on", "off"], help="hold each passage's topic fixed in the tests (default on)")
-    c.add_argument("--tiers", type=Path, help="JSON list of lists of variable ids, earliest tier first")
-    c.add_argument("--view", choices=["stated", "implied", "all"],
-                   help="which cells count: stated only, stated + implied (default), or also usual levels and readings")
+    c.add_argument("--min-weight", type=int, help="fewest passages a judgment must be made in to count (default 1)")
+    c.add_argument("--folds", type=int, help="blocks of passages for the held-out check (default 5)")
 
-    v = sub.add_parser("validate", help="score the subject transformation on held-out situations (about 3 calls each)")
-    v.add_argument("--corpus", default="meditations")
-    v.add_argument("--n", type=int, default=40, help="held-out situations (default 40)")
-    v.add_argument("--workers", type=int, default=6)
-    f = sub.add_parser("fill", help="fill unknown cells of trusted variables through the subject transformation")
-    f.add_argument("--corpus", default="meditations")
-    f.add_argument("--leak-sample", type=int, default=30, help="filled values to run the prior-leak checks on")
-    f.add_argument("--workers", type=int, default=6)
-    g = sub.add_parser("vignettes", help="ask the subject transformation about invented situations (2 calls each)")
-    g.add_argument("--corpus", default="meditations")
-    g.add_argument("--per-level", type=int, default=6, help="vignettes per variable and level (default 6)")
-    g.add_argument("--max-targets", type=int, default=6, help="variables to set (default 6)")
-    g.add_argument("--workers", type=int, default=6)
-    bm = sub.add_parser("benchmark", help="test the causal methods on a planted model and a topic-only null corpus")
-    bm.add_argument("--n", type=int, default=600, help="situations to sample (offline) or passages to write (--claude)")
-    bm.add_argument("--seeds", type=int, default=3)
-    bm.add_argument("--claude", action="store_true", help="have Claude write the passages and run the real pipeline")
+    bm = sub.add_parser("benchmark", help="test the causal fit on a subject whose model we planted")
+    bm.add_argument("--n", type=int, default=300, help="passages to generate (offline) or to have Claude write (--claude)")
+    bm.add_argument("--seeds", type=int, default=5)
+    bm.add_argument("--claude", action="store_true", help="have Claude write the passages and run the real reading pipeline")
 
     s = sub.add_parser("serve", help="run the web app")
     s.add_argument("--port", type=int, default=8000)
@@ -99,41 +74,16 @@ free: causal, benchmark (without --claude), serve. Full guide: docs/commands.md"
             raise SystemExit("building needs Claude: put ANTHROPIC_API_KEY in your local .env")
         if args.model:
             llm.DEFAULT_MODEL = args.model
-        build(spec, args.data, limit=args.limit, workers=args.workers, read_situations=not args.no_situations,
-              n_topics=args.topics)
+        build(spec, args.data, limit=args.limit, workers=args.workers)
     elif args.cmd == "causal":
-        settings: dict = {}
-        if args.alpha is not None:
-            settings["alpha"] = args.alpha
-        if args.depth is not None:
-            settings["max_depth"] = args.depth
-        if args.bootstrap is not None:
-            settings["bootstrap"] = args.bootstrap
-        if args.no_claims:
-            settings["claims_as_pins"] = False
-        if args.tiers:
-            settings["tiers"] = json.loads(args.tiers.read_text(encoding="utf-8"))
-        if args.view:
-            settings["view"] = args.view
-        if args.topic:
-            settings["topic"] = args.topic == "on"
-        sel = {k: v for k, v in (("max_vars", args.max_vars), ("min_support", args.min_support)) if v is not None}
-        if sel:
-            settings["selection"] = sel
-        mirror = rediscover(args.data, CorpusSpec.load(args.corpus).id, settings)
-        c = mirror["causal"]
-        size = c.get("class_size", {})
-        print(f"{len(c.get('variables', []))} variables, {len(c.get('edges', []))} edges; class size "
-              f"{size.get('data', {}).get('count')} from the data, {size.get('with_pins', {}).get('count')} with pins")
-    elif args.cmd in ("validate", "fill", "vignettes"):
-        if not llm.available():
-            raise SystemExit(f"{args.cmd} needs Claude: put ANTHROPIC_API_KEY in your local .env")
-        opts = {"validate": lambda: {"n": args.n}, "fill": lambda: {"leak_sample": args.leak_sample},
-                "vignettes": lambda: {"per_level": args.per_level, "max_targets": args.max_targets}}[args.cmd]()
+        settings = {k: v for k, v in (("min_weight", args.min_weight), ("folds", args.folds)) if v is not None}
         try:
-            run_step(args.cmd, args.data, CorpusSpec.load(args.corpus).id, workers=args.workers, **opts)
+            mirror = refit(args.data, CorpusSpec.load(args.corpus).id, settings)
         except (RuntimeError, FileNotFoundError) as e:
             raise SystemExit(str(e)) from None
+        st, h = mirror["causal"]["stats"], mirror["causal"]["holdout"]
+        print(f"{st['held_constraints']} judgments held by the subject, {st['arrows']} arrows ({st['open']} open), "
+              f"{st['rejected']} in tension, {st['denials_held']} denials; held out: {h['positive']} {h['negative']}")
     elif args.cmd == "benchmark":
         from .mirror import benchmark
 

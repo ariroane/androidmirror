@@ -1,124 +1,113 @@
-"""An offline stand-in for Claude, and a synthetic corpus with a known causal structure.
+"""An offline stand-in for Claude, and a synthetic corpus whose subject holds a known causal model.
 
-Passages carry their own coding as tags, e.g. "[v anger -1] [s justice is_a virtue] [c anger distress 1 explicit]",
-so the build pipeline can run end to end without a key. Each passage is one situation; a variable the passage
-does not tag is unknown there (mentioned at random, independently of its level).
+Passages carry their own coding as tags, e.g. "[v anger -1] [s justice is_a virtue] [j causes gamma delta - 1 direct]",
+so the build pipeline can run end to end without a key.
+
+The planted model: alpha -> gamma <- beta, gamma -> delta -> epsilon (negative); zeta touches nothing.
+The subject says so in these ways, some many times over (repetition must not add weight):
+- gamma -> delta, directly, in 30 passages;
+- alpha -> gamma as a thought experiment ("take away alpha and gamma goes"), in 8;
+- beta -> gamma in 5; delta lowers epsilon in 6;
+- "not alpha but gamma moves delta" (screens_off) in 3; alpha -> delta overall in 4 (open: through gamma);
+- "zeta makes no difference to alpha" in 4;
+- one slip, epsilon -> gamma, in 1 passage (a cycle, so it is rejected and reported);
+- reported or entertained views that must not count: Epicurus's beta -> zeta, a hypothesis zeta -> delta.
 """
 
 from __future__ import annotations
 
 import random
-import re
 from pathlib import Path
+import re
 
-TAG = re.compile(r"\[(v|s|c|n|m) ([^\]]+)\]")
-# the planted model: alpha -> gamma <- beta, gamma -> delta -> epsilon (negative), zeta on its own
-PARENTS = {"gamma": [("alpha", 1), ("beta", 1)], "delta": [("gamma", 1)], "epsilon": [("delta", -1)]}
-ORDER = ["alpha", "beta", "zeta", "gamma", "delta", "epsilon"]
-TOPIC_WORDS = ["grave dust corpse mortal ashes", "senate emperor council office law", "stars cosmos river flux sea"]
-
-
-def _level(score: float) -> int:
-    return 1 if score > 0.6 else -1 if score < -0.6 else 0
+TAG = re.compile(r"\[(v|s|n|j|w) ([^\]]+)\]")
+PLANTED = [("alpha", "gamma", 1), ("beta", "gamma", 1), ("gamma", "delta", 1), ("delta", "epsilon", -1)]
+VARIABLES = ["alpha", "beta", "gamma", "delta", "epsilon", "zeta"]
 
 
 class FakeCoder:
     uses_llm = False
 
     def __init__(self) -> None:
-        self.calls = {"code": 0, "consolidate": 0, "situations": 0, "answer": 0}
+        self.calls = {"code": 0, "consolidate": 0, "judgments": 0}
 
     def code(self, text, locator, subject):
         self.calls["code"] += 1
-        out = {"concepts": [], "statements": [], "causal_claims": []}
+        out = {"concepts": [], "statements": []}
         for kind, body in TAG.findall(text):
             parts = body.split()
             if kind == "v":
                 label, level = parts[0].replace("_", " "), int(parts[1])
                 out["concepts"].append({"label": label, "kind": parts[2] if len(parts) > 2 else "state",
                                         "gloss": f"gloss of {label}", "level": 1 if level >= 0 else -1, "quote": text[:30]})
-            elif kind == "s" or kind == "n":
+            elif kind in ("s", "n"):
                 s, r, o = parts[:3]
                 out["statements"].append({"subject": s.replace("_", " "), "relation": r, "object": o.replace("_", " "),
                                           "negated": kind == "n", "modality": parts[3] if len(parts) > 3 else "asserts",
                                           "attribution": parts[4] if len(parts) > 4 else "self", "qualifier": "",
                                           "wording": "", "quote": text[:30]})
-            elif kind == "c":
-                out["causal_claims"].append({"cause": parts[0].replace("_", " "), "effect": parts[1].replace("_", " "),
-                                             "sign": int(parts[2]), "direction_basis": parts[3], "scope": "direct",
-                                             "strength_word": "", "modality": "asserts", "attribution": "self",
-                                             "quote": text[:30]})
         return out
 
     def consolidate(self, lines, subject):
         self.calls["consolidate"] += 1
         return []
 
-    def situations(self, text, locator, subject, variables):
-        self.calls["situations"] += 1
-        ids = {v["id"] for v in variables}
-        levels, claims = [], []
+    def judgments(self, text, locator, subject, concepts):
+        """[j kind x y z sign scope register attribution]; [w concept direction]"""
+        self.calls["judgments"] += 1
+        out = {"judgments": [], "values": []}
         for kind, body in TAG.findall(text):
             parts = body.split()
-            if kind == "v" and parts[0] in ids:
-                levels.append({"variable": parts[0], "level": int(parts[1]), "quote": text[:20]})
-            elif kind == "m":
-                x, y, z = (parts[1:] + ["", "", ""])[:3]
-                claims.append({"kind": parts[0], "x": x, "y": y, "z": "" if z == "-" else z, "quote": text[:20]})
-        return {"situations": [{"description": f"situation in {locator}", "kind": "actual", "contrast_with": -1,
-                                "levels": levels}], "model_claims": claims}
-
-    def answer(self, req):
-        """A perfect stand-in for the subject (the planted model); the generic adult knows nothing."""
-        self.calls["answer"] += 1
-        if req["mode"] != "subject":
-            return []
-        known = {k["variable"]: k["level"] for k in req["situation"]["known"]}
-        target = req["situation"].get("target")
-        out = []
-        state = dict(known)
-        for v in ORDER:
-            if v in state or v == target:
-                continue
-            ps = PARENTS.get(v)
-            if ps and all(p in state for p, _ in ps):
-                state[v] = _level(sum(1.3 * s * state[p] for p, s in ps))
-        for a in req["ask"]:
-            if a["id"] in state and a["id"] not in known:
-                out.append({"variable": a["id"], "known": True, "level": state[a["id"]], "basis": "belief",
-                            "cite": f"{a['id']} follows its causes", "reason": "planted"})
+            if kind == "j":
+                k, x, y, z, sign = parts[:5]
+                scope, register, attribution = (parts[5:] + ["unsaid", "describes", "self"][len(parts[5:]):])[:3]
+                out["judgments"].append({"kind": k, "x": x, "y": y, "z": "" if z == "-" else z, "sign": int(sign),
+                                         "scope": scope, "register": register, "attribution": attribution,
+                                         "quote": text[:40]})
+            elif kind == "w":
+                out["values"].append({"concept": parts[0], "direction": int(parts[1]), "quote": text[:30]})
         return out
 
 
-def sample_dag(n: int, seed: int = 1) -> list[dict[str, int]]:
-    rng = random.Random(seed)
-    rows = []
-    for _ in range(n):
-        st: dict[str, int] = {}
-        for v in ORDER:
-            ps = PARENTS.get(v, [])
-            st[v] = _level(sum(1.3 * s * st[p] for p, s in ps) + rng.gauss(0, 0.8))
-        rows.append(st)
-    return rows
+def judgment_tags(i: int) -> list[str]:
+    tags = []
+    if i < 30:
+        tags.append("[j causes gamma delta - 1 direct]")
+        if i % 3 == 0:
+            tags.append("[j causes gamma delta - 1 direct]")  # said twice in one passage: still one passage
+    if 30 <= i < 38:
+        tags.append("[j intervention alpha gamma - 1]")
+    if 38 <= i < 43:
+        tags.append("[j causes beta gamma - 1 direct]")
+    if 43 <= i < 49:
+        tags.append("[j causes delta epsilon - -1 direct]")
+    if 49 <= i < 52:
+        tags.append("[j screens_off alpha gamma delta 1]")
+    if 52 <= i < 56:
+        tags.append("[j causes alpha delta - 1 overall]")
+    if 56 <= i < 60:
+        tags.append("[j independent zeta alpha - 0]")
+    if i == 60:
+        tags.append("[j causes epsilon gamma - 1]")  # the slip
+    if i == 61:
+        tags += ["[j causes beta zeta - 1 unsaid describes epicurus]", "[j causes zeta delta - 1 unsaid entertains]",
+                 "[j causes alpha unicorns - 1]"]  # unicorns are not in the codebook
+    if i in (62, 63):
+        tags.append("[w zeta 1]")
+    if i == 64:
+        tags.append("[w epsilon -1]")
+    return tags
 
 
-def write_corpus(folder: Path, n: int = 800, seed: int = 1, mention: float = 0.75) -> None:
+def write_corpus(folder: Path, n: int = 80, seed: int = 1) -> None:
     folder.mkdir(parents=True, exist_ok=True)
-    rng = random.Random(seed + 1)
-    trng = random.Random(seed + 99)  # its own stream, so the topic words leave the rest of the corpus as it was
-    for i, row in enumerate(sample_dag(n, seed)):
-        tags = [f"[v {k} {v} state]" for k, v in row.items() if rng.random() < mention]
-        if i % 50 == 0:
-            tags.append("[c gamma delta 1 explicit]")
-        if i % 70 == 0:
-            tags.append("[c alpha zeta 1 explicit]")  # a claim the data does not support
-        if i == 5:
-            tags.append("[m whether_or_not zeta alpha -]")  # "whether zeta or not, alpha": true
-            tags.append("[m not_x_but_y alpha gamma delta]")  # "not alpha but gamma moves delta": true
+    rng = random.Random(seed)
+    for i in range(n):
+        tags = [f"[v {v} {rng.choice([-1, 1])} state]" for v in VARIABLES if rng.random() < 0.5 or i < 6]
+        tags += judgment_tags(i)
         if i == 3:
             tags += ["[s justice is_a virtue]", "[s virtue is_a good]", "[s self values good]",
                      "[s cruelty is_a vice]", "[s vice opposes virtue]", "[n justice is_a good]",
                      "[s pleasure is_a good asserts epicurus]", "[s reason requires attention]",
                      "[s virtue requires reason]"]
-        words = " ".join(trng.sample(TOPIC_WORDS[i % 3].split(), 3))  # what the passage is about, unrelated to the levels
-        (folder / f"{i:05d}.txt").write_text(f"# Doc {i}\ngroup: {i // 40}\npassage {i} {words} " + " ".join(tags), encoding="utf-8")
+        (folder / f"{i:05d}.txt").write_text(f"# Doc {i}\ngroup: {i // 40}\npassage {i} " + " ".join(tags), encoding="utf-8")

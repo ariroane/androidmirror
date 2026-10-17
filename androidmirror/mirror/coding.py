@@ -1,16 +1,16 @@
 """Claude's three reading jobs in building a Mirror, each one structured call.
 
 1. `code_passage` (once per passage): open coding. Concept mentions with their
-   level in the passage, descriptive statements with modality and
-   attribution, and causal claims with how their direction is grounded.
+   level in the passage, and descriptive statements with modality and
+   attribution. These build the knowledge graph.
 2. `consolidate` (a few calls over the whole vocabulary): fold the labels from
    step 1 into one codebook, merging synonyms and folding antonyms into one
    concept with a polarity ("freedom from anger" = anger at level -1).
-3. `situations_passage` (once per passage): with the codebook fixed, find the
-   situations the passage reasons about and the level (low, typical, high) of
-   each variable the passage states for each, plus the places where the subject
-   states its causal model outright. Situations, not passages, are the units of
-   the subject's model (see causal/__init__.py).
+3. `judgments_passage` (once per passage): with the codebook fixed, the
+   subject's causal judgments in the passage (what brings about what, the
+   thought experiments, what makes no difference, what works only through
+   what), and, apart from them, what the passage urges (the values layer).
+   These build the causal layer (see judgments.py and causal/).
 
 Each function has the same shape as its offline stand-in in the tests, so the
 build pipeline can run without a key.
@@ -46,17 +46,8 @@ CODE_SCHEMA: dict[str, Any] = {
                            "attribution": _STR, "qualifier": _STR, "wording": _STR, "quote": _STR},
             "required": ["subject", "relation", "object", "negated", "modality", "attribution", "qualifier",
                          "wording", "quote"], "additionalProperties": False}},
-        "causal_claims": {"type": "array", "items": {
-            "type": "object",
-            "properties": {"cause": _STR, "effect": _STR, "sign": _LEVEL,
-                           "direction_basis": {"type": "string", "enum": ["explicit", "temporal", "inferred"]},
-                           "scope": {"type": "string", "enum": ["direct", "overall"]},
-                           "strength_word": _STR, "modality": {"type": "string", "enum": list(MODALITIES)},
-                           "attribution": _STR, "quote": _STR},
-            "required": ["cause", "effect", "sign", "direction_basis", "scope", "strength_word", "modality",
-                         "attribution", "quote"], "additionalProperties": False}},
     },
-    "required": ["concepts", "statements", "causal_claims"],
+    "required": ["concepts", "statements"],
     "additionalProperties": False,
 }
 
@@ -73,7 +64,7 @@ CODE_SYSTEM = f"""You are coding one passage of a corpus for the Android Mirror,
 2. statements: descriptive facts, using only these relations:
 {chr(10).join(f"   - {r}: {s['gloss']}" for r, s in RELATIONS.items())}
    - Evaluations are is_a with object "good", "bad" or "indifferent" ("pleasure is not a good" -> pleasure is_a good, negated).
-   - Definitions and "X is a form of Y" are statements (is_a, part_of, requires), never causal claims.
+   - Definitions and "X is a form of Y" are statements (is_a, part_of, requires).
    - subject and object are concept labels from your list, "{SELF}", or one of {", ".join(EVALUATIONS)}.
    - negated: true when the passage denies the fact.
    - modality: asserts (states it), prescribes (urges it, "thou must"), asks (rhetorical or open question), entertains (a hypothesis or one horn of a dilemma).
@@ -81,11 +72,7 @@ CODE_SYSTEM = f"""You are coding one passage of a corpus for the Android Mirror,
    - qualifier: extra detail a binary fact loses, e.g. for learned_from what was learned; else "".
    - wording: for related_to, the original verb phrase; else "".
 
-3. causal_claims: what the passage says brings about, increases or reduces what. cause and effect are concept labels.
-   - sign: 1 if more cause gives more effect, -1 if less.
-   - direction_basis: explicit (a connective like because, so that, from this comes), temporal (one precedes the other), inferred (your reading).
-   - scope: direct if the passage presents an immediate effect, overall if it is the end result of a chain.
-   - strength_word: the quantifier the passage uses (always, necessarily, often, may), or "".
+Causal claims are read in a separate pass; here code only concepts and descriptive statements.
 
 Quotes must be copied exactly from the passage. Prefer fewer, well-grounded items over speculative ones. An empty list is fine."""
 
@@ -126,56 +113,63 @@ def consolidate(lines: list[str], subject: str) -> list[dict[str, Any]]:
     return llm._json_call(system, "\n".join(lines), CONSOLIDATE_SCHEMA, effort="high")["concepts"]
 
 
-SITUATION_SCHEMA: dict[str, Any] = {
+KINDS_OF_JUDGMENT = ("causes", "intervention", "means_end", "screens_off", "independent")
+REGISTERS = ("describes", "urges", "asks", "entertains")
+HELD_REGISTERS = {"describes", "urges"}
+
+JUDGMENT_SCHEMA: dict[str, Any] = {
     "type": "object",
     "properties": {
-        "situations": {"type": "array", "items": {
+        "judgments": {"type": "array", "items": {
             "type": "object",
             "properties": {
-                "description": _STR,
-                "kind": {"type": "string", "enum": ["actual", "hypothetical", "ideal", "general"]},
-                "contrast_with": {"type": "integer"},
-                "levels": {"type": "array", "items": {
-                    "type": "object",
-                    "properties": {"variable": _STR, "level": {"type": "integer", "enum": [-1, 0, 1]}, "quote": _STR},
-                    "required": ["variable", "level", "quote"], "additionalProperties": False}}},
-            "required": ["description", "kind", "contrast_with", "levels"], "additionalProperties": False}},
-        "model_claims": {"type": "array", "items": {
+                "kind": {"type": "string", "enum": list(KINDS_OF_JUDGMENT)},
+                "x": _STR, "y": _STR, "z": _STR,
+                "sign": {"type": "integer", "enum": [-1, 0, 1]},
+                "scope": {"type": "string", "enum": ["direct", "overall", "unsaid"]},
+                "register": {"type": "string", "enum": list(REGISTERS)},
+                "attribution": _STR, "quote": _STR},
+            "required": ["kind", "x", "y", "z", "sign", "scope", "register", "attribution", "quote"],
+            "additionalProperties": False}},
+        "values": {"type": "array", "items": {
             "type": "object",
-            "properties": {"kind": {"type": "string", "enum": ["causes", "direct", "not_x_but_y", "whether_or_not", "so_that"]},
-                           "x": _STR, "y": _STR, "z": _STR, "quote": _STR},
-            "required": ["kind", "x", "y", "z", "quote"], "additionalProperties": False}},
+            "properties": {"concept": _STR, "direction": _LEVEL, "quote": _STR},
+            "required": ["concept", "direction", "quote"], "additionalProperties": False}},
     },
-    "required": ["situations", "model_claims"],
+    "required": ["judgments", "values"],
     "additionalProperties": False,
 }
 
-SITUATION_SYSTEM = """You are reading one passage of a corpus about {subject} to recover the subject's own model of how things work: not what drives the writing, but the situations the subject thinks about and how things stand in them.
+JUDGMENT_SYSTEM = """You are reading one passage of a corpus by or about {subject} to recover {subject}'s own causal model: the judgments the passage makes about what brings about what. Record what the passage says, never what you know about the subject or about the world, and never a judgment the passage does not make.
 
-You get a fixed list of variables (id: label - meaning). Each can stand low (-1), typical (0) or high (1) in a situation.
+Concepts (id: label - meaning). Use these ids for x, y and z; if no concept fits, give a short label in the corpus's own words:
+{vocabulary}
 
-1. situations: each concrete or imagined circumstance the passage reasons about (the morning with the meddlers, an insult, an illness, the hour of death). A passage may hold several; a purely general remark is one situation of kind "general".
-   - description: one line, in neutral words, saying what the situation is. Do not state the variables' levels in it.
-   - kind: actual (something that happened or happens), hypothetical (an "if" or "suppose"), ideal (the state the passage urges: "be free of anger" describes a situation where anger is low), general (how things stand in general).
-   - contrast_with: a conditional or a contrast often describes two situations that differ in one respect ("take away the opinion, and the complaint is taken away": one situation with the opinion and the complaint, one without either). Give the index (0-based, within this passage) of the situation this one is contrasted with, or -1.
-   - levels: only the variables whose level in this situation the passage states or plainly shows, each with the shortest verbatim quote that shows it. Leave out everything the passage leaves unsaid; most situations involve only a few variables. Never fill in a level from what you know about the subject or about the world.
+1. judgments, each one of these kinds:
+   - causes: x brings about, produces, increases or reduces y ("from this comes", "because of x, y", "x makes y"). sign 1 if more x gives more y, -1 if more x gives less y. scope: direct if the passage presents x acting on y immediately, overall if as the end of a chain, unsaid if it does not say.
+   - intervention: a thought experiment. The passage imagines adding or removing x and says what then happens to y ("take away the opinion, and the complaint is taken away"; "if you remove x, y remains"). sign 1 if y moves with x, -1 if against it, 0 if y stays as it was.
+   - means_end: x is a way to y ("do x so that y", "by x you will have y"). sign 1; -1 for "avoid x so that y" (x stands in the way of y).
+   - screens_off: "it is not x but y that does z", "x affects z only through y". x and z, with y in between: y acts on z (sign is the sign of y on z), and x acts on z only through y or not at all.
+   - independent: x makes no difference to y ("whether x or not, y", "x cannot harm y", "x does not touch y"). sign 0.
+   Not judgments: definitions, classifications and evaluations ("anger is a vice", "death is a natural thing"), which are descriptive facts read elsewhere; and exhortations with no causal reason ("be free of anger"), which go under values.
+   - register: describes (the passage states it), urges (it is part of an exhortation, e.g. "do x so that y"), asks (an open question; a rhetorical question that plainly asserts counts as describes), entertains (a hypothesis, one horn of a dilemma, or a view the passage tests and sets aside).
+   - attribution: "{self}" for the subject's own view, or the name of the person, school or source the passage reports.
+   - quote: the shortest verbatim span that shows the judgment.
 
-2. model_claims: places where the subject states its model outright, using variable ids for x, y, z ("" when unused):
-   - causes: x brings about or raises y ("from this comes").
-   - direct: x acts on y directly, not through anything else.
-   - not_x_but_y: "it is not x but y that does z" (x makes no difference to z once y is known).
-   - whether_or_not: "whether x or not, y" (y does not depend on x).
-   - so_that: "do x so that y" (x is a means to y).
-   Quote each exactly. An empty list is fine.
+2. values: what the passage urges, praises or holds up as the ideal, apart from any causal claim. concept: an id or label; direction 1 if it is to be had or increased, -1 if to be avoided or reduced; quote: verbatim.
 
-Judge from this passage alone."""
+Judge from this passage alone. Prefer fewer, well-grounded judgments. Empty lists are fine."""
 
 
-def situations_passage(text: str, locator: str, subject: str, variables: list[dict[str, str]]) -> dict[str, Any]:
-    system = SITUATION_SYSTEM.replace("{subject}", subject)
-    listing = "\n".join(f"{v['id']}: {v['label']} - {v['gloss']}" for v in variables)
-    user = f"Variables (id: label - meaning):\n{listing}\n\nPassage ({locator}):\n{text}"
-    return llm._json_call(system, user, SITUATION_SCHEMA, effort="medium")
+def vocabulary(concepts: list[dict[str, str]]) -> str:
+    return "\n".join(f"{c['id']}: {c['label']} - {c['gloss']}" for c in concepts)
+
+
+def judgments_passage(text: str, locator: str, subject: str, concepts: list[dict[str, str]]) -> dict[str, Any]:
+    """The causal judgments and values in one passage. The vocabulary is the same for every passage, so it goes in
+    the (cached) system prompt."""
+    system = JUDGMENT_SYSTEM.replace("{subject}", subject).replace("{self}", SELF).replace("{vocabulary}", vocabulary(concepts))
+    return llm._json_call(system, f"Passage ({locator}):\n{text}", JUDGMENT_SCHEMA, effort="medium", cache_system=True)
 
 
 def prompt_version() -> str:
@@ -184,6 +178,6 @@ def prompt_version() -> str:
     return hashlib.sha256(blob.encode()).hexdigest()[:12]
 
 
-def situation_version() -> str:
-    """A short hash of the situations prompt, so a change re-reads the situations but not the coding."""
-    return hashlib.sha256(json.dumps([SITUATION_SYSTEM, SITUATION_SCHEMA], sort_keys=True).encode()).hexdigest()[:12]
+def judgment_version() -> str:
+    """A short hash of the judgments prompt, so a change re-reads the judgments but not the coding."""
+    return hashlib.sha256(json.dumps([JUDGMENT_SYSTEM, JUDGMENT_SCHEMA], sort_keys=True).encode()).hexdigest()[:12]
