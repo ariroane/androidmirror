@@ -23,6 +23,7 @@ Commands that call Claude need `ANTHROPIC_API_KEY` in the local `.env` file. Eve
 | `ask` | Ask the Mirror a question from the command line | 1 call per question |
 | `mutate` | Merge or split concepts, preview what changes in both graphs, apply what you approve | No (`split --claude`: 1 call per 50 passages) |
 | `question` | Answer the Mirror's questions about what its graphs leave open | No (1 call per answer written in words) |
+| `transmutate` | Combine two built Mirrors and trim the result to what is strong; writes only when you approve | No (`--claude`: 1 call) |
 | `p1` | The paused Prototype 1 app | Some subcommands |
 
 ## The usual order
@@ -191,6 +192,29 @@ python -m androidmirror question --revoke 3fa9c1d2e0      # take an approved ans
 ```
 
 Kinds: `tension`, `sign`, `open`, `weak`, `link`, `conflict`, `evaluate`, `want`, and `basis` (the weak bases in a current Derange report, `derange.json`, if there is one). Answers are kept in `data/mirror/<corpus>/answers.json` and survive a rebuild. The Questions tab of the web app does the same.
+
+## transmutate
+
+Combines two built Mirrors into one, then trims it to the relationships and causes that are strong. It works in two steps, and nothing is written into `data/mirror/` until the second.
+
+```powershell
+python -m androidmirror transmutate propose meditations fomc
+python -m androidmirror transmutate propose meditations fomc --claude --opposite tranquillity=uncertainty --drop patience
+python -m androidmirror transmutate approve meditations fomc --keep 3 --keep 17
+```
+
+**propose** pairs the concepts the two Mirrors share, pools their facts and causal judgments into one Mirror whose subject is both, fits one causal model to the pooled judgments, and scores everything for fitness. It saves the proposal to `data/transmutations/meditations+fomc/` (`proposal.json`, and `proposal.md` to read) and prints it:
+
+- **Aligned concepts:** pairs with the same name (label or alias), plus Claude's pairs by meaning with `--claude`, plus yours. `--pair A=B` says B's concept is A's; `--opposite A=B` says it is A's contrary, and every sign through it flips. `--drop CONCEPT` (or `--drop A=B`) leaves a pair out. Each concept is paired at most once. Unpaired concepts keep their Mirror's name as a prefix, such as `fomc:inflation`.
+- **Both Mirrors say:** causal claims made in both corpora.
+- **Tensions that come from combining:** places where the Mirrors disagree that neither has on its own: opposite signs, a cycle made of one Mirror's arrow and the other's chain, a claim one makes that the other denies, a concept one calls good and the other bad, a value one urges and the other avoids. The fit takes the better-supported side and keeps the other as "in tension".
+- **Proposed trims, numbered:** fitness asks whether a reader of half the combined corpus would still come away with each item. Each sample keeps every passage with probability `--share` (default 0.5) and re-fits the model; a claim survives if the re-fitted model still has a path of the same sign, a denial if it still holds, a fact if any passage holding it was kept. What survives less often than `--keep-at` (default 0.6) is proposed for trimming: in practice, what is said in only one passage and not implied by anything else. A strong claim that the model rejects is kept, so the tension stays visible. Views the subject only reports or entertains are trimmed too.
+
+Re-run `propose` as often as you like; it is free unless `--claude`, and replaces the previous proposal.
+
+**approve** writes the combined Mirror exactly as proposed to `data/mirror/meditations+fomc/`, where `serve` shows it in the Mirror menu like any other. `--keep N` (repeatable, by number or by id) spares a trim. Trimmed items are archived in `trimmed.json` in that folder, not deleted, and an earlier approval is moved to `history/`. Answers you approved in the Question engine come along: your rulings follow the concepts' new names, and your answers are never sampled out or trimmed. If either source Mirror has been rebuilt, or its answers have changed, since the proposal, approve refuses: propose again.
+
+Two Mirrors combined this way can be combined with a third. The web app has the same steps as routes (`POST /api/transmutate/propose`, `GET /api/transmutate?a=&b=`, `POST /api/transmutate/approve`) but no buttons yet.
 
 ## p1
 

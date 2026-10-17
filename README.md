@@ -160,6 +160,7 @@ The full guide, with every option, examples, what each step costs and what to do
 | `ask "question" [--corpus NAME]` | The Oracle from the command line. |
 | `mutate propose\|merge\|split\|show\|approve\|reject\|undo` | Merge or split concepts; previews, applied only on approval. Offline except `split --claude`. |
 | `question [--corpus NAME] [--limit 10] [--kind K] [--list]` | Answer the Question engine's questions; approve each proposal by typing your name. `--pending`, `--approve ID --by NAME`, `--reject ID`, `--revoke ID`. No Claude calls unless you answer in words. |
+| `transmutate propose A B [--claude] [--pair A=B] [--opposite A=B] [--drop C]` then `transmutate approve A B [--keep N]` | Combine two Mirrors and trim to what is strong. Writes nothing until approve. |
 | `p1 ...` | The paused Prototype 1 app (patch review, Refactorer, Breaker, Chainer, Evolver): [docs/prototype1.md](docs/prototype1.md). |
 
 ## Adding a corpus
@@ -188,6 +189,7 @@ Splitters: `paragraphs` (one text file, short paragraphs merged), `documents` (a
 | `androidmirror/mirror/build.py`, `store.py`, `ask.py` | The pipeline, the read views, the Oracle |
 | `androidmirror/mirror/mutate.py`, `mutate_api.py` | The mutate engine and its routes |
 | `androidmirror/mirror/question.py`, `answers.py` | The Question engine; approved answers and how they amend a Mirror |
+| `androidmirror/mirror/transmutate.py` | Transmutate: align, combine and fitness-trim two Mirrors |
 | `androidmirror/server.py`, `web/index.html` | The app |
 | `androidmirror/p1_*`, `refactor.py`, `breaker.py`, `chainer.py`, `evolver/` | Prototype 1, paused |
 

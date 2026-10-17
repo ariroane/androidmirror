@@ -101,6 +101,19 @@ free: causal, derange, benchmark (without --claude), serve. Full guide: docs/com
     qu.add_argument("--revoke", metavar="ID", help="take an approved answer back out")
     qu.add_argument("--by", default="", help="your name, for --approve")
 
+    t = sub.add_parser("transmutate", help="combine two built Mirrors and trim to what is strong (writes only on approve)")
+    t.add_argument("action", choices=["propose", "approve"])
+    t.add_argument("a", help="a built Mirror (a folder in data/mirror/)")
+    t.add_argument("b", help="the Mirror to combine with it")
+    t.add_argument("--claude", action="store_true", help="propose: also have Claude pair concepts by meaning (1 call)")
+    t.add_argument("--pair", action="append", metavar="A=B", help="propose: pair A's concept with B's")
+    t.add_argument("--opposite", action="append", metavar="A=B", help="propose: B's concept is the opposite of A's")
+    t.add_argument("--drop", action="append", metavar="CONCEPT", help="propose: leave this concept (or A=B pair) unpaired")
+    t.add_argument("--share", type=float, help="propose: share of passages a fitness sample reads (default 0.5)")
+    t.add_argument("--samples", type=int, help="propose: fitness samples (default 50)")
+    t.add_argument("--keep-at", type=float, help="propose: survival rate below which an item is trimmed (default 0.6)")
+    t.add_argument("--keep", action="append", metavar="N", help="approve: spare trim N (number or id) from the proposal")
+
     sub.add_parser("p1", help="the paused Prototype 1 app: python -m androidmirror p1 --help")
 
     args = ap.parse_args(argv)
@@ -167,6 +180,10 @@ free: causal, derange, benchmark (without --claude), serve. Full guide: docs/com
                 question.cli(root, limit=args.limit, kind=args.kind, listing=args.list)
         except (KeyError, ValueError) as e:
             raise SystemExit(str(e)) from None
+    elif args.cmd == "transmutate":
+        from .mirror import transmutate
+
+        transmutate.cli(args, args.data)
     elif args.cmd == "ask":
         m = Mirror.load(mirror_dir(args.data, CorpusSpec.load(args.corpus).id))
         if m is None:
