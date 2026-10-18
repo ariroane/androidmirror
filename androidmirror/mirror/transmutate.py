@@ -596,6 +596,7 @@ def propose(data_dir: Path, a_name: str, b_name: str, use_claude: bool = False, 
         "alignment": alignment["pairs"], "dropped": alignment["dropped"],
         "crossings": crossings(mirror, model),
         "shared_causes": shared_causes(a, b, alignment["pairs"], model, after),
+        "differences": differences(data_dir, a_name, b_name, alignment["pairs"]),
         "trims": [{"n": i + 1, **t} for i, t in enumerate(sorted(cut, key=lambda t: ("cfn".index(t["id"][0]), -t["weight"], t["id"])))],
         "fitness": fit_["claims"],
         "stats": {
@@ -615,6 +616,58 @@ def propose(data_dir: Path, a_name: str, b_name: str, use_claude: bool = False, 
     _write(root / "proposal.json", proposal)
     (root / "proposal.md").write_text(describe(proposal, mirror["nodes"]), encoding="utf-8")
     return proposal
+
+
+def differences(data_dir: Path, a_name: str, b_name: str, pairs: list[dict[str, Any]]) -> dict[str, Any]:
+    """How the two Mirrors differ in knowledge, causes and OODA (compare.py), through the alignment."""
+    from . import compare
+    from .store import Mirror
+
+    ma, mb = (Mirror.load(data_dir / "mirror" / n) for n in (a_name, b_name))
+    return compare.compare(ma, mb, pairs, (a_name, b_name))
+
+
+def compare_only(data_dir: Path, a_name: str, b_name: str, use_claude: bool = False,
+                 add: list[dict[str, Any]] | None = None, drop: list[str] | None = None) -> dict[str, Any]:
+    """Only the differences, with the alignment they rest on: no fitness, nothing saved."""
+    if a_name == b_name:
+        raise ValueError("pick two different Mirrors")
+    a, b = load_source(data_dir, a_name), load_source(data_dir, b_name)
+    if use_claude and not llm.available():
+        raise llm.LLMUnavailable("aligning with Claude needs ANTHROPIC_API_KEY in your local .env")
+    alignment = align(a, b, use_claude, add, drop)
+    return {"a": a_name, "b": b_name, "alignment": alignment["pairs"],
+            "differences": differences(data_dir, a_name, b_name, alignment["pairs"])}
+
+
+def describe_differences(d: dict[str, Any]) -> list[str]:
+    """The comparison in words, as Markdown lines."""
+    a, b = d["names"]
+    k, c, o = d["knowledge"], d["causal"], d["ooda"]
+    pct = lambda v: f"{v:.0%}" if v is not None else "n/a"  # noqa: E731
+    lines = [f"## How {a} and {b} differ", ""] + [f"- {x}" for x in d["headline"]]
+    lines += ["", "### Knowledge", "",
+              (f"- {a}: {k['a']['concepts']} concepts, {k['a']['held']} facts held, {k['a']['inferred']} inferred, "
+               f"{k['a']['violations']} inconsistencies. {b}: {k['b']['concepts']}, {k['b']['held']}, "
+               f"{k['b']['inferred']}, {k['b']['violations']}."),
+              "- Relations (share of held facts, " + a + " / " + b + "): "
+              + ", ".join(f"{r['relation'].replace('_', ' ')} {pct(r['a'])} / {pct(r['b'])}" for r in k["relations"][:8])]
+    lines += [f"- Held by one, denied by the other: {x['text']}" for x in k["contradicted"][:10]]
+    lines += [f"- Evaluated differently: {x['text']}" for x in k["evaluations"][:10]]
+    lines += ["", "### Causes", "",
+              (f"- {a}: {c['a']['arrows']} arrows, {c['a']['in_tension']} in tension, held-out passages predicted "
+               f"{pct(c['a']['held_out_predicted'])}. {b}: {c['b']['arrows']}, {c['b']['in_tension']}, "
+               f"{pct(c['b']['held_out_predicted'])}.")]
+    lines += [f"- {x['text']}" for x in c["effects"] if x["kind"] != "agree"][:20]
+    lines += [f"- Role: {x['text']}" for x in c["roles"][:10]]
+    lines += ["", "### OODA", "",
+              f"- Stages ({a} / {b}): " + ", ".join(f"{t} {o['a']['stages'].get(t, 0)} / {o['b']['stages'].get(t, 0)}"
+                                                 for t in ("observe", "orient", "decide", "act")),
+              f"- Loop closes: {a} {'yes' if o['a']['closes'] else 'no'}, {b} {'yes' if o['b']['closes'] else 'no'}.",
+              "- Causation between stages (" + a + " / " + b + "): "
+              + ", ".join(f"{f['link'].replace('>', ' → ')} {pct(f['a'])} / {pct(f['b'])}" for f in o["flow"][:6])]
+    lines += [f"- Stage: {x['text']}" for x in o["moved"][:15]]
+    return lines + [""]
 
 
 def approve(data_dir: Path, a_name: str, b_name: str, keep: list[str] | None = None, approver: str = "you",
@@ -725,6 +778,8 @@ def describe(p: dict[str, Any], nodes: dict[str, Any]) -> str:
     if s["arrows_new"]:
         lines += ["Arrows that only appear after trimming (a claim that followed through a weak path now stands alone): "
                   + ", ".join(_say(nodes, f"reaches|{e}") for e in s["arrows_new"]), ""]
+    if p.get("differences"):
+        lines += describe_differences(p["differences"])
     lines += [f"## Aligned concepts ({len(p['alignment'])})", ""]
     for x in p["alignment"]:
         rel = "is" if x["polarity"] == 1 else "is the opposite of"
@@ -769,6 +824,13 @@ def cli(args: Any, data_dir: Path) -> None:
         text = (root / "proposal.md").read_text(encoding="utf-8")
         print(text if len(text) < 6000 else text[:6000] + f"\n... (the rest is in {root / 'proposal.md'})")
         print(f"\nNothing has been changed. To accept: python -m androidmirror transmutate approve {args.a} {args.b}")
+    elif args.action == "compare":
+        add = [parse_pair(x) for x in args.pair or []] + [parse_pair(x, -1) for x in args.opposite or []]
+        try:
+            r = compare_only(data_dir, args.a, args.b, args.claude, add, args.drop)
+        except (FileNotFoundError, RuntimeError, KeyError, ValueError, llm.LLMUnavailable) as e:
+            raise SystemExit(str(e)) from None
+        print("\n".join(describe_differences(r["differences"])))
     else:
         try:
             approve(data_dir, args.a, args.b, args.keep)

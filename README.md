@@ -67,7 +67,7 @@ How each part works, in `designs/`:
 - **OODA:** the subject's ideas in the four stages of the OODA loop, built from the knowledge graph and the causal model, with why each idea is where it is, the cause-and-effect between stages, and what the shape shows (does the loop close, does Orient skip straight to Act). Move an idea to another stage if the placement is wrong; that changes neither graph. See [the OODA model](designs/ooda-model.md).
 - **Face:** the Major Arcana card the whole Mirror most resembles, drawn as a face. See [the face](designs/face.md).
 - **Mutate:** merge concepts that are one, or split one used in two senses. See [the engines](designs/engines.md#mutate-merging-and-splitting-concepts).
-- **Transmutate:** combine two Mirrors into one and trim it to what is strong; nothing is written until you approve.
+- **Transmutate:** compare two Mirrors (how they differ in knowledge, causes and OODA loop), then combine them into one and trim it to what is strong; nothing is written until you approve.
 
 ## The OODA interview
 
@@ -97,7 +97,8 @@ Write the corpus again after more answers; a changed answer is read again and th
 | `ask "question" [--corpus NAME]` | The Oracle from the command line. |
 | `mutate propose\|merge\|split\|show\|approve\|reject\|undo` | Merge or split concepts; previews, applied only on approval. Offline except `split --claude`. |
 | `question [--corpus NAME] [--limit 10] [--kind K] [--list]` | Answer the Question engine's questions; approve each proposal by typing your name. `--pending`, `--approve ID --by NAME`, `--reject ID`, `--revoke ID`. No Claude calls unless you answer in words. |
-| `transmutate propose A B [--claude] [--pair A=B] [--opposite A=B] [--drop C]` then `transmutate approve A B [--keep N]` | Combine two Mirrors and trim to what is strong. Writes nothing until approve. |
+| `transmutate compare A B [--claude] [--pair A=B] [--opposite A=B] [--drop C]` | How two Mirrors differ in knowledge, causes and OODA loop. Writes nothing. |
+| `transmutate propose A B [same options]` then `transmutate approve A B [--keep N]` | Combine two Mirrors and trim to what is strong; the proposal includes the comparison. Writes nothing until approve. |
 | `interview NAME [--stage observe\|orient\|decide\|act]` | Answer the OODA interview in the terminal, resuming where NAME left off, then write the corpus `interview-NAME`. No Claude calls. |
 | `p1 ...` | The paused Prototype 1 app (patch review, Refactorer, Breaker, Chainer, Evolver). `python -m androidmirror p1 --help` lists its commands. |
 
@@ -127,7 +128,7 @@ Splitters: `paragraphs` (one text file, short paragraphs merged), `documents` (a
 | `androidmirror/mirror/build.py`, `store.py`, `ask.py` | The pipeline, the read views, the Oracle |
 | `androidmirror/mirror/mutate.py`, `mutate_api.py` | The mutate engine and its routes |
 | `androidmirror/mirror/question.py`, `answers.py` | The Question engine; approved answers and how they amend a Mirror |
-| `androidmirror/mirror/transmutate.py` | Transmutate: align, combine and fitness-trim two Mirrors |
+| `androidmirror/mirror/transmutate.py`, `compare.py` | Transmutate: align, compare, combine and fitness-trim two Mirrors |
 | `androidmirror/mirror/ooda.py` | The OODA model: tiers built from the two graphs |
 | `androidmirror/mirror/interview.py`, `data/interview_ooda.json` | The OODA interview: questions, saved answers, the corpus they become |
 | `androidmirror/server.py`, `web/index.html` | The app |

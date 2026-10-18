@@ -142,8 +142,9 @@ python -m androidmirror build --corpus fomc</pre>
       <div class="row"><input id="topp" placeholder="opposite ideas: first_idea=second_idea, …" style="flex:1"></div>
       <div class="row"><input id="tdrop" placeholder="keep apart (ideas from the second Mirror): second_idea, …" style="flex:1"></div>
       <div class="row"><label class="small"><input type="checkbox" id="tclaude"> Let Claude match ideas by meaning (one call, uses your API key)</label>
-        <button class="b primary" id="tpropose">Propose</button></div>
+        <button class="b" id="tcompare">Compare</button><button class="b primary" id="tpropose">Propose</button></div>
       <div id="tout"></div>
+      <div id="tdiff"></div>
       <div id="tprop"></div>
     </section>
   </aside>
@@ -800,6 +801,38 @@ function transmutateView(p) {
     <table>${p.trims.map(t => `<tr><td><input type="checkbox" data-tkeep="${t.n}"></td><td class="small"><span class="pill">${esc(t.what)}</span>${esc(t.text || t.id)}<div class="muted">${esc(t.why)}</div></td></tr>`).join('')}</table>
     <div class="row"><input id="tby" placeholder="Your name (needed to approve)" style="flex:1"><button class="b primary" id="tapprove">Approve and write the combined Mirror</button></div>`;
 }
+const TSAYS = {raises:'<span class="pos">raises</span>', lowers:'<span class="neg">lowers</span>', mixed:'mixed', 'no effect':'makes no difference', silent:'<span class="muted">says nothing</span>'};
+const TROLE = {driver:'only a cause', driven:'only an effect', both:'a cause and an effect'};
+const TSTAGE = {observe:'Observe', orient:'Orient', decide:'Decide', act:'Act'};
+const pc = v => v == null ? 'n/a' : `${Math.round(v * 100)}%`;
+function differencesView(d) {
+  const [a, b] = d.names, k = d.knowledge, c = d.causal, o = d.ooda;
+  const two = (rows, f) => `<table><tr><th></th><th>${esc(a)}</th><th>${esc(b)}</th></tr>${rows.map(f).join('')}</table>`;
+  const row = (name, x, y) => `<tr><td>${name}</td><td>${x}</td><td>${y}</td></tr>`;
+  const effects = c.effects.filter(x => x.kind !== 'agree');
+  const flow = x => x.link.split('>').map(t => TSTAGE[t]).join(' → ');
+  return `<details open><summary><b>How ${esc(a)} and ${esc(b)} differ</b></summary>
+    <ul>${items(d.headline, esc)}</ul>
+    <details><summary><b>Knowledge</b></summary>
+      ${two([['ideas', k.a.concepts, k.b.concepts], ['facts held', k.a.held, k.b.held], ['facts inferred', k.a.inferred, k.b.inferred], ['inconsistencies', k.a.violations, k.b.violations]], r => row(...r))}
+      <h4>What each reasons with (share of its facts)</h4>${two(k.relations.slice(0, 10), r => row(rel(r.relation), pc(r.a), pc(r.b)))}
+      <p class="small">Facts about shared ideas: ${k.shared_facts.both} held by both, ${k.shared_facts.only_a} only by ${esc(a)}, ${k.shared_facts.only_b} only by ${esc(b)}.</p>
+      ${tlist('Held by one, denied by the other', k.contradicted, x => `${esc(x.text)} <span class="muted">${esc(a)} ${esc(x.a)}, ${esc(b)} ${esc(x.b)}</span>`, k.contradicted.length > 0)}
+      ${tlist('Judged differently (good or bad)', k.evaluations, x => esc(x.text), k.evaluations.length > 0)}
+      ${tlist(`Facts only ${a} holds`, k.only_a, esc)}${tlist(`Facts only ${b} holds`, k.only_b, esc)}
+    </details>
+    <details><summary><b>Causes</b></summary>
+      ${two([['links', c.a.arrows, c.b.arrows], ['claims held aside', c.a.in_tension, c.b.in_tension], ['held-out passages predicted', pc(c.a.held_out_predicted), pc(c.b.held_out_predicted)]], r => row(...r))}
+      ${tlist('Where they differ on what changes what', effects, x => `${esc(x.x_label)} → ${esc(x.y_label)}: ${esc(a)} ${TSAYS[x.a_says] || esc(x.a_says)}, ${esc(b)} ${TSAYS[x.b_says] || esc(x.b_says)}`, true)}
+      ${tlist('Where they agree', c.effects.filter(x => x.kind === 'agree'), x => `${esc(x.x_label)} → ${esc(x.y_label)}: both ${TSAYS[x.a_says] || esc(x.a_says)}`)}
+      ${tlist('Ideas that play a different part', c.roles, x => `${esc(x.label)}: ${TROLE[x.a]} for ${esc(a)}, ${TROLE[x.b]} for ${esc(b)}`)}
+    </details>
+    <details><summary><b>OODA</b></summary>
+      ${two(Object.keys(TSTAGE).map(t => [TSTAGE[t], o.a.stages[t] || 0, o.b.stages[t] || 0]).concat([['loop closes', o.a.closes ? 'yes' : 'no', o.b.closes ? 'yes' : 'no']]), r => row(...r))}
+      <h4>Where the stated causes run (share)</h4>${two(o.flow.slice(0, 10), x => row(flow(x), pc(x.a), pc(x.b)))}
+      ${tlist('Shared ideas in a different stage', o.moved, x => `${esc(x.label)}: ${TSTAGE[x.a]} for ${esc(a)}, ${TSTAGE[x.b]} for ${esc(b)}`, o.moved.length > 0)}
+    </details></details>`;
+}
 async function loadTransmutate() {
   try {
     const s = await api('/api/status');
@@ -813,11 +846,12 @@ async function loadTransmutate() {
 }
 async function showTransmutation() {
   const {a, b} = tpair();
-  tproposal = null;
+  tproposal = null; $('#tdiff').innerHTML = '';
   if (!a || !b || a === b) { $('#tprop').innerHTML = '<p class="muted small">Build at least two Mirrors, then pick two different ones.</p>'; return; }
   const r = await fetch(`/api/transmutate?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`);
   if (r.status === 404) { $('#tprop').innerHTML = '<p class="muted small">No proposal for these two yet. Making one costs nothing unless Claude matches the ideas.</p>'; return; }
   tproposal = await r.json();
+  $('#tdiff').innerHTML = tproposal.differences ? differencesView(tproposal.differences) : '';
   $('#tprop').innerHTML = transmutateView(tproposal);
   $('#tby').value = store.get('approver') || '';
 }
@@ -833,6 +867,10 @@ const tpropose = extraDrop => transmutateDo(async () => {
 });
 $('#ta').onchange = $('#tb').onchange = () => showTransmutation().catch(err => fail($('#tprop'), err));
 $('#tpropose').onclick = () => tpropose();
+$('#tcompare').onclick = () => transmutateDo(async () => {
+  const r = await api('/api/transmutate/compare', {...tpair(), pairs: csv('#tpairs'), opposites: csv('#topp'), drop: csv('#tdrop'), claude: $('#tclaude').checked});
+  $('#tdiff').innerHTML = differencesView(r.differences); return '';
+});
 $('#transmutate').addEventListener('click', e => {
   const t = e.target;
   if (t.dataset.tdrop) return tpropose(t.dataset.tdrop);
