@@ -70,6 +70,10 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
     def index() -> FileResponse:
         return FileResponse(WEB / "index.html")
 
+    @app.get("/interview")
+    def interview_page() -> FileResponse:
+        return FileResponse(WEB / "interview.html")
+
     @app.get("/api/status")
     def status() -> dict:
         specs = sorted(p.stem for p in SPECS.glob("*.json"))

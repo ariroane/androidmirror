@@ -13,6 +13,7 @@
   header { display:flex; gap:12px; align-items:center; padding:10px 16px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
   header h1 { font-size:16px; margin:0; }
   header .stat { color:var(--quiet); }
+  header a.b { margin-left:auto; border:1px solid var(--line); background:var(--panel); color:var(--ink); border-radius:6px; padding:5px 10px; text-decoration:none; }
   main { flex:1; display:flex; min-height:0; }
   #graphwrap { flex:1; position:relative; min-width:0; }
   #cy { position:absolute; inset:0; }
@@ -55,6 +56,7 @@
   <h1>Android Mirror</h1>
   <select id="corpus" title="Which Mirror"></select>
   <span class="stat" id="stat">loading…</span>
+  <a href="/interview" class="b">OODA interview</a>
 </header>
 <main>
   <div id="graphwrap">
@@ -69,7 +71,7 @@
       <p>Build one from a whole text (a corpus). Claude reads every passage once, so this takes a while and uses your API key:</p>
       <pre class="passage">python -m androidmirror build --corpus meditations
 python -m androidmirror build --corpus fomc</pre>
-      <p>Or make a corpus of your own words: answer the OODA interview in the <b>Interview</b> tab.</p>
+      <p>Or make a corpus of your own words: answer the <a href="/interview">OODA interview</a>.</p>
       <p class="muted">Try <code>--limit 30</code> first for a cheap trial run. If a build stops partway, running it again picks up where it left off.</p>
     </div></div>
   </div>
@@ -89,7 +91,6 @@ python -m androidmirror build --corpus fomc</pre>
       </div>
       <div class="tabrow">
       <button data-tab="face">Face</button>
-      <button data-tab="interview">Interview</button>
       </div>
     </nav>
     <section id="node" class="on"><p class="muted">Click a dot on the graph to see what that idea is, what follows from what the text says about it, and the passages it comes from.</p></section>
@@ -112,11 +113,6 @@ python -m androidmirror build --corpus fomc</pre>
       <div class="row"><button class="b" id="frun">Read again</button></div>
       <svg id="aface" viewBox="0 0 240 290" width="100%" style="max-width:300px"></svg>
       <div id="fcard"></div>
-    </section>
-    <section id="interview">
-      <p class="muted">Answer questions about how you observe, orient, decide and act (the OODA loop). Every answer is saved as you go, so you can stop and come back. Your answers become a corpus, and building it makes a Mirror of you.</p>
-      <div id="ilist"></div>
-      <div id="iview"></div>
     </section>
     <section id="mutate">
       <p class="muted">Merge two ideas that are really one, or split an idea that is used in two different senses, then see what would change. Nothing changes until you approve.</p>
@@ -828,69 +824,6 @@ $('#transmutate').addEventListener('click', e => {
   });
 });
 
-// ---------- OODA interview ----------
-let ibank = null, iv = null, iq = null;  // the question bank, the open interview, the question shown
-async function loadInterview() {
-  try {
-    ibank = await api('/api/interview');
-    const open = store.get('interview');
-    if (open && ibank.interviews.some(x => x.id === open)) return showInterview(open);
-    $('#iview').innerHTML = '';
-    $('#ilist').innerHTML = `<div class="row"><input id="iname" placeholder="Name of the person answering" style="flex:1"><button class="b primary" id="istart">Start</button></div>` +
-      (ibank.interviews.length ? `<h4>Interviews</h4><table>${ibank.interviews.map(x => `<tr><td>${esc(x.subject)}</td><td class="small muted">${x.answered} of ${x.total} answered</td><td><button class="b" data-iopen="${esc(x.id)}">${x.next ? 'Continue' : 'Open'}</button></td></tr>`).join('')}</table>` : '') +
-      `<h4>The four stages</h4>${ibank.stages.map(s => `<p class="small"><b>${esc(s.label)}</b> (${ibank.questions.filter(q => q.stage === s.id).length} questions): ${esc(s.about)}</p>`).join('')}`;
-  } catch (err) { fail($('#ilist'), err); }
-}
-async function showInterview(id, qid) {
-  iv = await api(`/api/interview/${encodeURIComponent(id)}`);
-  store.set('interview', iv.id);
-  if (!ibank) ibank = await api('/api/interview');
-  iq = ibank.questions.find(q => q.id === (qid || iv.progress.next)) || null;
-  const p = iv.progress;
-  const bars = p.stages.map(s => `<button class="link small" data-istage="${esc(s.id)}" title="Go to ${esc(s.label)}">${esc(s.label)}</button> <span class="bar" style="width:${Math.round(60 * s.answered / s.total)}px"></span> <span class="small muted">${s.answered}/${s.total}</span>`).join(' &nbsp; ');
-  $('#ilist').innerHTML = `<div class="row"><b>${esc(iv.subject)}</b><span class="muted small">${p.answered} of ${p.total} answered${p.skipped ? `, ${p.skipped} skipped` : ''}</span><button class="link small" id="iclose">Other interviews</button></div><div class="row">${bars}</div>`;
-  let h = '';
-  if (iq) {
-    const stage = ibank.stages.find(s => s.id === iq.stage);
-    const a = iv.answers[iq.id];
-    h += `<div class="card"><div class="small muted">${esc(stage.label)} · question ${iq.n} of ${iq.of}${iv.skipped.includes(iq.id) ? ' · skipped before' : ''}</div>
-      <h3>${esc(iq.text)}</h3>
-      <textarea id="itext" rows="7" style="width:100%" placeholder="Answer in your own words. Say what leads to what, and why.">${esc(a ? a.text : '')}</textarea>
-      <div class="row"><button class="b" id="iback">Back</button><button class="b" id="iskip">Skip</button><button class="b primary" id="isave">Save and next</button><span class="small muted">Ctrl+Enter saves</span></div></div>`;
-  } else h += `<p>Every question is answered. You can still go back and change any answer.</p>`;
-  h += `<h4>Make it a corpus</h4><p class="small muted">Writes your answers so far as the corpus <code>${esc(iv.corpus)}</code>, one passage per answer. Do it again after more answers to add them.</p>
-    <div class="row"><button class="b" id="icorpus" ${p.answered ? '' : 'disabled'}>Write the corpus</button></div><div id="iout">${iv.corpus_written ? `<p class="small">Written before. Build it with: <code>python -m androidmirror build --corpus ${esc(iv.corpus)}</code></p>` : ''}</div>
-    <details><summary class="small muted">All questions</summary><table>${ibank.questions.map(q => `<tr class="click" data-iq="${esc(q.id)}"><td class="small muted">${esc(q.stage_label)} ${q.n}</td><td class="small">${esc(q.text)}</td><td class="small">${iv.answers[q.id] ? '✓' : iv.skipped.includes(q.id) ? 'skipped' : ''}</td></tr>`).join('')}</table></details>`;
-  $('#iview').innerHTML = h;
-  if ($('#itext')) $('#itext').focus();
-}
-async function interviewAnswer(skip) {
-  if (!iq) return;
-  try {
-    iv = await api(`/api/interview/${encodeURIComponent(iv.id)}/answer`, {qid: iq.id, text: skip ? '' : $('#itext').value, skip});
-    const qs = ibank.questions, i = qs.findIndex(q => q.id === iq.id);
-    const after = qs.slice(i + 1).find(q => !iv.answers[q.id] && !iv.skipped.includes(q.id));  // keep going forward, then wrap to what is left
-    await showInterview(iv.id, after ? after.id : null);
-  } catch (err) { fail($('#iout'), err); }
-}
-$('#interview').addEventListener('click', async e => {
-  const t = e.target;
-  try {
-    if (t.id === 'istart') { const name = $('#iname').value.trim(); if (!name) return; const r = await api('/api/interview', {subject: name}); ibank = null; await showInterview(r.id); }
-    else if (t.dataset.iopen) await showInterview(t.dataset.iopen);
-    else if (t.id === 'iclose') { store.set('interview', ''); await loadInterview(); }
-    else if (t.id === 'isave') await interviewAnswer(false);
-    else if (t.id === 'iskip') await interviewAnswer(true);
-    else if (t.id === 'iback') { const qs = ibank.questions, i = qs.findIndex(q => q.id === iq.id); if (i > 0) await showInterview(iv.id, qs[i - 1].id); }
-    else if (t.dataset.istage) { const s = t.dataset.istage; const q = ibank.questions.find(q => q.stage === s && !iv.answers[q.id]) || ibank.questions.find(q => q.stage === s); await showInterview(iv.id, q.id); }
-    else if (t.closest('[data-iq]')) await showInterview(iv.id, t.closest('[data-iq]').dataset.iq);
-    else if (t.id === 'icorpus') {
-      const r = await api(`/api/interview/${encodeURIComponent(iv.id)}/corpus`, {});
-      $('#iout').innerHTML = `<p class="small">Wrote ${r.passages} passages. Build the Mirror (uses your API key, about two Claude calls per answer), then reload this page:</p><pre class="passage">${esc(r.command)}</pre>`;
-    }
-  } catch (err) { fail($('#iout') || $('#ilist'), err); }
-});
-$('#interview').addEventListener('keydown', e => { if (e.target.id === 'itext' && e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); interviewAnswer(false); } });
 
 // ---------- wiring ----------
 document.addEventListener('click', e => {
@@ -902,7 +835,7 @@ document.addEventListener('click', e => {
   else if (t.dataset.edge) { const [a, b] = t.dataset.edge.split('|'); tab('causal'); showEdge(a, b); }
   else if (t.dataset.holds) { const [s, r, o] = t.dataset.holds.split('|'); tab('knowledge'); setTimeout(() => checkHolds(s, r, o).catch(err => fail($('#hout'), err)), 0); }
 });
-document.querySelectorAll('nav button').forEach(b => b.onclick = () => { tab(b.dataset.tab); if (b.dataset.tab === 'derange') loadDerange(); if (b.dataset.tab === 'transmutate') loadTransmutate(); if (b.dataset.tab === 'interview') loadInterview(); });
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => { tab(b.dataset.tab); if (b.dataset.tab === 'derange') loadDerange(); if (b.dataset.tab === 'transmutate') loadTransmutate(); });
 document.querySelectorAll('#layers button').forEach(b => b.onclick = () => {
   document.querySelectorAll('#layers button').forEach(x => x.classList.remove('sel')); b.classList.add('sel'); layer = b.dataset.layer; drawGraph();
 });

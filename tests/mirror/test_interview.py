@@ -63,6 +63,7 @@ def test_the_answers_become_a_corpus_the_build_reads(tmp_path):
 def test_routes(tmp_path, monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     c = TestClient(create_app(tmp_path))
+    assert "OODA interview" in c.get("/interview").text and 'href="/interview"' in c.get("/").text
     b = c.get("/api/interview").json()
     assert len(b["questions"]) >= 100 and b["interviews"] == []
     iv = c.post("/api/interview", json={"subject": "Ari"}).json()

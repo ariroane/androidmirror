@@ -66,13 +66,12 @@ How each part works, in `designs/`:
 - **Face:** the Major Arcana card the whole Mirror most resembles, drawn as a face. See [the face](designs/face.md).
 - **Mutate:** merge concepts that are one, or split one used in two senses. See [the engines](designs/engines.md#mutate-merging-and-splitting-concepts).
 - **Transmutate:** combine two Mirrors into one and trim it to what is strong; nothing is written until you approve.
-- **Interview:** answer the OODA interview; see below.
 
 ## The OODA interview
 
 106 questions on how the person answering observes, orients, decides and acts (John Boyd's OODA loop), grouped by stage: Observe (26), Orient (28), Decide (26) and Act (26, ending on how results feed back into what is noticed next). The questions are in `data/interview_ooda.json`.
 
-Answer them in the **Interview** tab (or `python -m androidmirror interview "Your Name"` in a terminal, one line per answer). Each answer is saved as soon as it is given, under `data/interviews/`, so you can stop at any point and pick up where you left off; skipped questions come back at the end, and any answer can be changed later. No Claude calls.
+Answer them on the interview page, http://localhost:8000/interview, linked from the top of the app (or `python -m androidmirror interview "Your Name"` in a terminal, one line per answer). Each answer is saved as soon as it is given, under `data/interviews/`, so you can stop at any point and pick up where you left off; skipped questions come back at the end, and any answer can be changed later. No Claude calls.
 
 **Write the corpus** turns the answers so far into the corpus `interview-<name>`: one passage per answer, with the question kept as the interviewer's words so that only the answer is read as the subject's view, and the stage as its group. Then build it like any other corpus:
 
