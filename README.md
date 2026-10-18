@@ -112,7 +112,7 @@ The Causal tab lists every constraint with its status, the tensions, the pairs s
 - **Derange:** where the worldview rests on least, under what matters most (see below).
 - **Face:** the Major Arcana card the whole Mirror most resembles, drawn as a face. See [The face](#the-face).
 - **Mutate:** merge concepts that are one, or split one used in two senses. See [Mutate](#mutate-merging-and-splitting-concepts).
-- **Transmutate:** combine two Mirrors into one and trim it to what is strong; nothing is written until you approve. See [docs/commands.md](docs/commands.md#transmutate).
+- **Transmutate:** combine two Mirrors into one and trim it to what is strong; nothing is written until you approve.
 
 ## The face
 
@@ -151,7 +151,7 @@ Some of what the subject holds is said in forty passages and some in one; some o
 
 ## Command reference
 
-The full guide, with every option, examples, what each step costs and what to do when something goes wrong, is in [docs/commands.md](docs/commands.md). `python -m androidmirror <command> --help` lists a command's options.
+`python -m androidmirror <command> --help` lists a command's options.
 
 | Command | What it does |
 |---|---|
@@ -164,7 +164,7 @@ The full guide, with every option, examples, what each step costs and what to do
 | `mutate propose\|merge\|split\|show\|approve\|reject\|undo` | Merge or split concepts; previews, applied only on approval. Offline except `split --claude`. |
 | `question [--corpus NAME] [--limit 10] [--kind K] [--list]` | Answer the Question engine's questions; approve each proposal by typing your name. `--pending`, `--approve ID --by NAME`, `--reject ID`, `--revoke ID`. No Claude calls unless you answer in words. |
 | `transmutate propose A B [--claude] [--pair A=B] [--opposite A=B] [--drop C]` then `transmutate approve A B [--keep N]` | Combine two Mirrors and trim to what is strong. Writes nothing until approve. |
-| `p1 ...` | The paused Prototype 1 app (patch review, Refactorer, Breaker, Chainer, Evolver): [docs/prototype1.md](docs/prototype1.md). |
+| `p1 ...` | The paused Prototype 1 app (patch review, Refactorer, Breaker, Chainer, Evolver). `python -m androidmirror p1 --help` lists its commands. |
 
 ## Adding a corpus
 
@@ -200,7 +200,7 @@ Splitters: `paragraphs` (one text file, short paragraphs merged), `documents` (a
 
 As of 2026-10-18.
 
-Four problems in Android Mirror that nobody has solved yet. Each entry says what the problem is, why it is still open, and where the existing work lives. Paths under `android-mirror/` are in the project's shared files, not in this repository.
+Five problems in Android Mirror that nobody has solved yet. Each entry says what the problem is, why it is still open, and where the existing work lives. Paths under `android-mirror/` are in the project's shared files, not in this repository.
 
 ### 1. A consistent graphical causal framework
 
@@ -264,6 +264,21 @@ Four problems in Android Mirror that nobody has solved yet. Each entry says what
 - Descriptive review (qualifiers for modality, attribution and polarity): [review doc](https://claude.ai/code/artifact/c75478d6-4c3b-4d12-a3d3-97cb16a36d12).
 - Causal validity review (separating confidence from effect size): `android-mirror/reviews/causal-validity-review.md`.
 - Current schema: [README, the descriptive ontology](#the-descriptive-ontology-built-for-inference) and [the causal model](#the-causal-model-the-subjects-own-judgments).
+
+### 5. An automated sequence of engines: descent with modification
+
+**Problem.** Today each engine runs on its own and a person approves every change. The goal is a sequence that runs the engines automatically, generation after generation (vary with Mutate, Transmutate and Question, select with Derange and a fitness test), so the Mirror descends with modifications on its own.
+
+**Why it's open.**
+
+- It needs a fitness measure, which waits on problem 2: without evidence that a change makes a Mirror better, selection has nothing to select on.
+- The rule so far is that no engine applies a change without approval. Running automatically means deciding what can run unattended (for example in a sandbox copy), and what still needs a person before it reaches the live Mirror.
+- Generations must not drift away from the corpus: each one has to stay grounded in the subject's own words, and the lineage has to be traceable and reversible.
+
+**Pointers.**
+
+- Prototype 1 had an Evolver that searched sandbox copies of both graphs with the other engines' operations, scored designs on fitness, and queued the winners for approval: `androidmirror/evolver/`.
+- The current engines: `androidmirror/mirror/mutate.py`, `transmutate.py`, `derange.py`, `question.py`.
 
 ## Tests
 
