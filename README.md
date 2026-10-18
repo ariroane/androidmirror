@@ -196,6 +196,10 @@ Splitters: `paragraphs` (one text file, short paragraphs merged), `documents` (a
 | `androidmirror/server.py`, `web/index.html` | The app |
 | `androidmirror/p1_*`, `refactor.py`, `breaker.py`, `chainer.py`, `evolver/` | Prototype 1, paused |
 
+## Open problems
+
+What is still unsolved (a consistent causal graph framework, testing whether the engines help, a Breaker that splits one Mirror into several, and more knowledge and causal dimensions) is in [docs/open-problems.md](docs/open-problems.md).
+
 ## Tests
 
 ```
