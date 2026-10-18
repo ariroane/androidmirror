@@ -34,6 +34,10 @@ Each link is classified by the stages it joins: to the next stage (forward), wit
 
 The tab sums the passages behind causal and loop links into a stage-to-stage table, and states what the shape shows: stages nothing reaches, whether the loop closes, shortcuts from Orient or Observe straight to Act, and the one stage-to-stage flow that dominates, if one does.
 
+## Asking it questions
+
+The Ask tab reads the OODA model as a third source, cited as [O1], [O2] and so on: the stage of each idea named in the question and why, the stage links that touch it, and what the loop shows. A question that names a stage ("what does Marcus observe?", "how does the FOMC decide?") adds that stage's ideas and its links; one about the loop, OODA or stages adds every stage and the passages behind the links between them.
+
 ## What it is not
 
 The stages are a reading of the Mirror, not something the subject said. A heuristic places them, and nobody has validated it against people's own view of their loop.
