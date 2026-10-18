@@ -63,6 +63,7 @@
     <div id="layers">
       <button class="b sel" data-layer="kg">Knowledge graph</button>
       <button class="b" data-layer="causal">Causal model</button>
+      <button class="b" data-layer="ooda">OODA loop</button>
     </div>
     <div id="cy"></div>
     <div id="legend"></div>
@@ -90,6 +91,7 @@ python -m androidmirror build --corpus fomc</pre>
       <button data-tab="transmutate">Transmutate</button>
       </div>
       <div class="tabrow">
+      <button data-tab="ooda">OODA</button>
       <button data-tab="face">Face</button>
       </div>
     </nav>
@@ -108,6 +110,7 @@ python -m androidmirror build --corpus fomc</pre>
       <h4>Your answers</h4>
       <div id="plist"></div>
     </section>
+    <section id="ooda"></section>
     <section id="face">
       <p class="muted">The tarot card (from the 22 Major Arcana) this Mirror most resembles, judged from both what <span class="who">the subject</span> believes and what <span class="who">the subject</span> says causes what.</p>
       <div class="row"><button class="b" id="frun">Read again</button></div>
@@ -225,8 +228,10 @@ async function drawGraph(keepPositions) {
   if (keepPositions && graphCache && graphCache.layer === layer) g = graphCache;
   else { try { g = graphCache = await api(`/api/graph?layer=${layer}`); } catch (err) { return; } }
   g.nodes.forEach(n => labels[n.id] = n.label);
-  const els = g.nodes.map(n => ({data:{id:n.id, label:n.label, ev:n.evaluation||'none', size:12 + Math.min(26, Math.sqrt(n.support||1) * 3), variable:n.variable ? 1 : 0, value:n.value || 0}}));
+  const els = g.nodes.map(n => ({data:{id:n.id, label:n.label, ev:n.evaluation||'none', size:12 + Math.min(26, Math.sqrt(n.support||1) * 3), variable:n.variable ? 1 : 0, value:n.value || 0, tier:n.tier || '', weak:n.weak ? 1 : 0}}));
+  if (layer === 'ooda') OODA_TIERS.forEach(t => els.push({data:{id:'tier:' + t, label:OODA_LABEL[t].toUpperCase(), tier:t, size:1}, classes:'tierhead', selectable:false, grabbable:false}));
   g.edges.forEach(e => {
+    if (layer === 'ooda') { els.push({data:{id:e.id, source:e.source, target:e.target, label:'', status:'ooda-' + e.kind, via:e.via, sign:e.sign, w:e.via === 'fact' ? 1 : 1 + Math.min(6, 1.5 * Math.log2(1 + e.weight))}}); return; }
     if (layer === 'kg') { els.push({data:{id:e.id, source:e.source, target:e.target, label:relWord(e.rel, e.target), status:'kg', sign:0, w:1 + Math.min(4, Math.log2(1 + (e.support||1)))}}); return; }
     els.push({data:{id:e.id, source:e.source, target:e.target, label:String(e.weight), status:e.status, sign:e.sign, w:e.status === 'common_cause' ? 2 : 1 + Math.min(6, 1.5 * Math.log2(1 + e.weight))}});
   });
@@ -243,15 +248,35 @@ async function drawGraph(keepPositions) {
       {selector:'edge[status = "open"]', style:{'line-style':'dashed'}},
       {selector:'edge[status = "common_cause"]', style:{'line-style':'dotted','line-color':'#b05fd8','target-arrow-color':'#b05fd8','source-arrow-color':'#b05fd8','target-arrow-shape':'triangle','source-arrow-shape':'triangle','label':''}},
       {selector:'.hl', style:{'border-width':4,'border-color':'#e0a800'}},
+      {selector:'node[tier = "observe"]', style:{'background-color':OODA_COLOR.observe}},
+      {selector:'node[tier = "orient"]', style:{'background-color':OODA_COLOR.orient}},
+      {selector:'node[tier = "decide"]', style:{'background-color':OODA_COLOR.decide}},
+      {selector:'node[tier = "act"]', style:{'background-color':OODA_COLOR.act}},
+      {selector:'node[weak = 1]', style:{'border-width':2,'border-style':'dashed','border-color':css('--quiet')}},
+      {selector:'node.tierhead', style:{'width':1,'height':1,'background-opacity':0,'font-size':15,'font-weight':'bold','text-valign':'center','color':css('--quiet'),'events':'no'}},
+      {selector:'edge[status = "ooda-forward"]', style:{'line-color':css('--accent'),'target-arrow-color':css('--accent')}},
+      {selector:'edge[status = "ooda-within"]', style:{'line-color':css('--quiet'),'target-arrow-color':css('--quiet')}},
+      {selector:'edge[status = "ooda-skip"]', style:{'line-color':css('--accent'),'target-arrow-color':css('--accent'),'line-style':'dashed','curve-style':'unbundled-bezier','control-point-distances':[-70],'control-point-weights':[0.5]}},
+      {selector:'edge[status = "ooda-feedback"]', style:{'line-color':'#d9822b','target-arrow-color':'#d9822b','curve-style':'unbundled-bezier','control-point-distances':[-120],'control-point-weights':[0.5]}},
+      {selector:'edge[status = "ooda-back"]', style:{'line-color':'#b05fd8','target-arrow-color':'#b05fd8','line-style':'dotted'}},
+      {selector:'edge[via = "loop"]', style:{'line-style':'dashed'}},
+      {selector:'edge[via = "fact"]', style:{'line-style':'dotted','target-arrow-shape':'vee','opacity':0.7}},
     ]});
     cy.on('tap', 'node', e => showNode(e.target.id()));
-    cy.on('tap', 'edge', e => { if (layer !== 'causal') return; tab('causal');
+    cy.on('tap', 'edge', e => { if (layer === 'ooda' && e.target.data('via') === 'causal') { tab('causal'); showEdge(e.target.data('source'), e.target.data('target')); return; }
+      if (layer !== 'causal') return; tab('causal');
       if (e.target.data('status') === 'common_cause') showCommon(e.target.id()); else showEdge(e.target.data('source'), e.target.data('target')); });
   }
   cy.elements().remove(); cy.add(els);
-  if (pos && cy.nodes().every(n => pos[n.id()])) cy.layout({name:'preset', positions:n => pos[n.id()], fit:false}).run();
+  if (layer === 'ooda') {  // four columns, one per stage, the most-read ideas at the top
+    const col = {}, gap = 46, x = t => OODA_TIERS.indexOf(t) * 240;
+    cy.layout({name:'preset', positions:n => { const t = n.data('tier'); if (n.hasClass('tierhead')) return {x:x(t), y:-50};
+      col[t] = (col[t] || 0) + 1; return {x:x(t) + (col[t] % 2 ? -30 : 30), y:col[t] * gap}; }, padding:40}).run();
+  } else if (pos && cy.nodes().every(n => pos[n.id()])) cy.layout({name:'preset', positions:n => pos[n.id()], fit:false}).run();
   else cy.layout({name:'cose', animate:false, randomize:true, nodeRepulsion:() => 500000, idealEdgeLength:() => 100, nodeOverlap:40, gravity:0.3, numIter:2500, padding:40}).run();
-  $('#legend').innerHTML = layer === 'kg'
+  $('#legend').innerHTML = layer === 'ooda'
+    ? `Ideas placed in the stage of ${W()}'s loop they belong to (see the OODA tab for why). <span style="color:${css('--accent')}">Blue</span>: a cause leading to the next stage (dashed: skipping one); <span style="color:#d9822b">orange curve</span>: from Act back to an earlier stage, closing the loop (dashed: ${W()} says it, but it closes a cycle, so the causal model holds it aside); <span style="color:#b05fd8">purple dots</span>: backward; grey: within a stage; dotted: a stated fact rather than a cause. Dashed ring: placement the evidence barely decides.`
+    : layer === 'kg'
     ? `Dot colour: whether ${W()} calls it <span class="pos">good</span>, <span class="neg">bad</span> or indifferent (purple: more than one; grey: never says). Lines: facts ${W()} states as true${g.hidden ? `; ${g.hidden} less-connected ideas hidden` : ''}.`
     : `What ${W()} says causes what. <span class="pos">Green arrow</span>: more of one brings more of the other; <span class="neg">red bar</span>: brings less. Number and thickness: how many passages say it. Dashed: may work only by way of other steps. <span style="color:#b05fd8">Purple dotted, arrows at both ends</span>: the two go together, but what ${W()} says about which drives which clashes, so the Mirror shows a shared cause ${W()} never names. Double ring: something ${W()} wants <span class="pos">more</span> or <span class="neg">less</span> of.`;
 }
@@ -825,6 +850,33 @@ $('#transmutate').addEventListener('click', e => {
 });
 
 
+// ---------- the OODA model ----------
+const OODA_TIERS = ['observe', 'orient', 'decide', 'act'];
+const OODA_LABEL = {observe:'Observe', orient:'Orient', decide:'Decide', act:'Act'};
+const OODA_COLOR = {observe:'#3b8fd8', orient:'#8a63d2', decide:'#d9a02b', act:'#2f9f6b'};
+const OODA_KIND = {forward:'to the next stage', within:'within the stage', skip:'skipping a stage', feedback:'back from Act (closes the loop)', back:'backward'};
+async function loadOoda() {
+  const el = $('#ooda');
+  try {
+    const r = await api('/api/ooda');
+    const rows = OODA_TIERS.map(a => `<tr><th>${OODA_LABEL[a]}</th>${OODA_TIERS.map(b => `<td class="${a === 'act' && b !== 'act' && r.flow[a][b] ? 'neg' : ''}">${r.flow[a][b] || '<span class="muted">·</span>'}</td>`).join('')}</tr>`).join('');
+    const reason = c => c.reasons.length ? `<details><summary class="small muted">why ${OODA_LABEL[c.tier]}${c.by ? ` (placed by ${esc(c.by)})` : c.weak ? ' (barely decided)' : ''}</summary><ul class="small">${c.reasons.map(x => `<li>${OODA_LABEL[x.tier]} +${x.points}: ${esc(x.reason)}</li>`).join('')}</ul></details>` : `<div class="small muted">placed by ${esc(c.by)}</div>`;
+    const move = c => `<select class="small" data-oplace="${esc(c.id)}"><option value="">${c.auto ? 'automatic (' + OODA_LABEL[c.auto] + ')' : 'automatic'}</option>${OODA_TIERS.map(t => `<option value="${t}" ${c.by && c.tier === t ? 'selected' : ''}>${OODA_LABEL[t]}</option>`).join('')}</select>`;
+    el.innerHTML = `<p class="muted">${WW()}'s ideas in the four stages of the OODA loop (observe, orient, decide, act), placed from the knowledge graph and the causal model${r.staged ? ' and from which stage of the interview each idea was talked about in' : ''}. The links are ${W()}'s own cause-and-effect claims. This only reads the two graphs: moving an idea to another stage changes nothing in them.</p>
+      ${r.findings.length ? `<h4>What the loop shows</h4><ul>${r.findings.map(f => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}
+      <h4>Cause-and-effect between stages</h4><p class="small muted">Passages behind the links from the stage on the left to the stage on top.</p>
+      <table><tr><th>from \\ to</th>${OODA_TIERS.map(t => `<th>${OODA_LABEL[t]}</th>`).join('')}</tr>${rows}</table>
+      ${r.tiers.map(t => `<h4><span class="pill" style="border-color:${OODA_COLOR[t.id]};color:${OODA_COLOR[t.id]}">${esc(t.label)}</span> ${t.concepts.length} idea${t.concepts.length === 1 ? '' : 's'}</h4><p class="small muted">${esc(t.about)}</p>
+        ${t.concepts.length ? `<table>${t.concepts.map(c => `<tr><td><button class="link" data-node="${esc(c.id)}">${esc(c.label)}</button>${reason(c)}</td><td>${move(c)}</td></tr>`).join('')}</table>` : '<p class="muted small">None yet.</p>'}`).join('')}
+      <h4>Links</h4><table>${r.links.filter(l => l.via !== 'fact').sort((a, b) => b.weight - a.weight).map(l => `<tr ${l.via === 'causal' ? `class="click" data-edge="${esc(l.src)}|${esc(l.dst)}"` : ''}><td>${esc(l.text)}</td><td class="small muted">${OODA_LABEL[l.from]} → ${OODA_LABEL[l.to]}, ${OODA_KIND[l.kind]}</td><td class="small">${l.weight}</td></tr>`).join('') || '<tr><td class="muted">No cause-and-effect links between these ideas.</td></tr>'}</table>`;
+  } catch (err) { fail(el, err); }
+}
+$('#ooda').addEventListener('change', async e => {
+  const s = e.target.closest('[data-oplace]'); if (!s) return;
+  try { await api('/api/ooda/place', {concept: s.dataset.oplace, tier: s.value || null, by: store.get('approver') || ''});
+    await loadOoda(); if (layer === 'ooda') drawGraph(); } catch (err) { fail($('#ooda'), err); }
+});
+
 // ---------- wiring ----------
 document.addEventListener('click', e => {
   const t = e.target.closest('[data-passage],[data-node],[data-edge],[data-holds]'); if (!t) return;
@@ -835,7 +887,7 @@ document.addEventListener('click', e => {
   else if (t.dataset.edge) { const [a, b] = t.dataset.edge.split('|'); tab('causal'); showEdge(a, b); }
   else if (t.dataset.holds) { const [s, r, o] = t.dataset.holds.split('|'); tab('knowledge'); setTimeout(() => checkHolds(s, r, o).catch(err => fail($('#hout'), err)), 0); }
 });
-document.querySelectorAll('nav button').forEach(b => b.onclick = () => { tab(b.dataset.tab); if (b.dataset.tab === 'derange') loadDerange(); if (b.dataset.tab === 'transmutate') loadTransmutate(); });
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => { tab(b.dataset.tab); if (b.dataset.tab === 'derange') loadDerange(); if (b.dataset.tab === 'transmutate') loadTransmutate(); if (b.dataset.tab === 'ooda') loadOoda(); });
 document.querySelectorAll('#layers button').forEach(b => b.onclick = () => {
   document.querySelectorAll('#layers button').forEach(x => x.classList.remove('sel')); b.classList.add('sel'); layer = b.dataset.layer; drawGraph();
 });
@@ -858,6 +910,7 @@ async function refresh() {
   await drawGraph();
   causalData = null;
   loadKnowledge(); loadCausal(); loadFace(); loadQuestions(); loadMutate();
+  if ($('#ooda').classList.contains('on')) loadOoda();
   derangeFor = null; if ($('#derange').classList.contains('on')) loadDerange();
 }
 refresh().catch(err => $('#stat').textContent = err.message);
