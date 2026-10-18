@@ -100,3 +100,26 @@ def test_routes(tmp_path, monkeypatch):
     assert tiers(r)["noise"] == "act"
     assert c.post("/api/ooda/place", json={"concept": "noise", "tier": "nap", **q}).status_code == 400
     assert c.post("/api/ooda/place", json={"concept": "nope", "tier": "act", **q}).status_code == 404
+
+
+def test_ask_reads_the_ooda_model(tmp_path, monkeypatch):
+    from androidmirror import llm
+    from androidmirror.mirror import ask
+
+    monkeypatch.setattr(llm, "available", lambda: False)
+    m = Mirror.load(staged(tmp_path))
+    # an idea: its stage and why, and the stage links that touch it
+    items = ask.ask(m, "what does fear do?")["facts"]
+    o = [x for x in items if x.split("]")[0].startswith("[O")]
+    assert any("stage: fear is placed in Orient" in x and "Orient stage" in x for x in o)
+    assert any("fear raises running, Orient -> Act, skipping a stage" in x for x in o)
+    assert any("what the loop shows: The loop closes" in x for x in o)
+    # a stage: its ideas, with no idea named in the question
+    items = ask.ask(m, "what does Tester observe?")["facts"]
+    assert any("stage Observe" in x and "danger" in x and "noise" in x for x in items)
+    assert not any("stage Decide" in x for x in items)
+    # the whole loop: every stage, the flow between stages, and the feedback link held aside by the causal model
+    items = ask.ask(m, "how does the OODA loop close?")["facts"]
+    assert sum("stage " in x and "(" in x and ": " in x and x.split("] ")[1].startswith("stage ") for x in items) >= 4
+    assert any("passages behind the links between stages" in x for x in items)
+    assert any("running raises noise, Act -> Observe, from Act back" in x and "holds it aside" in x for x in items)
