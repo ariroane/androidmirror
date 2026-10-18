@@ -13,7 +13,7 @@
   header { display:flex; gap:12px; align-items:center; padding:10px 16px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
   header h1 { font-size:16px; margin:0; }
   header .stat { color:var(--quiet); }
-  header a.b { margin-left:auto; border:1px solid var(--line); background:var(--panel); color:var(--ink); border-radius:6px; padding:5px 10px; text-decoration:none; }
+  header a.b { border:1px solid var(--line); background:var(--panel); color:var(--ink); border-radius:6px; padding:5px 10px; text-decoration:none; }
   main { flex:1; display:flex; min-height:0; }
   #graphwrap { flex:1; position:relative; min-width:0; }
   #cy { position:absolute; inset:0; }
@@ -55,8 +55,8 @@
 <header>
   <h1>Android Mirror</h1>
   <select id="corpus" title="Which Mirror"></select>
-  <span class="stat" id="stat">loading…</span>
   <a href="/interview" class="b">OODA interview</a>
+  <span class="stat" id="stat">loading…</span>
 </header>
 <main>
   <div id="graphwrap">
