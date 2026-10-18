@@ -1,5 +1,6 @@
 import json
 import math
+import re
 
 import pytest
 
@@ -8,7 +9,7 @@ from androidmirror.mirror import judgments as jd
 from androidmirror.mirror.causal import explain, fit, holdout
 from androidmirror.mirror.corpus import split_documents, split_paragraphs
 from androidmirror.mirror.kg import KnowledgeBase, aggregate
-from androidmirror.mirror.sources import dgn, fomc
+from androidmirror.mirror.sources import dgn, epictetus, fomc
 
 
 def J(kind, x, y, sign=1, z="", p="p1", scope="unsaid", held=True):
@@ -395,3 +396,35 @@ def test_dgn_parsing(tmp_path):
                                           "Amantadine should be used to reduce dyskinesias.", "And so on."]
     manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["PMC1"]["licence"] == "CC BY" and manifest["PMC2"]["kept"] is False and "PMC3" not in manifest
+
+
+EPICTETUS_XHTML = '''<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops"><body>
+<section id="book-{b}"><h2>Book</h2>
+<section id="chapter-{b}-1"><hgroup><h3>I</h3><p epub:type="title">Of the Things Which Are in Our Power</p></hgroup>
+<p>Of all the faculties<a href="endnotes.xhtml#note-2" epub:type="noteref">2</a> the rational faculty alone examines itself.</p>
+<blockquote><p><span>Tis true I know</span><br/><span>But passion overpowers</span></p></blockquote>
+<table><tbody><tr><td>Polynices</td><td>Where will you stand?</td></tr></tbody></table>
+</section></section></body></html>'''
+SHORT_XHTML = '''<html xmlns="http://www.w3.org/1999/xhtml"><body><article>
+<section id="{p}introduction"><p>Long's own introduction.</p></section>
+<section id="{p}1"><h3>I</h3><p>Of things some are in our power.</p></section>
+<section id="{p}137"><h4>CXXXVII</h4><p>Contentment is a short road.</p></section>
+</article></body></html>'''
+
+
+def test_epictetus_parsing(tmp_path):
+    def get(url):
+        m = re.search(r"book-(\d)\.xhtml", url)
+        if m:
+            return EPICTETUS_XHTML.replace("{b}", m.group(1))
+        return SHORT_XHTML.replace("{p}", "the-enchiridion-" if "enchiridion" in url else "fragments-")
+
+    n = epictetus.download(tmp_path, delay=0, get=get, log=lambda *_: None)
+    docs = split_documents(tmp_path)
+    assert n == 7 and [d.id for d in docs] == ["d1-01", "d2-01", "d3-01", "d4-01", "e-01", "e-137", "f-001"]
+    assert docs[0].locator == "Discourses I, 1: Of the Things Which Are in Our Power"
+    assert docs[0].group == "Discourses I"
+    assert docs[0].text.split("\n\n") == ["Of all the faculties the rational faculty alone examines itself.",
+                                          "Tis true I know / But passion overpowers", "Polynices: Where will you stand?"]
+    assert [(d.locator, d.text) for d in docs if d.group == "Fragments"] == [("Fragments I-I", "I. Of things some are in our power.")]

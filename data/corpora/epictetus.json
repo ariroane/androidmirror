@@ -1,0 +1,9 @@
+{
+  "id": "epictetus",
+  "title": "Epictetus, Discourses, Enchiridion and Fragments (tr. George Long)",
+  "subject": "Epictetus",
+  "splitter": "documents",
+  "fetcher": "epictetus",
+  "unit": "paragraph",
+  "min_chars": 1500
+}

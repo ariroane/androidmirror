@@ -42,7 +42,7 @@ After `git pull`, run `build` again: it reuses everything cached and only redoes
 | Option | Meaning |
 |---|---|
 | `--data FOLDER` | Where corpora and built Mirrors live (default `./data`). Goes **before** the command: `python -m androidmirror --data D:\mirrors build` |
-| `--corpus NAME` | Which corpus: `meditations` (the default), `fomc`, `dgn`, any spec in `data/corpora/`, or a path to a spec file. Used by `build`, `causal` and `ask` |
+| `--corpus NAME` | Which corpus: `meditations` (the default), `fomc`, `dgn`, `epictetus`, any spec in `data/corpora/`, or a path to a spec file. Used by `build`, `causal` and `ask` |
 
 ---
 
@@ -54,6 +54,7 @@ Reads the corpus with Claude and builds both graphs.
 python -m androidmirror build --corpus meditations --limit 30
 python -m androidmirror build --corpus meditations
 python -m androidmirror build --corpus fomc
+python -m androidmirror build --corpus epictetus
 ```
 
 What happens, in order (the log prints each step):
