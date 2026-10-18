@@ -2,7 +2,7 @@
 
 As of 2026-10-18.
 
-Five problems in Android Mirror that nobody has solved yet. Each entry says what the problem is, why it is still open, and where the existing work lives.
+Six problems in Android Mirror that nobody has solved yet. Each entry says what the problem is, why it is still open, and where the existing work lives.
 
 ## 1. A consistent graphical causal framework
 
@@ -81,3 +81,21 @@ Five problems in Android Mirror that nobody has solved yet. Each entry says what
 
 - Prototype 1 had an Evolver that searched sandbox copies of both graphs with the other engines' operations, scored designs on fitness, and queued the winners for approval: `androidmirror/evolver/`.
 - The current engines: `androidmirror/mirror/mutate.py`, `transmutate.py`, `derange.py`, `question.py`.
+
+## 6. Joint causes: "A and B are both needed for C"
+
+**Problem.** In a causal graph, A → C ← B looks the same whether A and B are both needed (AND), either is enough (OR), or their effects just add up. The graph only says C depends on both; "both are needed" is an interaction, which lives in the function that sets C, not in the arrows. A subject who says "virtue needs both reason and practice" makes exactly this kind of claim, and the Mirror can't record it.
+
+**Why it's open.**
+
+- Each causal judgment is read as one pair, x to y (`JUDGMENT_SCHEMA` in `androidmirror/mirror/coding.py`), so "only if both" is either missed or split into two separate arrows and the AND is lost.
+- There are three standard ways to show it, and the choice isn't made:
+    - **Sufficient-component causes** (Rothman's "causal pies"): each pie is a set of causes that is enough by itself, so A and B in one pie means both are needed.
+    - **A mechanism node:** A → M ← B, M → C, where M fires only when both are present. The graph stays a DAG, with the AND attached to M.
+    - **A label on C's incoming arrows:** "all of" versus "any of", as qualitative and Boolean causal models do. This fits the Mirror best, since its arrows are already signed and weighted by passages, and the graph would be built the same way.
+- The fit, Trace, the held-out check and the engines would all have to respect the label, for example by not treating one of two jointly needed causes as enough on its own.
+
+**Pointers.**
+
+- The judgment kinds and how they become constraints: [the causal model](causal-model.md).
+- Problem 1 (a consistent graphical framework) and problem 4 (more causal dimensions) overlap this one.
