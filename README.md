@@ -7,12 +7,13 @@ A reflective model of a subjective system (a person, a group, an institution) bu
 
 What the subject wants is kept apart from what they think causes what: a third layer of **values** records what each passage urges more or less of.
 
-Two corpora come with it:
+Three corpora come with it:
 
 | Corpus | Subject | Units |
 |---|---|---|
 | `meditations` | Marcus Aurelius, *Meditations* (Meric Casaubon translation, Project Gutenberg #2680) | about 410 numbered sections |
 | `fomc` | The Federal Reserve's FOMC, every policy statement since 1994 (federalreserve.gov) | one statement per meeting |
+| `dgn` | The German Society of Neurology's English-language guidelines on Parkinson's disease, the CC BY ones on Europe PMC (set `conditions` in `data/corpora/dgn.json` to add others, or `[]` for all) | one guideline section |
 
 Any other subject works too: write a spec in `data/corpora/` pointing at a text file, or at a folder of `.txt` documents.
 
@@ -31,6 +32,7 @@ copy .env.example .env          # then put your key in .env: ANTHROPIC_API_KEY=s
 python -m androidmirror build --corpus meditations --limit 30   # a cheap trial on 30 passages
 python -m androidmirror build --corpus meditations              # the whole book
 python -m androidmirror build --corpus fomc                     # downloads the statements first
+python -m androidmirror build --corpus dgn                      # downloads the guidelines first
 python -m androidmirror serve
 ```
 
@@ -178,7 +180,7 @@ Splitters: `paragraphs` (one text file, short paragraphs merged), `documents` (a
 
 | Path | What |
 |---|---|
-| `androidmirror/mirror/corpus.py`, `sources/fomc.py` | Passages; the FOMC downloader |
+| `androidmirror/mirror/corpus.py`, `sources/fomc.py`, `sources/dgn.py` | Passages; the FOMC and DGN guideline downloaders |
 | `androidmirror/mirror/coding.py` | The Claude calls and their schemas |
 | `androidmirror/mirror/codebook.py` | Consolidating labels into concepts |
 | `androidmirror/mirror/schema.py` | Kinds, relations and their logical properties |
