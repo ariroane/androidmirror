@@ -11,7 +11,7 @@ Four corpora come with it:
 | `dgn` | The German Society of Neurology's English-language guidelines on Parkinson's disease, the CC BY ones on Europe PMC (set `conditions` in `data/corpora/dgn.json` to add others, or `[]` for all) | one guideline section |
 | `epictetus` | Epictetus, the *Discourses*, *Enchiridion* and *Fragments* (George Long translation, Standard Ebooks), a Stoic to set beside Marcus in Transmutate | about 360 passages of a chapter or part of one |
 
-Any other subject works too: write a spec in `data/corpora/` pointing at a text file, or at a folder of `.txt` documents.
+Any other subject works too: write a spec in `data/corpora/` pointing at a text file, or at a folder of `.txt` documents. Or make a corpus of your own words with the [OODA interview](#the-ooda-interview).
 
 ## Run it on your computer
 
@@ -67,6 +67,20 @@ How each part works, in `designs/`:
 - **Mutate:** merge concepts that are one, or split one used in two senses. See [the engines](designs/engines.md#mutate-merging-and-splitting-concepts).
 - **Transmutate:** combine two Mirrors into one and trim it to what is strong; nothing is written until you approve.
 
+## The OODA interview
+
+106 questions on how the person answering observes, orients, decides and acts (John Boyd's OODA loop), grouped by stage: Observe (26), Orient (28), Decide (26) and Act (26, ending on how results feed back into what is noticed next). The questions are in `data/interview_ooda.json`.
+
+Answer them on the interview page, http://localhost:8000/interview, linked from the top of the app (or `python -m androidmirror interview "Your Name"` in a terminal, one line per answer). Each answer is saved as soon as it is given, under `data/interviews/`, so you can stop at any point and pick up where you left off; skipped questions come back at the end, and any answer can be changed later. No Claude calls.
+
+**Write the corpus** turns the answers so far into the corpus `interview-<name>`: one passage per answer, with the question kept as the interviewer's words so that only the answer is read as the subject's view, and the stage as its group. Then build it like any other corpus:
+
+```powershell
+python -m androidmirror build --corpus interview-your-name
+```
+
+Write the corpus again after more answers; a changed answer is read again and the rest stay cached. The answers, the corpus and its spec stay on your computer (they are gitignored).
+
 ## Command reference
 
 `python -m androidmirror <command> --help` lists a command's options.
@@ -82,6 +96,7 @@ How each part works, in `designs/`:
 | `mutate propose\|merge\|split\|show\|approve\|reject\|undo` | Merge or split concepts; previews, applied only on approval. Offline except `split --claude`. |
 | `question [--corpus NAME] [--limit 10] [--kind K] [--list]` | Answer the Question engine's questions; approve each proposal by typing your name. `--pending`, `--approve ID --by NAME`, `--reject ID`, `--revoke ID`. No Claude calls unless you answer in words. |
 | `transmutate propose A B [--claude] [--pair A=B] [--opposite A=B] [--drop C]` then `transmutate approve A B [--keep N]` | Combine two Mirrors and trim to what is strong. Writes nothing until approve. |
+| `interview NAME [--stage observe\|orient\|decide\|act]` | Answer the OODA interview in the terminal, resuming where NAME left off, then write the corpus `interview-NAME`. No Claude calls. |
 | `p1 ...` | The paused Prototype 1 app (patch review, Refactorer, Breaker, Chainer, Evolver). `python -m androidmirror p1 --help` lists its commands. |
 
 ## Adding a corpus
@@ -111,6 +126,7 @@ Splitters: `paragraphs` (one text file, short paragraphs merged), `documents` (a
 | `androidmirror/mirror/mutate.py`, `mutate_api.py` | The mutate engine and its routes |
 | `androidmirror/mirror/question.py`, `answers.py` | The Question engine; approved answers and how they amend a Mirror |
 | `androidmirror/mirror/transmutate.py` | Transmutate: align, combine and fitness-trim two Mirrors |
+| `androidmirror/mirror/interview.py`, `data/interview_ooda.json` | The OODA interview: questions, saved answers, the corpus they become |
 | `androidmirror/server.py`, `web/index.html` | The app |
 | `androidmirror/p1_*`, `refactor.py`, `breaker.py`, `chainer.py`, `evolver/` | Prototype 1, paused |
 

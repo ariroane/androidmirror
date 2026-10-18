@@ -38,7 +38,7 @@ def main(argv: list[str] | None = None) -> None:
   build --corpus meditations              the whole corpus; cached passages cost nothing
   causal --min-weight 2                   re-fit the causal model with other settings, free
 
-free: causal, derange, benchmark (without --claude), serve.""")
+free: causal, derange, benchmark (without --claude), serve, interview.""")
     ap.add_argument("--data", type=Path, default=DATA, help="data directory (default: ./data)")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
@@ -114,6 +114,10 @@ free: causal, derange, benchmark (without --claude), serve.""")
     t.add_argument("--keep-at", type=float, help="propose: survival rate below which an item is trimmed (default 0.6)")
     t.add_argument("--keep", action="append", metavar="N", help="approve: spare trim N (number or id) from the proposal")
 
+    iv = sub.add_parser("interview", help="answer the OODA interview in the terminal; the answers become a corpus (no Claude calls)")
+    iv.add_argument("name", help="the person answering; the same name resumes their interview")
+    iv.add_argument("--stage", choices=["observe", "orient", "decide", "act"], help="only this stage's questions")
+
     sub.add_parser("p1", help="the paused Prototype 1 app: python -m androidmirror p1 --help")
 
     args = ap.parse_args(argv)
@@ -179,6 +183,13 @@ free: causal, derange, benchmark (without --claude), serve.""")
             else:
                 question.cli(root, limit=args.limit, kind=args.kind, listing=args.list)
         except (KeyError, ValueError) as e:
+            raise SystemExit(str(e)) from None
+    elif args.cmd == "interview":
+        from .mirror import interview
+
+        try:
+            interview.cli(args.data, args.name, args.stage)
+        except ValueError as e:
             raise SystemExit(str(e)) from None
     elif args.cmd == "transmutate":
         from .mirror import transmutate

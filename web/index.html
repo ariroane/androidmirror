@@ -13,6 +13,7 @@
   header { display:flex; gap:12px; align-items:center; padding:10px 16px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
   header h1 { font-size:16px; margin:0; }
   header .stat { color:var(--quiet); }
+  header a.b { margin-left:auto; border:1px solid var(--line); background:var(--panel); color:var(--ink); border-radius:6px; padding:5px 10px; text-decoration:none; }
   main { flex:1; display:flex; min-height:0; }
   #graphwrap { flex:1; position:relative; min-width:0; }
   #cy { position:absolute; inset:0; }
@@ -55,6 +56,7 @@
   <h1>Android Mirror</h1>
   <select id="corpus" title="Which Mirror"></select>
   <span class="stat" id="stat">loading…</span>
+  <a href="/interview" class="b">OODA interview</a>
 </header>
 <main>
   <div id="graphwrap">
@@ -69,6 +71,7 @@
       <p>Build one from a whole text (a corpus). Claude reads every passage once, so this takes a while and uses your API key:</p>
       <pre class="passage">python -m androidmirror build --corpus meditations
 python -m androidmirror build --corpus fomc</pre>
+      <p>Or make a corpus of your own words: answer the <a href="/interview">OODA interview</a>.</p>
       <p class="muted">Try <code>--limit 30</code> first for a cheap trial run. If a build stops partway, running it again picks up where it left off.</p>
     </div></div>
   </div>
@@ -820,6 +823,7 @@ $('#transmutate').addEventListener('click', e => {
     return `Wrote <b>${esc(r.built)}</b>; it is now the Mirror shown. ${r.transmutation.trimmed} items archived in trimmed.json.`;
   });
 });
+
 
 // ---------- wiring ----------
 document.addEventListener('click', e => {

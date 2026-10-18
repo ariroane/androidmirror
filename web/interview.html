@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OODA Interview · Android Mirror</title>
+<style>
+  :root { --bg:#f6f5f2; --panel:#fff; --ink:#1d1d1b; --quiet:#6b6a66; --line:#dddbd5; --accent:#3b6fd8; --pos:#2f8f5b; --neg:#c2453b; --mid:#9a8f6a; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#161615; --panel:#20201f; --ink:#ecebe7; --quiet:#a19f99; --line:#3a3936; --accent:#7aa2f0; --pos:#5cc08a; --neg:#ec7a70; --mid:#c2b68c; } }
+  * { box-sizing: border-box; }
+  h3 { margin:4px 0 6px; } h4 { margin:14px 0 4px; font-size:13px; }
+  button.b { border:1px solid var(--line); background:var(--panel); color:var(--ink); border-radius:6px; padding:5px 10px; cursor:pointer; font:inherit; }
+  button.b.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  button.b.sel { border-color:var(--accent); color:var(--accent); }
+  button.link { border:0; background:none; color:var(--accent); cursor:pointer; padding:0; font:inherit; text-align:left; }
+  input, select, textarea { font:inherit; color:var(--ink); background:var(--bg); border:1px solid var(--line); border-radius:6px; padding:6px 8px; max-width:100%; }
+  .card { border:1px solid var(--line); border-radius:8px; padding:10px; margin-bottom:10px; }
+  .row { display:flex; gap:8px; align-items:center; margin:8px 0; flex-wrap:wrap; }
+  .muted { color:var(--quiet); } .small { font-size:12px; }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  td, th { text-align:left; padding:4px 6px; border-bottom:1px solid var(--line); vertical-align:top; }
+  tr.click { cursor:pointer; } tr.click:hover td { background:var(--bg); }
+  .passage { white-space:pre-wrap; border-left:3px solid var(--accent); padding:6px 10px; margin:6px 0; background:var(--bg); }
+  details > summary { cursor:pointer; }
+  .bar { display:inline-block; height:8px; background:var(--accent); border-radius:2px; vertical-align:middle; }
+  body { margin:0; font:15px/1.5 system-ui, sans-serif; background:var(--bg); color:var(--ink); }
+  header { display:flex; gap:12px; align-items:center; padding:10px 16px; border-bottom:1px solid var(--line); background:var(--panel); }
+  header h1 { font-size:16px; margin:0; }
+  header a { margin-left:auto; color:var(--accent); text-decoration:none; }
+  main { max-width:760px; margin:0 auto; padding:20px 16px 60px; }
+  h3 { font-size:20px; line-height:1.35; }
+  textarea { width:100%; }
+  .card { background:var(--panel); padding:16px; }
+  .neg { color:var(--neg); }
+  code { font-size:13px; }
+</style>
+</head>
+<body>
+<header><h1>OODA interview</h1><a href="/">Back to the Mirror</a></header>
+<main>
+  <p class="muted">Answer questions about how you observe, orient, decide and act (the OODA loop). Every answer is saved as you go, so you can stop and come back. Your answers become a corpus, and building it makes a Mirror of you.</p>
+  <div id="ilist"></div>
+  <div id="iview"></div>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const store = { get(k){ try { return localStorage.getItem(k); } catch { return null; } }, set(k,v){ try { localStorage.setItem(k,v); } catch {} } };
+const api = async (url, body) => {
+  const r = await fetch(url, body ? {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)} : {});
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.detail || r.statusText);
+  return j;
+};
+const fail = (el, err) => el.innerHTML = `<p class="neg">${esc(err.message)}</p>`;
+// ---------- OODA interview ----------
+let ibank = null, iv = null, iq = null;  // the question bank, the open interview, the question shown
+async function loadInterview() {
+  try {
+    ibank = await api('/api/interview');
+    const open = store.get('interview');
+    if (open && ibank.interviews.some(x => x.id === open)) return showInterview(open);
+    $('#iview').innerHTML = '';
+    $('#ilist').innerHTML = `<div class="row"><input id="iname" placeholder="Name of the person answering" style="flex:1"><button class="b primary" id="istart">Start</button></div>` +
+      (ibank.interviews.length ? `<h4>Interviews</h4><table>${ibank.interviews.map(x => `<tr><td>${esc(x.subject)}</td><td class="small muted">${x.answered} of ${x.total} answered</td><td><button class="b" data-iopen="${esc(x.id)}">${x.next ? 'Continue' : 'Open'}</button></td></tr>`).join('')}</table>` : '') +
+      `<h4>The four stages</h4>${ibank.stages.map(s => `<p class="small"><b>${esc(s.label)}</b> (${ibank.questions.filter(q => q.stage === s.id).length} questions): ${esc(s.about)}</p>`).join('')}`;
+  } catch (err) { fail($('#ilist'), err); }
+}
+async function showInterview(id, qid) {
+  iv = await api(`/api/interview/${encodeURIComponent(id)}`);
+  store.set('interview', iv.id);
+  if (!ibank) ibank = await api('/api/interview');
+  iq = ibank.questions.find(q => q.id === (qid || iv.progress.next)) || null;
+  const p = iv.progress;
+  const bars = p.stages.map(s => `<button class="link small" data-istage="${esc(s.id)}" title="Go to ${esc(s.label)}">${esc(s.label)}</button> <span class="bar" style="width:${Math.round(60 * s.answered / s.total)}px"></span> <span class="small muted">${s.answered}/${s.total}</span>`).join(' &nbsp; ');
+  $('#ilist').innerHTML = `<div class="row"><b>${esc(iv.subject)}</b><span class="muted small">${p.answered} of ${p.total} answered${p.skipped ? `, ${p.skipped} skipped` : ''}</span><button class="link small" id="iclose">Other interviews</button></div><div class="row">${bars}</div>`;
+  let h = '';
+  if (iq) {
+    const stage = ibank.stages.find(s => s.id === iq.stage);
+    const a = iv.answers[iq.id];
+    h += `<div class="card"><div class="small muted">${esc(stage.label)} · question ${iq.n} of ${iq.of}${iv.skipped.includes(iq.id) ? ' · skipped before' : ''}</div>
+      <h3>${esc(iq.text)}</h3>
+      <textarea id="itext" rows="7" style="width:100%" placeholder="Answer in your own words. Say what leads to what, and why.">${esc(a ? a.text : '')}</textarea>
+      <div class="row"><button class="b" id="iback">Back</button><button class="b" id="iskip">Skip</button><button class="b primary" id="isave">Save and next</button><span class="small muted">Ctrl+Enter saves</span></div></div>`;
+  } else h += `<p>Every question is answered. You can still go back and change any answer.</p>`;
+  h += `<h4>Make it a corpus</h4><p class="small muted">Writes your answers so far as the corpus <code>${esc(iv.corpus)}</code>, one passage per answer. Do it again after more answers to add them.</p>
+    <div class="row"><button class="b" id="icorpus" ${p.answered ? '' : 'disabled'}>Write the corpus</button></div><div id="iout">${iv.corpus_written ? `<p class="small">Written before. Build it with: <code>python -m androidmirror build --corpus ${esc(iv.corpus)}</code></p>` : ''}</div>
+    <details><summary class="small muted">All questions</summary><table>${ibank.questions.map(q => `<tr class="click" data-iq="${esc(q.id)}"><td class="small muted">${esc(q.stage_label)} ${q.n}</td><td class="small">${esc(q.text)}</td><td class="small">${iv.answers[q.id] ? '✓' : iv.skipped.includes(q.id) ? 'skipped' : ''}</td></tr>`).join('')}</table></details>`;
+  $('#iview').innerHTML = h;
+  if ($('#itext')) $('#itext').focus();
+}
+async function interviewAnswer(skip) {
+  if (!iq) return;
+  try {
+    iv = await api(`/api/interview/${encodeURIComponent(iv.id)}/answer`, {qid: iq.id, text: skip ? '' : $('#itext').value, skip});
+    const qs = ibank.questions, i = qs.findIndex(q => q.id === iq.id);
+    const after = qs.slice(i + 1).find(q => !iv.answers[q.id] && !iv.skipped.includes(q.id));  // keep going forward, then wrap to what is left
+    await showInterview(iv.id, after ? after.id : null);
+  } catch (err) { fail($('#iout'), err); }
+}
+document.body.addEventListener('click', async e => {
+  const t = e.target;
+  try {
+    if (t.id === 'istart') { const name = $('#iname').value.trim(); if (!name) return; const r = await api('/api/interview', {subject: name}); ibank = null; await showInterview(r.id); }
+    else if (t.dataset.iopen) await showInterview(t.dataset.iopen);
+    else if (t.id === 'iclose') { store.set('interview', ''); await loadInterview(); }
+    else if (t.id === 'isave') await interviewAnswer(false);
+    else if (t.id === 'iskip') await interviewAnswer(true);
+    else if (t.id === 'iback') { const qs = ibank.questions, i = qs.findIndex(q => q.id === iq.id); if (i > 0) await showInterview(iv.id, qs[i - 1].id); }
+    else if (t.dataset.istage) { const s = t.dataset.istage; const q = ibank.questions.find(q => q.stage === s && !iv.answers[q.id]) || ibank.questions.find(q => q.stage === s); await showInterview(iv.id, q.id); }
+    else if (t.closest('[data-iq]')) await showInterview(iv.id, t.closest('[data-iq]').dataset.iq);
+    else if (t.id === 'icorpus') {
+      const r = await api(`/api/interview/${encodeURIComponent(iv.id)}/corpus`, {});
+      $('#iout').innerHTML = `<p class="small">Wrote ${r.passages} passages. Build the Mirror (uses your API key, about two Claude calls per answer), then reload this page:</p><pre class="passage">${esc(r.command)}</pre>`;
+    }
+  } catch (err) { fail($('#iout') || $('#ilist'), err); }
+});
+document.body.addEventListener('keydown', e => { if (e.target.id === 'itext' && e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); interviewAnswer(false); } });
+loadInterview();
+</script>
+</body>
+</html>
