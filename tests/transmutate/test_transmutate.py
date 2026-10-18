@@ -247,3 +247,35 @@ def test_combining_can_resolve_one_mirrors_shared_cause():
     sc = tm.shared_causes(a, b, pairs, combined, combined)
     assert [(x["key"], x["sources"]) for x in sc["resolved"]] == [(["a", "c"], ["A"])]
     assert [x["key"] for x in sc["created"]] == [["b", "c"]]  # a step of the chain gives way instead
+
+
+def test_differences_in_knowledge_causes_and_ooda(built):
+    r = tm.compare_only(built, "synthetic", "second", add=[tm.parse_pair("zeta=unease", -1)])
+    d = r["differences"]
+    assert not (built / "transmutations" / "synthetic+second" / "compare").exists()
+    k, c, o = d["knowledge"], d["causal"], d["ooda"]
+    assert any(x["label"] == "justice" and (x["a_says"], x["b_says"]) == ("good", "bad") for x in k["evaluations"])
+    assert {x["relation"] for x in k["relations"]} >= {"is_a", "requires"}
+    effects = {(x["x"], x["y"]): x for x in c["effects"]}
+    assert effects[("delta", "epsilon")]["kind"] == "opposite"  # the first lowers it, the second raises it
+    # unease lowers alpha in the second, so zeta raises it; the first says zeta makes no difference
+    assert (effects[("zeta", "alpha")]["a_says"], effects[("zeta", "alpha")]["b_says"]) == ("no effect", "raises")
+    assert effects[("alpha", "gamma")]["kind"] == "only a"
+    assert any(x["concept"] == "alpha" and (x["a"], x["b"]) == ("driver", "driven") for x in c["roles"])
+    assert set(o["a"]["stages"]) == {"observe", "orient", "decide", "act"} and o["flow"]
+    assert d["headline"] and all(isinstance(x, str) for x in d["headline"])
+    # the proposal carries the same comparison, and proposal.md says it in words
+    p = proposal(built)
+    assert p["differences"]["causal"]["counts"] == c["counts"]
+    md = (built / "transmutations" / "synthetic+second" / "proposal.md").read_text(encoding="utf-8")
+    assert "## How synthetic and second differ" in md and "### OODA" in md
+
+
+def test_compare_cli_and_api(built, capsys):
+    main(["--data", str(built), "transmutate", "compare", "synthetic", "second", "--opposite", "zeta=unease"])
+    out = capsys.readouterr().out
+    assert "### Knowledge" in out and "### Causes" in out and "### OODA" in out
+    client = TestClient(create_app(built))
+    r = client.post("/api/transmutate/compare", json={"a": "synthetic", "b": "second"})
+    assert r.status_code == 200 and r.json()["differences"]["headline"]
+    assert client.post("/api/transmutate/compare", json={"a": "synthetic", "b": "synthetic"}).status_code == 400

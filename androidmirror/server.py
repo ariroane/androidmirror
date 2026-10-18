@@ -206,6 +206,17 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
         except (FileNotFoundError, RuntimeError, KeyError, ValueError, llm.LLMUnavailable) as e:
             raise HTTPException(400, str(e)) from None
 
+    @app.post("/api/transmutate/compare")
+    def transmutate_compare(t: Transmute) -> dict:
+        """How two Mirrors differ in knowledge, causes and OODA. Saves nothing."""
+        from .mirror import transmutate as tm
+
+        try:
+            add = [tm.parse_pair(x) for x in t.pairs] + [tm.parse_pair(x, -1) for x in t.opposites]
+            return tm.compare_only(data_dir, t.a, t.b, t.claude, add, t.drop)
+        except (FileNotFoundError, RuntimeError, KeyError, ValueError, llm.LLMUnavailable) as e:
+            raise HTTPException(400, str(e)) from None
+
     @app.post("/api/transmutate/approve")
     def transmutate_approve(t: Transmute) -> dict:
         from .mirror import transmutate as tm
