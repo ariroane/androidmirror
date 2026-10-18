@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 from . import archetypes, llm, mutate_api
 from .mirror import ask as oracle
-from .mirror import derange, question
+from .mirror import derange, interview, question
 from .mirror.build import mirror_dir
 from .mirror.corpus import SPECS
 from .mirror.store import Mirror
@@ -155,6 +155,7 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
 
     mutate_api.register(app, lambda c: mirror_dir(data_dir, get(c).meta["corpus"]["id"]))
     app.include_router(question.routes(get))  # the Question engine: questions, answers, proposals to approve
+    app.include_router(interview.routes(data_dir))  # the OODA interview: answers saved as they come, then a corpus
 
     @app.get("/api/transmutate")
     def transmutation(a: str, b: str) -> dict:

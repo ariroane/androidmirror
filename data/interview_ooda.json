@@ -1,0 +1,458 @@
+{
+ "title": "OODA loop interview",
+ "about": "Questions about how one person observes, orients, decides and acts (John Boyd's OODA loop). Each answer becomes one passage of a corpus.",
+ "stages": [
+  {
+   "id": "observe",
+   "label": "Observe",
+   "about": "What you take in: where your information comes from, what you notice and what you miss.",
+   "questions": [
+    {
+     "id": "observe-01",
+     "text": "When you walk into a situation you don't know yet, what do you notice first, and why that?"
+    },
+    {
+     "id": "observe-02",
+     "text": "What sources of information do you trust most, and what makes you trust them?"
+    },
+    {
+     "id": "observe-03",
+     "text": "Which sources do you distrust or ignore, and what led you to that?"
+    },
+    {
+     "id": "observe-04",
+     "text": "How do you know when something around you has changed?"
+    },
+    {
+     "id": "observe-05",
+     "text": "What early signs tell you a situation is about to go well?"
+    },
+    {
+     "id": "observe-06",
+     "text": "What early signs tell you a situation is about to go badly?"
+    },
+    {
+     "id": "observe-07",
+     "text": "What do you tend to miss that other people catch?"
+    },
+    {
+     "id": "observe-08",
+     "text": "What do you catch that other people tend to miss?"
+    },
+    {
+     "id": "observe-09",
+     "text": "When you are tired, stressed or rushed, what happens to what you notice?"
+    },
+    {
+     "id": "observe-10",
+     "text": "How much do you rely on what you see and hear yourself, and how much on what others tell you? What decides the balance?"
+    },
+    {
+     "id": "observe-11",
+     "text": "When two sources tell you opposite things, what do you do?"
+    },
+    {
+     "id": "observe-12",
+     "text": "How do you go looking for information you don't have yet? Describe a recent example."
+    },
+    {
+     "id": "observe-13",
+     "text": "What makes you stop gathering information and feel you have enough?"
+    },
+    {
+     "id": "observe-14",
+     "text": "What kinds of information do you deliberately avoid, and what does avoiding them do for you?"
+    },
+    {
+     "id": "observe-15",
+     "text": "How do you notice what other people are feeling or intending?"
+    },
+    {
+     "id": "observe-16",
+     "text": "What part do numbers, data or measurements play in what you notice?"
+    },
+    {
+     "id": "observe-17",
+     "text": "What part does your body (gut feelings, tension, energy) play in what you notice?"
+    },
+    {
+     "id": "observe-18",
+     "text": "Which people do you watch most closely, and what are you watching for?"
+    },
+    {
+     "id": "observe-19",
+     "text": "When something surprises you, what do you do in the next few minutes?"
+    },
+    {
+     "id": "observe-20",
+     "text": "Think of a time you missed an important signal. What made you miss it?"
+    },
+    {
+     "id": "observe-21",
+     "text": "What do you check routinely, every day or every week, and why those things?"
+    },
+    {
+     "id": "observe-22",
+     "text": "How does your mood change what you pay attention to?"
+    },
+    {
+     "id": "observe-23",
+     "text": "How do you tell a real signal from noise?"
+    },
+    {
+     "id": "observe-24",
+     "text": "What information reaches you too late, and what does that cost you?"
+    },
+    {
+     "id": "observe-25",
+     "text": "How do you notice your own mistakes?"
+    },
+    {
+     "id": "observe-26",
+     "text": "If you could add one source of information to your life, what would it be and what would it change?"
+    }
+   ]
+  },
+  {
+   "id": "orient",
+   "label": "Orient",
+   "about": "How you make sense of it: the experience, beliefs, values and habits of mind that turn what you notice into a picture.",
+   "questions": [
+    {
+     "id": "orient-01",
+     "text": "When you take in something new, what do you compare it to first?"
+    },
+    {
+     "id": "orient-02",
+     "text": "Which experiences most shaped how you read situations today, and how?"
+    },
+    {
+     "id": "orient-03",
+     "text": "Which people, books or traditions taught you how to think about the world?"
+    },
+    {
+     "id": "orient-04",
+     "text": "What do you believe about people that guides how you interpret what they do?"
+    },
+    {
+     "id": "orient-05",
+     "text": "What do you believe about how the world works that most people around you don't?"
+    },
+    {
+     "id": "orient-06",
+     "text": "What do you hold most important, and how does it color what you see?"
+    },
+    {
+     "id": "orient-07",
+     "text": "How does where you come from (family, culture, place) shape how you make sense of things?"
+    },
+    {
+     "id": "orient-08",
+     "text": "How do your current goals change how you interpret what is happening?"
+    },
+    {
+     "id": "orient-09",
+     "text": "When a situation is ambiguous, which interpretation do you tend to reach for first, and why?"
+    },
+    {
+     "id": "orient-10",
+     "text": "What are your usual explanations for why things go wrong?"
+    },
+    {
+     "id": "orient-11",
+     "text": "What are your usual explanations for why things go right?"
+    },
+    {
+     "id": "orient-12",
+     "text": "How do you find out that your picture of a situation is wrong?"
+    },
+    {
+     "id": "orient-13",
+     "text": "Describe a time you changed your mind about something important. What changed it?"
+    },
+    {
+     "id": "orient-14",
+     "text": "What would it take to change your mind about something you now feel sure of?"
+    },
+    {
+     "id": "orient-15",
+     "text": "Which of your assumptions do you rarely question?"
+    },
+    {
+     "id": "orient-16",
+     "text": "Which of your biases do you know about, and how do they show up?"
+    },
+    {
+     "id": "orient-17",
+     "text": "How do you weigh your intuition against careful reasoning?"
+    },
+    {
+     "id": "orient-18",
+     "text": "How do you make sense of a person whose behaviour surprises you?"
+    },
+    {
+     "id": "orient-19",
+     "text": "When you face something entirely new, how do you build a picture of it?"
+    },
+    {
+     "id": "orient-20",
+     "text": "What patterns do you see repeating in your life, and what do you think drives them?"
+    },
+    {
+     "id": "orient-21",
+     "text": "How do your emotions shape how you interpret events?"
+    },
+    {
+     "id": "orient-22",
+     "text": "Whose way of seeing things do you borrow when your own isn't enough?"
+    },
+    {
+     "id": "orient-23",
+     "text": "What do you think causes success in the things you care about?"
+    },
+    {
+     "id": "orient-24",
+     "text": "What do you think causes failure in those things?"
+    },
+    {
+     "id": "orient-25",
+     "text": "How do you judge what matters most in a situation and what can be ignored?"
+    },
+    {
+     "id": "orient-26",
+     "text": "What makes something feel dangerous or safe to you?"
+    },
+    {
+     "id": "orient-27",
+     "text": "What makes something feel urgent, or able to wait?"
+    },
+    {
+     "id": "orient-28",
+     "text": "How would someone who sees the world very differently describe your blind spots?"
+    }
+   ]
+  },
+  {
+   "id": "decide",
+   "label": "Decide",
+   "about": "How you choose: the options you consider, how you weigh them and when you commit.",
+   "questions": [
+    {
+     "id": "decide-01",
+     "text": "Describe how you made an important decision recently, step by step."
+    },
+    {
+     "id": "decide-02",
+     "text": "How do you know when it is time to decide rather than keep thinking?"
+    },
+    {
+     "id": "decide-03",
+     "text": "How many options do you usually consider, and where do they come from?"
+    },
+    {
+     "id": "decide-04",
+     "text": "What makes one option stand out over the others?"
+    },
+    {
+     "id": "decide-05",
+     "text": "What do you do when every option looks bad?"
+    },
+    {
+     "id": "decide-06",
+     "text": "What do you do when two options look equally good?"
+    },
+    {
+     "id": "decide-07",
+     "text": "Which rules, principles or habits do you rely on to decide, and what do they do for you?"
+    },
+    {
+     "id": "decide-08",
+     "text": "Which decisions do you make quickly, and which slowly? What makes the difference?"
+    },
+    {
+     "id": "decide-09",
+     "text": "Who do you consult before deciding, and what do you want from them?"
+    },
+    {
+     "id": "decide-10",
+     "text": "When do you decide alone, and why?"
+    },
+    {
+     "id": "decide-11",
+     "text": "How do you weigh what you might gain against what you might lose?"
+    },
+    {
+     "id": "decide-12",
+     "text": "How do you weigh the short term against the long term?"
+    },
+    {
+     "id": "decide-13",
+     "text": "How do your values rule some options out before you consider them?"
+    },
+    {
+     "id": "decide-14",
+     "text": "What part does fear play in your decisions?"
+    },
+    {
+     "id": "decide-15",
+     "text": "What part do hope and excitement play?"
+    },
+    {
+     "id": "decide-16",
+     "text": "How do you decide under pressure, when there is no time to think?"
+    },
+    {
+     "id": "decide-17",
+     "text": "How do you decide when key information is missing?"
+    },
+    {
+     "id": "decide-18",
+     "text": "What kinds of decisions do you put off, and what happens when you do?"
+    },
+    {
+     "id": "decide-19",
+     "text": "When have you decided too quickly, and what led to it?"
+    },
+    {
+     "id": "decide-20",
+     "text": "When have you decided too slowly, and what led to it?"
+    },
+    {
+     "id": "decide-21",
+     "text": "How do you judge whether a decision was a good one, apart from how it turned out?"
+    },
+    {
+     "id": "decide-22",
+     "text": "Which decision are you proudest of, and what made it good?"
+    },
+    {
+     "id": "decide-23",
+     "text": "Which decision do you regret most, and what would you do differently?"
+    },
+    {
+     "id": "decide-24",
+     "text": "How do other people's expectations shape what you choose?"
+    },
+    {
+     "id": "decide-25",
+     "text": "How do you decide what not to do?"
+    },
+    {
+     "id": "decide-26",
+     "text": "Once a decision is made but before you act on it, do you revisit it? What makes you reopen it?"
+    }
+   ]
+  },
+  {
+   "id": "act",
+   "label": "Act",
+   "about": "How you carry it out, and how the results come back to what you notice next.",
+   "questions": [
+    {
+     "id": "act-01",
+     "text": "Once you have decided, how quickly do you act, and what speeds you up or slows you down?"
+    },
+    {
+     "id": "act-02",
+     "text": "What gets in the way between deciding and doing?"
+    },
+    {
+     "id": "act-03",
+     "text": "How do you choose the first step of an action?"
+    },
+    {
+     "id": "act-04",
+     "text": "How do you act when you are not sure it will work?"
+    },
+    {
+     "id": "act-05",
+     "text": "How do you get other people to act with you?"
+    },
+    {
+     "id": "act-06",
+     "text": "What do you do when an action goes differently than you expected?"
+    },
+    {
+     "id": "act-07",
+     "text": "When do you stop or reverse something you have started?"
+    },
+    {
+     "id": "act-08",
+     "text": "How do you keep going when acting gets hard or dull?"
+    },
+    {
+     "id": "act-09",
+     "text": "Which habits or routines carry out much of what you do without a decision, and where did they come from?"
+    },
+    {
+     "id": "act-10",
+     "text": "Which actions do you put the most care into, and why?"
+    },
+    {
+     "id": "act-11",
+     "text": "How do you act differently when others are watching?"
+    },
+    {
+     "id": "act-12",
+     "text": "Which limits (time, money, energy, people) most shape what you can do, and how do you work around them?"
+    },
+    {
+     "id": "act-13",
+     "text": "How do you tell whether an action worked?"
+    },
+    {
+     "id": "act-14",
+     "text": "After acting, what do you look at first?"
+    },
+    {
+     "id": "act-15",
+     "text": "How quickly do you learn from the results of what you did, and how?"
+    },
+    {
+     "id": "act-16",
+     "text": "Describe a time something you did changed how you saw the situation."
+    },
+    {
+     "id": "act-17",
+     "text": "How does what you did yesterday shape what you notice today?"
+    },
+    {
+     "id": "act-18",
+     "text": "When something you did fails, what do you change first: what you watch, how you read it, how you decide, or how you act?"
+    },
+    {
+     "id": "act-19",
+     "text": "Where in your life do you move faster than the people or situations around you, and where slower? What makes the difference?"
+    },
+    {
+     "id": "act-20",
+     "text": "What makes you take the initiative rather than respond to others?"
+    },
+    {
+     "id": "act-21",
+     "text": "How do you act when you need to surprise or outmanoeuvre someone?"
+    },
+    {
+     "id": "act-22",
+     "text": "How do you react when someone else moves faster than you?"
+    },
+    {
+     "id": "act-23",
+     "text": "Do you try to make your actions hard for others to predict? How, and why?"
+    },
+    {
+     "id": "act-24",
+     "text": "What would you do differently if you had to act twice as fast?"
+    },
+    {
+     "id": "act-25",
+     "text": "What would you do differently if you had all the time you needed?"
+    },
+    {
+     "id": "act-26",
+     "text": "If you could change one thing about how you get from seeing to doing, what would it be?"
+    }
+   ]
+  }
+ ]
+}

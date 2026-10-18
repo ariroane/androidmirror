@@ -13,3 +13,7 @@ __pycache__/
 *.egg-info/
 .venv/
 .pytest_cache/
+
+# Interviews: your answers and the corpora made from them stay on your machine
+data/interviews/
+data/corpora/interview-*.json
