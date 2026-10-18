@@ -1,3 +1,4 @@
+import json
 import math
 
 import pytest
@@ -7,7 +8,7 @@ from androidmirror.mirror import judgments as jd
 from androidmirror.mirror.causal import explain, fit, holdout
 from androidmirror.mirror.corpus import split_documents, split_paragraphs
 from androidmirror.mirror.kg import KnowledgeBase, aggregate
-from androidmirror.mirror.sources import fomc
+from androidmirror.mirror.sources import dgn, fomc
 
 
 def J(kind, x, y, sign=1, z="", p="p1", scope="unsaid", held=True):
@@ -352,3 +353,45 @@ def test_a_claim_ruled_out_by_a_denial_about_other_ideas_records_the_chain_it_wo
     assert c["path"] == ["thoughts", "acceptance", "holiness", "happiness"]
     assert c["through"] == ["reaches|thoughts|acceptance", "reaches|holiness|happiness"]
     assert link(m, "acceptance", "holiness")
+
+
+DGN_SEARCH = {"resultList": {"result": [
+    {"pmcid": "PMC1", "doi": "10.1/a", "pubYear": "2024", "journalTitle": "J Neurol",
+     "title": "Pharmacotherapy of motor symptoms in early and mid-stage Parkinson's disease: guideline "
+              "“Parkinson's disease” of the German Society of Neurology"},
+    {"pmcid": "PMC2", "title": "Guideline “Parkinson's disease” of the German Society of Neurology (Deutsche "
+                               "Gesellschaft für Neurologie): concepts of care"},
+    {"pmcid": "PMC3", "title": "Correction: Guideline “Parkinson's disease” of the German Society of Neurology"},
+]}, "nextCursorMark": "*"}
+DGN_XML = '''<article xmlns:xlink="http://www.w3.org/1999/xlink"><front><permissions>
+<license xlink:href="http://creativecommons.org/licenses/by/4.0/"><p>Open access.</p></license></permissions></front>
+<body><sec><title>Introduction</title><p>Levodopa is the most effective drug.</p></sec>
+<sec><title>Early therapy</title><p>Overview.</p>
+<sec><title>Levodopa</title><p>Early monotherapy brings fluctuations sooner.<boxed-text><caption><title>Recommendation</title></caption>
+<p>Amantadine should be used to reduce dyskinesias.</p></boxed-text> And so on.</p></sec></sec>
+<sec><title>Declarations</title><p>None.</p></sec></body><back><ref-list><ref>Ref</ref></ref-list></back></article>'''
+
+
+def test_dgn_parsing(tmp_path):
+    assert dgn.short_name(DGN_SEARCH["resultList"]["result"][0]["title"]) == \
+        "Parkinson's disease: pharmacotherapy of motor symptoms in early and mid-stage Parkinson's disease"
+    assert dgn.short_name(DGN_SEARCH["resultList"]["result"][1]["title"]) == "Parkinson's disease: concepts of care"
+
+    def get(url):
+        if "/search?" in url:
+            return json.dumps(DGN_SEARCH)
+        if "PMC1/" in url:
+            return DGN_XML
+        if "PMC2/" in url:
+            return DGN_XML.replace("licenses/by/", "licenses/by-nc-nd/")
+        raise OSError("404")
+
+    n = dgn.download(tmp_path, delay=0, get=get, log=lambda *_: None)
+    docs = split_documents(tmp_path)
+    assert n == 3 and len(docs) == 3
+    assert [d.locator.split(" - ")[1] for d in docs] == ["Introduction", "Early therapy", "Early therapy / Levodopa"]
+    assert docs[2].group.startswith("Parkinson's disease: pharmacotherapy")
+    assert docs[2].text.split("\n\n") == ["Early monotherapy brings fluctuations sooner.", "Recommendation",
+                                          "Amantadine should be used to reduce dyskinesias.", "And so on."]
+    manifest = json.loads((tmp_path / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["PMC1"]["licence"] == "CC BY" and manifest["PMC2"]["kept"] is False and "PMC3" not in manifest

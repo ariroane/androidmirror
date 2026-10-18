@@ -42,7 +42,7 @@ After `git pull`, run `build` again: it reuses everything cached and only redoes
 | Option | Meaning |
 |---|---|
 | `--data FOLDER` | Where corpora and built Mirrors live (default `./data`). Goes **before** the command: `python -m androidmirror --data D:\mirrors build` |
-| `--corpus NAME` | Which corpus: `meditations` (the default), `fomc`, any spec in `data/corpora/`, or a path to a spec file. Used by `build`, `causal` and `ask` |
+| `--corpus NAME` | Which corpus: `meditations` (the default), `fomc`, `dgn`, any spec in `data/corpora/`, or a path to a spec file. Used by `build`, `causal` and `ask` |
 
 ---
 

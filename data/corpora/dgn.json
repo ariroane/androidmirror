@@ -1,0 +1,9 @@
+{
+  "id": "dgn",
+  "title": "German Society of Neurology guidelines (English, CC BY), Parkinson's disease",
+  "subject": "the German Society of Neurology",
+  "splitter": "documents",
+  "fetcher": "dgn",
+  "unit": "document",
+  "options": {"conditions": ["parkinson"], "licences": ["by"]}
+}
