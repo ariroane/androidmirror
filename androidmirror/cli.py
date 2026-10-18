@@ -38,7 +38,7 @@ def main(argv: list[str] | None = None) -> None:
   build --corpus meditations              the whole corpus; cached passages cost nothing
   causal --min-weight 2                   re-fit the causal model with other settings, free
 
-free: causal, derange, benchmark (without --claude), serve. Full guide: docs/commands.md""")
+free: causal, derange, benchmark (without --claude), serve.""")
     ap.add_argument("--data", type=Path, default=DATA, help="data directory (default: ./data)")
     sub = ap.add_subparsers(dest="cmd", required=True)
 
