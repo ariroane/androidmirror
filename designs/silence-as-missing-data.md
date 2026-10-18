@@ -14,7 +14,7 @@ These are not pairs where we lack evidence. They follow from the two-way links t
 
 The usual shape is this. Fate drives Anger. Anger and Calm are joined by a two-way link, and Anger also leads to Calm by a chain. Holding Anger fixed blocks Fate's chain to Calm, but it opens the route Fate → Anger ← hidden cause → Calm. Leaving Anger free leaves the chain open. No choice of ideas to hold fixed separates Fate from Calm.
 
-In your three built Mirrors (staged from your machine, read-only):
+In three built Mirrors:
 
 | Mirror | Two-way links | Pairs nothing can pull apart | ...already joined by a chain | ...not otherwise connected |
 |---|---|---|---|---|

@@ -1,6 +1,6 @@
 # Does Prototype 2 encode Marcus's own causal model? A skeptic's evaluation
 
-Reviewed: `main` at `cd79f1d` (PRs #11, #12 and #13 merged), the real Meditations build in `data/mirror/meditations` on the user's machine (built 2026-10-16, 30 passages), the offline planted-model benchmark, and three adversarial versions of that benchmark I wrote for this review ([skeptic-experiments/adversarial.py](skeptic-experiments/adversarial.py)). No Claude calls were made. Every number below is from code I ran or from files in the build, unless it is marked as inferred.
+Reviewed: `main` at `cd79f1d` (PRs #11, #12 and #13 merged), a real Meditations build (built 2026-10-16, 30 passages), the offline planted-model benchmark, and three adversarial versions of that benchmark I wrote for this review ([skeptic-experiments/adversarial.py](skeptic-experiments/adversarial.py)). No Claude calls were made. Every number below is from code I ran or from files in the build, unless it is marked as inferred.
 
 ## Verdict
 
@@ -202,7 +202,7 @@ In the causal tab, mark each edge's evidence as one of:
 
 Add a flag for **"plain Claude draws this too"**. An edge whose only support is co-occurrence plus a plain-Claude match is the one least likely to be Marcus's.
 
-## What to run next, on your machine
+## What to run next
 
 1. **The full 412-passage build.** The 30-passage build is too small to judge discovery, fill or vignettes. Prediction from Experiment B: an edge count in the low teens, 0 compelled arrows, and validation still unable to separate subject from plain.
 2. **Validation at `n = 40`**, with the trust rule changed to "beats plain" (R5). This is a small code change.
