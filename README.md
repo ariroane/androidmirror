@@ -1,11 +1,6 @@
 # Android Mirror
 
-A reflective model of a subjective system (a person, a group, an institution) built from its own words (other data generating mechanisms in progress). Combines three knowledge structures - knowledge graphs for relational knowledge, causal graphs for observational knowledge, and language structures through Claude. Prototype 3 reads a whole corpus once and builds two linked structures over the same concepts:
-
-- **Descriptive ontology:** a knowledge graph with a schema and rules, so it can be reasoned over, not only browsed. Every answer it gives has a proof that bottoms out in quotes.
-- **Causal model:** the subject's *own* model of how things work, built only from the causal judgments the subject makes ("anger comes from opinion", "take away the opinion and the hurt is gone", "not the thing but your judgment of it disturbs you", "this makes no difference to that"). Each judgment becomes a constraint on a graph, and the graph is fitted to them. Nothing is inferred from how often ideas appear together, and Claude never answers as the subject.
-
-What the subject wants is kept apart from what they think causes what: a third layer of **values** records what each passage urges more or less of.
+A reflective model of a subjective system (a person, a group, an institution) built from its own words (other data generating mechanisms in progress). Combines three knowledge structures - knowledge graphs for relational knowledge, causal graphs for observational knowledge, and language structures through Claude. 
 
 Three corpora come with it:
 
@@ -40,14 +35,12 @@ Open http://localhost:8000. Building makes two Claude calls per passage plus a f
 
 ## How a Mirror is built
 
-1. **Passages.** The corpus is split into units: numbered sections for the Meditations, one statement per meeting for the FOMC.
+1. **Passages.** The corpus is split into units, dependent on the corpus.
 2. **Open coding (one Claude call per passage).** Concept mentions, and descriptive statements in a fixed relation vocabulary, each with its modality (asserts, prescribes, asks, entertains), attribution (the subject, or someone it quotes) and polarity.
 3. **Codebook.** All labels are consolidated into one fixed set of concepts: synonyms merged, opposites folded in with polarity −1 ("freedom from anger" is anger at −1), word senses kept apart.
-4. **Causal judgments (one Claude call per passage).** With the codebook fixed, Claude lists every causal judgment the passage makes, in the subject's terms, over concepts from the codebook (see [the causal model](designs/causal-model.md)), and what the passage urges more or less of. The vocabulary is the same in every call and is prompt-cached, which lowers their cost.
+4. **Causal judgments (one Claude call per passage).** With the codebook fixed, Claude lists every causal judgment the passage makes, in the systems's terms, over concepts from the codebook (see [the causal model](designs/causal-model.md)), and what the passage urges more or less of. The vocabulary is the same in every call and is prompt-cached, which lowers their cost.
 5. **Knowledge graph and inference** (no Claude calls).
 6. **Fitting the causal model** (no Claude calls). Re-run it any time: `python -m androidmirror causal --min-weight 2`.
-
-There is no review queue: the whole corpus seeds the Mirror at once. To review, click any node or arrow; every fact and judgment shows the passages it came from.
 
 ## Design notes
 
@@ -60,11 +53,9 @@ How each part works, in `designs/`:
 - [Silence as missing data](designs/silence-as-missing-data.md): a brainstorm for the hidden-cause view.
 - [Open problems](designs/open-problems.md): what is still unsolved.
 
-Reviews of earlier prototypes are in `reviews/`.
-
 ## The web app
 
-- **Canvas:** the knowledge graph (node colour is the subject's evaluation) or the causal model (green arrows raise, red bars lower, thickness is the number of passages, dashed may run only through another path, a double ring is something the subject urges more or less of). Click a node for its card; click an arrow for its quotes.
+- **Canvas:** the knowledge graph (node color is the subject's evaluation) or the causal model (green arrows raise, red bars lower, thickness is the number of passages, dashed may run only through another path, a double ring is something the subject urges more or less of). Click a node for its card; click an arrow for its quotes.
 - **Node:** what the concept is, its aliases and classes, stated facts with quotes, inferred facts with their rules, its arrows, every causal judgment about it with its status, and what the subject urges about it. Click a locator to read the passage and the judgments read from it.
 - **Knowledge:** "does it follow?" queries with proof trees, and the list of inconsistencies.
 - **Causal:** counts, the held-out check, Trace, the arrows, tensions, denials that hold, claims explained by a chain, values, reported views, and judgments about concepts outside the codebook.
