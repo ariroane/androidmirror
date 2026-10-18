@@ -200,7 +200,7 @@ Splitters: `paragraphs` (one text file, short paragraphs merged), `documents` (a
 
 As of 2026-10-18.
 
-Five problems in Android Mirror that nobody has solved yet. Each entry says what the problem is, why it is still open, and where the existing work lives. Paths under `android-mirror/` are in the project's shared files, not in this repository.
+Five problems in Android Mirror that nobody has solved yet. Each entry says what the problem is, why it is still open, and where the existing work lives.
 
 ### 1. A consistent graphical causal framework
 
@@ -216,8 +216,8 @@ Five problems in Android Mirror that nobody has solved yet. Each entry says what
 
 - PAG view, parked: PR #30.
 - Shared-cause links: PR #26 and #27.
-- Silence as missing data: `android-mirror/designs/silence-as-missing-data.md`.
-- Skeptical review: `android-mirror/reviews/skeptical-evaluation.md`.
+- Silence as missing data: [designs/silence-as-missing-data.md](designs/silence-as-missing-data.md).
+- Skeptical review: [reviews/skeptical-evaluation.md](reviews/skeptical-evaluation.md).
 
 ### 2. Empirically testing the value of the engines
 
@@ -232,7 +232,7 @@ Five problems in Android Mirror that nobody has solved yet. Each entry says what
 **Pointers.**
 
 - Engine code: `androidmirror/mirror/mutate.py`, `transmutate.py`, `derange.py`, `question.py`.
-- Skeptical review (validate must beat plain Claude; the corpus-transplant test is the decisive one): `android-mirror/reviews/skeptical-evaluation.md`.
+- Skeptical review (validate must beat plain Claude; the corpus-transplant test is the decisive one): [reviews/skeptical-evaluation.md](reviews/skeptical-evaluation.md).
 - Offline benchmark of the causal fit: [README, Benchmark](#benchmark).
 
 ### 3. A Breaker: the opposite of Transmutate
@@ -262,7 +262,7 @@ Five problems in Android Mirror that nobody has solved yet. Each entry says what
 **Pointers.**
 
 - Descriptive review (qualifiers for modality, attribution and polarity): [review doc](https://claude.ai/code/artifact/c75478d6-4c3b-4d12-a3d3-97cb16a36d12).
-- Causal validity review (separating confidence from effect size): `android-mirror/reviews/causal-validity-review.md`.
+- Causal validity review (separating confidence from effect size): [reviews/causal-validity-review.md](reviews/causal-validity-review.md).
 - Current schema: [README, the descriptive ontology](#the-descriptive-ontology-built-for-inference) and [the causal model](#the-causal-model-the-subjects-own-judgments).
 
 ### 5. An automated sequence of engines: descent with modification
