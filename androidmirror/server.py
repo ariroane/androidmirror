@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 from . import archetypes, llm, mutate_api
 from .mirror import ask as oracle
-from .mirror import derange, interview, question
+from .mirror import derange, interview, ooda, question
 from .mirror.build import mirror_dir
 from .mirror.corpus import SPECS
 from .mirror.store import Mirror
@@ -27,6 +27,13 @@ WEB = ROOT / "web"
 
 class Ask(BaseModel):
     question: str
+    corpus: str | None = None
+
+
+class Place(BaseModel):
+    concept: str
+    tier: str | None = None  # observe, orient, decide, act; None: automatic
+    by: str = ""
     corpus: str | None = None
 
 
@@ -88,7 +95,25 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
 
     @app.get("/api/graph")
     def graph(layer: str = "kg", limit: int = 120, corpus: str | None = None) -> dict:
-        return get(corpus).graph(layer, limit)
+        m = get(corpus)
+        return ooda.graph(m) if layer == "ooda" else m.graph(layer, limit)
+
+    @app.get("/api/ooda")
+    def ooda_model(corpus: str | None = None) -> dict:
+        """The OODA model: concepts in four tiers, built from the two graphs. Read-only."""
+        return ooda.model(get(corpus))
+
+    @app.post("/api/ooda/place")
+    def ooda_place(p: Place) -> dict:
+        """Put a concept in a tier yourself, or back to automatic (tier null). Changes neither graph."""
+        m = get(p.corpus)
+        if p.concept not in m.nodes:
+            raise HTTPException(404, f"not found: {p.concept}")
+        try:
+            ooda.place(m.root, p.concept, p.tier, p.by)
+        except ValueError as e:
+            raise HTTPException(400, str(e)) from None
+        return ooda.model(m)
 
     @app.get("/api/node/{nid}")
     def node(nid: str, corpus: str | None = None) -> dict:

@@ -51,18 +51,20 @@ How each part works, in `designs/`:
 - [The descriptive ontology](designs/descriptive-ontology.md): kinds, relations, rules and checks that make the knowledge graph something to reason over.
 - [The causal model](designs/causal-model.md): the five kinds of causal judgment, how the graph is fitted to them, the held-out check, and the benchmark.
 - [The engines](designs/engines.md): Question, Mutate and Derange.
+- [The OODA model](designs/ooda-model.md): placing the Mirror's ideas in Observe, Orient, Decide and Act, and linking the stages.
 - [The face](designs/face.md): how the Face tab picks a Major Arcana card for the whole Mirror.
 - [Silence as missing data](designs/silence-as-missing-data.md): a brainstorm for the hidden-cause view.
 - [Open problems](designs/open-problems.md): what is still unsolved.
 
 ## The web app
 
-- **Canvas:** the knowledge graph (node color is the subject's evaluation) or the causal model (green arrows raise, red bars lower, thickness is the number of passages, dashed may run only through another path, a double ring is something the subject urges more or less of). Click a node for its card; click an arrow for its quotes.
+- **Canvas:** the knowledge graph (node color is the subject's evaluation), the OODA loop (see below) or the causal model (green arrows raise, red bars lower, thickness is the number of passages, dashed may run only through another path, a double ring is something the subject urges more or less of). Click a node for its card; click an arrow for its quotes.
 - **Node:** what the concept is, its aliases and classes, stated facts with quotes, inferred facts with their rules, its arrows, every causal judgment about it with its status, and what the subject urges about it. Click a locator to read the passage and the judgments read from it.
 - **Knowledge:** "does it follow?" queries with proof trees, and the list of inconsistencies.
 - **Causal:** counts, the held-out check, Trace, the arrows, tensions, denials that hold, claims explained by a chain, values, reported views, and judgments about concepts outside the codebook.
 - **Ask:** the Oracle answers from the knowledge graph and the causal model only (stated facts and their relations, inferred facts with the rule and facts behind them, the subject's causal judgments, links, chains of links and values), never from the passages, and cites each item it uses as [K3] or [C2]. A second step then proposes two or three ways to use the answer: an idea to change, the pathway through the subject's model it would travel, the outcome it should move, and what has to be true for it to work.
 - **Derange:** where the worldview rests on least, under what matters most (see [the engines](designs/engines.md#derange-the-weakest-basis)).
+- **OODA:** the subject's ideas in the four stages of the OODA loop, built from the knowledge graph and the causal model, with why each idea is where it is, the cause-and-effect between stages, and what the shape shows (does the loop close, does Orient skip straight to Act). Move an idea to another stage if the placement is wrong; that changes neither graph. See [the OODA model](designs/ooda-model.md).
 - **Face:** the Major Arcana card the whole Mirror most resembles, drawn as a face. See [the face](designs/face.md).
 - **Mutate:** merge concepts that are one, or split one used in two senses. See [the engines](designs/engines.md#mutate-merging-and-splitting-concepts).
 - **Transmutate:** combine two Mirrors into one and trim it to what is strong; nothing is written until you approve.
@@ -126,6 +128,7 @@ Splitters: `paragraphs` (one text file, short paragraphs merged), `documents` (a
 | `androidmirror/mirror/mutate.py`, `mutate_api.py` | The mutate engine and its routes |
 | `androidmirror/mirror/question.py`, `answers.py` | The Question engine; approved answers and how they amend a Mirror |
 | `androidmirror/mirror/transmutate.py` | Transmutate: align, combine and fitness-trim two Mirrors |
+| `androidmirror/mirror/ooda.py` | The OODA model: tiers built from the two graphs |
 | `androidmirror/mirror/interview.py`, `data/interview_ooda.json` | The OODA interview: questions, saved answers, the corpus they become |
 | `androidmirror/server.py`, `web/index.html` | The app |
 | `androidmirror/p1_*`, `refactor.py`, `breaker.py`, `chainer.py`, `evolver/` | Prototype 1, paused |
