@@ -8,7 +8,7 @@ Every idea in the Mirror collects points toward each stage, and goes to the stag
 
 | Evidence | Stage | Points |
 |---|---|---|
-| Share of its mentions in passages grouped by stage (the [OODA interview](../README.md#the-ooda-interview) groups each answer by its question's stage) | that stage | 3 × share |
+| Share of its mentions in passages grouped by stage (the [OODA interview](../README.md#the-interview) groups each answer by its question's stage) | that stage | 3 × share |
 | Kind: agent, event, object, place | Observe | 1 |
 | Kind: state | Observe and Orient | 0.5 each |
 | Kind: belief, disposition, emotion, faculty | Orient | 1 |

@@ -1,7 +1,12 @@
-"""The OODA interview: a corpus written by the person who answers it.
+"""The interview: a corpus written by the person who answers it.
 
-The questions (data/interview_ooda.json) ask how one person observes, orients,
-decides and acts, in John Boyd's sense of the OODA loop, grouped by stage. The
+Two questionnaires, each grouped into stages: the OODA interview
+(data/interview_ooda.json) asks how one person observes, orients, decides and
+acts, in John Boyd's sense of the OODA loop; Get to Know You!
+(data/interview_know.json) asks what they hold sacred, the images they carry of
+themselves, their feelings, what they think doesn't matter, and what they count
+as good and bad. One interview of a person holds answers to both, and both feed
+the same corpus, so they land in the same knowledge graph and causal model. The
 answers are saved after each one under data/interviews/<id>.json, so an interview
 can be left and resumed, and any answer changed later.
 
@@ -26,20 +31,31 @@ from typing import Any
 
 from pydantic import BaseModel
 
-BANK = Path(__file__).resolve().parent.parent.parent / "data" / "interview_ooda.json"
+DATA = Path(__file__).resolve().parent.parent.parent / "data"
+BANKS = {"ooda": DATA / "interview_ooda.json", "know": DATA / "interview_know.json"}  # in corpus order
 PREFIX = "interview-"
 
 
-def bank() -> dict[str, Any]:
-    return json.loads(BANK.read_text(encoding="utf-8"))
+def bank(bid: str = "ooda") -> dict[str, Any]:
+    if bid not in BANKS:
+        raise KeyError(bid)
+    return {"id": bid, **json.loads(BANKS[bid].read_text(encoding="utf-8"))}
 
 
-def questions() -> list[dict[str, Any]]:
-    """Every question in order, with its stage and its number within the stage."""
+def stages() -> list[dict[str, Any]]:
+    """Every stage of every questionnaire, in corpus order, each with its questionnaire's id."""
+    return [{**s, "bank": bid} for bid in BANKS for s in bank(bid)["stages"]]
+
+
+def questions(bid: str | None = None) -> list[dict[str, Any]]:
+    """The questions of one questionnaire (or all), in order, with stage and number within the stage."""
     out = []
-    for s in bank()["stages"]:
+    for s in stages():
+        if bid and s["bank"] != bid:
+            continue
         for i, q in enumerate(s["questions"]):
-            out.append({**q, "stage": s["id"], "stage_label": s["label"], "n": i + 1, "of": len(s["questions"])})
+            out.append({**q, "bank": s["bank"], "stage": s["id"], "stage_label": s["label"],
+                        "n": i + 1, "of": len(s["questions"])})
     return out
 
 
@@ -110,9 +126,9 @@ def answer(data_dir: Path, iid: str, qid: str, text: str = "", skip: bool = Fals
     return iv
 
 
-def next_question(iv: dict[str, Any]) -> str | None:
+def next_question(iv: dict[str, Any], bid: str | None = None) -> str | None:
     """The first question neither answered nor skipped; then the first skipped one; None when all are answered."""
-    qs = [q["id"] for q in questions()]
+    qs = [q["id"] for q in questions(bid)]
     fresh = [q for q in qs if q not in iv["answers"] and q not in iv["skipped"]]
     later = [q for q in qs if q not in iv["answers"]]
     return (fresh or later or [None])[0]
@@ -120,13 +136,19 @@ def next_question(iv: dict[str, Any]) -> str | None:
 
 def progress(iv: dict[str, Any]) -> dict[str, Any]:
     qs = questions()
-    stages: dict[str, dict[str, Any]] = {}
+    by_stage: dict[str, dict[str, Any]] = {}
+    by_bank: dict[str, dict[str, Any]] = {}
     for q in qs:
-        s = stages.setdefault(q["stage"], {"id": q["stage"], "label": q["stage_label"], "answered": 0, "total": 0})
-        s["total"] += 1
-        s["answered"] += q["id"] in iv["answers"]
+        s = by_stage.setdefault(q["stage"], {"id": q["stage"], "label": q["stage_label"], "bank": q["bank"],
+                                              "answered": 0, "skipped": 0, "total": 0})
+        b = by_bank.setdefault(q["bank"], {"id": q["bank"], "title": bank(q["bank"])["title"],
+                                           "answered": 0, "skipped": 0, "total": 0, "next": next_question(iv, q["bank"])})
+        for r in (s, b):
+            r["total"] += 1
+            r["answered"] += q["id"] in iv["answers"]
+            r["skipped"] += q["id"] in iv["skipped"]
     return {"answered": len(iv["answers"]), "skipped": len(iv["skipped"]), "total": len(qs),
-            "stages": list(stages.values()), "next": next_question(iv)}
+            "stages": list(by_stage.values()), "banks": list(by_bank.values()), "next": next_question(iv)}
 
 
 def view(data_dir: Path, iid: str) -> dict[str, Any]:
@@ -159,7 +181,7 @@ def write_corpus(data_dir: Path, iid: str) -> dict[str, Any]:
     folder.mkdir(parents=True, exist_ok=True)
     for old in folder.glob("*.txt"):
         old.unlink()
-    order = {s["id"]: i + 1 for i, s in enumerate(bank()["stages"])}
+    order = {s["id"]: i + 1 for i, s in enumerate(stages())}  # OODA keeps 1-4, so its cached passages stay valid
     n = 0
     for q in questions():
         a = iv["answers"].get(q["id"])
@@ -170,7 +192,7 @@ def write_corpus(data_dir: Path, iid: str) -> dict[str, Any]:
         name = f"{order[q['stage']]}-{q['id']}-{h}.txt"
         (folder / name).write_text(f"# {q['stage_label']} {q['n']}\ngroup: {q['stage_label']}\n{body}\n", encoding="utf-8")
         n += 1
-    spec = {"id": cid, "title": f"OODA interview with {iv['subject']}", "subject": iv["subject"],
+    spec = {"id": cid, "title": f"Interview with {iv['subject']}", "subject": iv["subject"],
             "splitter": "documents", "dir": f"corpus/{cid}", "unit": "document"}
     _write(specs_dir(data_dir) / f"{cid}.json", spec)
     return {"spec": spec, "passages": n, "command": f"python -m androidmirror build --corpus {cid}"}
@@ -201,10 +223,9 @@ def routes(data_dir: Path) -> Any:
 
     @r.get("/api/interview")
     def index() -> dict:
-        b = bank()
-        return {"title": b["title"], "about": b["about"], "questions": questions(),
-                "stages": [{k: s[k] for k in ("id", "label", "about")} for s in b["stages"]],
-                "interviews": listing(data_dir)}
+        return {"banks": [{k: b[k] for k in ("id", "title", "about")} for b in map(bank, BANKS)],
+                "stages": [{k: s[k] for k in ("id", "label", "about", "bank")} for s in stages()],
+                "questions": questions(), "interviews": listing(data_dir)}
 
     @r.post("/api/interview")
     def post_start(s: StartIn) -> dict:
@@ -225,13 +246,16 @@ def routes(data_dir: Path) -> Any:
     return r
 
 
-def cli(data_dir: Path, subject: str, stage: str | None = None, inp: Any = input, out: Any = print) -> None:
-    """Ask in the terminal, saving after each answer. Enter on an empty line skips; q stops."""
+def cli(data_dir: Path, subject: str, stage: str | None = None, inp: Any = input, out: Any = print,
+        bid: str = "ooda") -> None:
+    """Ask one questionnaire in the terminal, saving after each answer. Enter on an empty line skips; q stops."""
     iv = start(data_dir, subject)
-    qs = [q for q in questions() if not stage or q["stage"] == stage]
+    qs = [q for q in questions(bid) if not stage or q["stage"] == stage]
+    if not qs:
+        raise ValueError(f"no stage {stage!r} in {bank(bid)['title']}")
     todo = [q for q in qs if q["id"] not in iv["answers"]]
-    p = progress(iv)
-    out(f"OODA interview with {iv['subject']}: {p['answered']} of {p['total']} answered. "
+    b = next(x for x in progress(iv)["banks"] if x["id"] == bid)
+    out(f"{bank(bid)['title']} with {iv['subject']}: {b['answered']} of {b['total']} answered. "
         "Enter on an empty line skips a question; q stops (everything so far is saved).\n")
     for q in todo:
         out(f"[{q['stage_label']} {q['n']}/{q['of']}] {q['text']}")
@@ -244,7 +268,8 @@ def cli(data_dir: Path, subject: str, stage: str | None = None, inp: Any = input
         iv = answer(data_dir, iv["id"], q["id"], text, skip=not text)
         out("")
     p = progress(load(data_dir, iv["id"]))
-    out(f"{p['answered']} of {p['total']} answered.")
+    b = next(x for x in p["banks"] if x["id"] == bid)
+    out(f"{b['answered']} of {b['total']} answered in {bank(bid)['title']}; {p['answered']} in all.")
     if p["answered"]:
         r = write_corpus(data_dir, iv["id"])
         out(f"Wrote {r['passages']} passage{'' if r['passages'] == 1 else 's'} as the corpus {r['spec']['id']}. Build it with:\n  {r['command']}")

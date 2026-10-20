@@ -1,0 +1,361 @@
+{
+ "title": "Get to Know You!",
+ "about": "Questions about what you hold sacred, the pictures you carry of yourself, your feelings and what stirs them, what you think doesn't matter, and what you count as good and bad. Each answer becomes one passage of the same corpus as the OODA interview.",
+ "stages": [
+  {
+   "id": "sacred",
+   "label": "The sacred",
+   "about": "What you hold beyond price, what you think the world is like, and what is and is not up to you.",
+   "questions": [
+    {
+     "id": "sacred-01",
+     "text": "What, if anything, do you hold sacred? What would it mean to betray it?"
+    },
+    {
+     "id": "sacred-02",
+     "text": "Is there an order or intelligence to the world, or is it indifferent? How does your answer change how you live?"
+    },
+    {
+     "id": "sacred-03",
+     "text": "What is up to you, and what is not up to you at all?"
+    },
+    {
+     "id": "sacred-04",
+     "text": "Which things that happen to you could you not have changed, whatever you did?"
+    },
+    {
+     "id": "sacred-05",
+     "text": "What do you think happens at death, and how does that shape what you do now?"
+    },
+    {
+     "id": "sacred-06",
+     "text": "Have you ever felt grace, luck or providence act on you? What do you think brought it about?"
+    },
+    {
+     "id": "sacred-07",
+     "text": "What does your conscience tell you, and where do you think its voice comes from?"
+    },
+    {
+     "id": "sacred-08",
+     "text": "What do you have faith in that you cannot prove? What would happen to you without it?"
+    },
+    {
+     "id": "sacred-09",
+     "text": "Where do you feel closest to something larger than yourself, and what brings that feeling on?"
+    },
+    {
+     "id": "sacred-10",
+     "text": "What practices, rituals or places keep you in touch with what matters most? What do they do for you?"
+    },
+    {
+     "id": "sacred-11",
+     "text": "What do you think a human being is for?"
+    },
+    {
+     "id": "sacred-12",
+     "text": "What gives your life meaning, and what drains the meaning out of it?"
+    },
+    {
+     "id": "sacred-13",
+     "text": "How do you make sense of suffering, your own and other people's?"
+    },
+    {
+     "id": "sacred-14",
+     "text": "Do you believe in fate? Where does fate end and choice begin?"
+    },
+    {
+     "id": "sacred-15",
+     "text": "What would you die for, and why that?"
+    },
+    {
+     "id": "sacred-16",
+     "text": "What do you owe to people who came before you, and to those who come after?"
+    }
+   ]
+  },
+  {
+   "id": "image",
+   "label": "Metaphor and inner image",
+   "about": "The pictures you carry of yourself and your life, and what moves what inside them.",
+   "questions": [
+    {
+     "id": "image-01",
+     "text": "If your mind were a place, what kind of place would it be? Who or what lives there, and what changes the weather?"
+    },
+    {
+     "id": "image-02",
+     "text": "What animal are you most like? What makes it thrive, and what wounds it?"
+    },
+    {
+     "id": "image-03",
+     "text": "What element or landscape are you most like (fire, water, a forest, a desert, the sea)? What makes it calm, and what makes it storm?"
+    },
+    {
+     "id": "image-04",
+     "text": "If your life were a journey, where are you on the road? What got you here, and what blocks the way ahead?"
+    },
+    {
+     "id": "image-05",
+     "text": "If your life were a book, what is the title of the chapter you are in now? What would turn the page?"
+    },
+    {
+     "id": "image-06",
+     "text": "What object would you keep as a symbol of who you are? What would losing it mean?"
+    },
+    {
+     "id": "image-07",
+     "text": "Describe the voice in your head when things go wrong. What sets it off, and what quiets it?"
+    },
+    {
+     "id": "image-08",
+     "text": "If your fear had a shape, what would it be? What feeds it, and what makes it shrink?"
+    },
+    {
+     "id": "image-09",
+     "text": "If your heart were a house, which rooms are open to visitors and which are locked? What opens a locked door?"
+    },
+    {
+     "id": "image-10",
+     "text": "Picture yourself at your best as a season of the year. What brings that season, and what ends it?"
+    },
+    {
+     "id": "image-11",
+     "text": "What machine or tool are you most like? What makes it run well, and what makes it break down?"
+    },
+    {
+     "id": "image-12",
+     "text": "If the people closest to you were a garden, what grows well in it, and what does the gardening?"
+    },
+    {
+     "id": "image-13",
+     "text": "Describe a dream, asleep or awake, that has stayed with you. What do you think it was telling you?"
+    },
+    {
+     "id": "image-14",
+     "text": "What image comes to mind when you think of being free? What stands between you and that picture?"
+    },
+    {
+     "id": "image-15",
+     "text": "What image comes to mind when you think of being trapped? What put you there, and what would get you out?"
+    },
+    {
+     "id": "image-16",
+     "text": "If you could send a picture, not words, to your younger self, what would it be, and what would it change?"
+    }
+   ]
+  },
+  {
+   "id": "feeling",
+   "label": "Feelings and what stirs them",
+   "about": "What brings your feelings on, what they lead you to do, and what you do to change them.",
+   "questions": [
+    {
+     "id": "feeling-01",
+     "text": "What reliably makes you angry? What do you do next?"
+    },
+    {
+     "id": "feeling-02",
+     "text": "What brings you calm, and how long does it last?"
+    },
+    {
+     "id": "feeling-03",
+     "text": "When you feel shame, what usually came just before it?"
+    },
+    {
+     "id": "feeling-04",
+     "text": "What makes you anxious, and what does anxiety make you do?"
+    },
+    {
+     "id": "feeling-05",
+     "text": "What fills you with joy? Does it come from what you do, or from what happens to you?"
+    },
+    {
+     "id": "feeling-06",
+     "text": "What makes you feel lonely, and what eases it?"
+    },
+    {
+     "id": "feeling-07",
+     "text": "What makes you envious, and what does envy push you toward?"
+    },
+    {
+     "id": "feeling-08",
+     "text": "What moves you to tears?"
+    },
+    {
+     "id": "feeling-09",
+     "text": "Which feelings do you try to change, and what do you actually do to change them?"
+    },
+    {
+     "id": "feeling-10",
+     "text": "Which feelings do you let run their course, and why those?"
+    },
+    {
+     "id": "feeling-11",
+     "text": "Which feelings lead you to act well, and which lead you astray?"
+    },
+    {
+     "id": "feeling-12",
+     "text": "When one feeling turns into another (fear into anger, sadness into relief), what turns it?"
+    },
+    {
+     "id": "feeling-13",
+     "text": "How do your feelings change what you believe about a situation?"
+    },
+    {
+     "id": "feeling-14",
+     "text": "Whose feelings affect yours the most, and how?"
+    },
+    {
+     "id": "feeling-15",
+     "text": "What feelings did you grow up being told not to have? What happened to them?"
+    },
+    {
+     "id": "feeling-16",
+     "text": "If you could stop feeling one thing for good, what would it be, and what would you lose with it?"
+    }
+   ]
+  },
+  {
+   "id": "matter",
+   "label": "What doesn't matter",
+   "about": "What people think makes a difference that, in your view, does not, and where they get the cause wrong.",
+   "questions": [
+    {
+     "id": "matter-01",
+     "text": "What do most people think matters for happiness that you think doesn't?"
+    },
+    {
+     "id": "matter-02",
+     "text": "What do people usually blame for unhappiness, and where do you think they have the cause wrong?"
+    },
+    {
+     "id": "matter-03",
+     "text": "What used to seem important to you that you now think makes no difference to how your life goes?"
+    },
+    {
+     "id": "matter-04",
+     "text": "If money were taken out of your life, what would stay exactly the same?"
+    },
+    {
+     "id": "matter-05",
+     "text": "If nobody ever praised you again, what would stay exactly the same?"
+    },
+    {
+     "id": "matter-06",
+     "text": "What do people think makes a good person that you think has nothing to do with it?"
+    },
+    {
+     "id": "matter-07",
+     "text": "What do people credit for success that you think is not the real cause? What is the real cause?"
+    },
+    {
+     "id": "matter-08",
+     "text": "Which of your habits do you keep even though you doubt they change anything?"
+    },
+    {
+     "id": "matter-09",
+     "text": "What do people worry about that has no effect on what they are worried about?"
+    },
+    {
+     "id": "matter-10",
+     "text": "Two things people think go together, which you think have nothing to do with each other: what are they?"
+    },
+    {
+     "id": "matter-11",
+     "text": "When something good happens to you, what do people assume caused it, and what actually did?"
+    },
+    {
+     "id": "matter-12",
+     "text": "When something bad happens to you, what do people assume caused it, and what actually did?"
+    },
+    {
+     "id": "matter-13",
+     "text": "What advice do you hear often that you think misses the real cause of the problem?"
+    },
+    {
+     "id": "matter-14",
+     "text": "What looks like the cause of your mood on a bad day but isn't?"
+    },
+    {
+     "id": "matter-15",
+     "text": "What would you stop doing if you were sure it made no difference? Why haven't you?"
+    },
+    {
+     "id": "matter-16",
+     "text": "Where in your life is luck doing more than people think, and where less?"
+    }
+   ]
+  },
+  {
+   "id": "goodbad",
+   "label": "Good and bad",
+   "about": "What you count as good, bad or neither, where the line falls, and what turns one into the other.",
+   "questions": [
+    {
+     "id": "goodbad-01",
+     "text": "Name three things you think are truly good. What makes each one good?"
+    },
+    {
+     "id": "goodbad-02",
+     "text": "Name three things you think are truly bad. What makes each one bad?"
+    },
+    {
+     "id": "goodbad-03",
+     "text": "What do most people call good that you think is bad?"
+    },
+    {
+     "id": "goodbad-04",
+     "text": "What do most people call bad that you think is good?"
+    },
+    {
+     "id": "goodbad-05",
+     "text": "What do you think is neither good nor bad, though people get worked up about it?"
+    },
+    {
+     "id": "goodbad-06",
+     "text": "What is good in small amounts but bad in large ones? What tips it over?"
+    },
+    {
+     "id": "goodbad-07",
+     "text": "Can something bad lead to something good? Give an example and say how."
+    },
+    {
+     "id": "goodbad-08",
+     "text": "Can something good lead to something bad? Give an example and say how."
+    },
+    {
+     "id": "goodbad-09",
+     "text": "When you call an action wrong, is it because of what it causes, what it shows about the person, or something else?"
+    },
+    {
+     "id": "goodbad-10",
+     "text": "What good thing would you refuse if getting it meant doing something you think is wrong?"
+    },
+    {
+     "id": "goodbad-11",
+     "text": "Has something you once thought was bad come to look good, or the reverse? What changed?"
+    },
+    {
+     "id": "goodbad-12",
+     "text": "Is there anything that is good no matter what comes of it?"
+    },
+    {
+     "id": "goodbad-13",
+     "text": "Which of your own traits do you count as virtues, and which as faults?"
+    },
+    {
+     "id": "goodbad-14",
+     "text": "What makes a good person go bad, and what brings them back?"
+    },
+    {
+     "id": "goodbad-15",
+     "text": "Is pleasure good? Is pain bad? Where would you draw the line?"
+    },
+    {
+     "id": "goodbad-16",
+     "text": "How do you tell a good life from a merely pleasant one?"
+    }
+   ]
+  }
+ ]
+}
