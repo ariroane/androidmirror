@@ -69,6 +69,8 @@ free: causal, derange, benchmark (without --claude), serve, interview.""")
     q = sub.add_parser("ask", help="ask the Mirror a question")
     q.add_argument("question")
     q.add_argument("--corpus", default="meditations")
+    q.add_argument("--cited", action="store_true",
+                   help="answer from the items about the question, with citations, instead of as the subject")
 
     mu = sub.add_parser("mutate", help="merge or split concepts and re-evaluate both graphs; applies only what you approve",
                         formatter_class=argparse.RawDescriptionHelpFormatter, epilog="""examples:
@@ -199,11 +201,17 @@ free: causal, derange, benchmark (without --claude), serve, interview.""")
         m = Mirror.load(mirror_dir(args.data, CorpusSpec.load(args.corpus).id))
         if m is None:
             raise SystemExit("no Mirror built yet: python -m androidmirror build")
-        r = oracle.ask(m, args.question)
-        print(r["answer"] or "\n".join(r["facts"]))
-        for u in r["uses"]:
-            print(f"\nWay to use this: change {u['lever']} to move {u['outcome']}\n  {u['how']}\n  Assumes: {u['assumes']}"
-                  f"\n  Based on {' '.join(u['citations'])}")
+        if args.cited:
+            r = oracle.ask(m, args.question)
+            print(r["answer"] or "\n".join(r["facts"]))
+            for u in r["uses"]:
+                print(f"\nWay to use this: change {u['lever']} to move {u['outcome']}\n  {u['how']}\n  Assumes: {u['assumes']}"
+                      f"\n  Based on {' '.join(u['citations'])}")
+        else:
+            r = oracle.ask_as_subject(m, args.question)
+            print(r["answer"])
+            if any(r["dropped"].values()):
+                print(f"\n(Left out to fit one call: {r['left_out']})")
 
 
 def _mutate(args: argparse.Namespace) -> None:

@@ -114,6 +114,40 @@ def test_ask_answers_then_proposes_uses(tmp_path, monkeypatch):
     assert len(calls) == 2 and "Answer: Alpha lowers epsilon [C1]." in calls[1][1] and "[C1]" in calls[1][1]
 
 
+def test_ask_as_the_subject_reads_the_whole_mirror(tmp_path, monkeypatch):
+    from androidmirror import llm
+    from androidmirror.mirror import ask
+    from androidmirror.mirror.build import mirror_dir
+    from androidmirror.mirror.store import Mirror
+
+    spec, *_ = make(tmp_path)
+    m = Mirror.load(mirror_dir(tmp_path, spec.id))
+    text, dropped = ask.whole(m)
+    for head in ("# KNOWLEDGE GRAPH", "# CAUSAL MODEL", "# OODA MODEL", "## Follows from what is held", "## Two-way links"):
+        assert head in text
+    assert "gamma raises delta" in text and "[epsilon]" in text and not any(dropped.values())
+    assert not any(p["text"][:40] in text for p in m.passages.values())  # structures only, no corpus text
+    small, cut = ask.whole(m, limit=len(text) - 300)
+    assert len(small) <= len(text) - 300 and cut["inferred"] and not cut["stated"] and "# OODA MODEL" in small
+
+    calls = []
+
+    def fake(system, user, schema, **kw):
+        calls.append((system, user, kw))
+        return {"answer": "I hold that alpha lowers epsilon.", "ideas": ["alpha", "nope"]}
+
+    monkeypatch.setattr(llm, "available", lambda: True)
+    monkeypatch.setattr(llm, "_json_call", fake)
+    client = TestClient(create_app(tmp_path))
+    r = client.post("/api/ask", json={"question": "what does alpha do?", "mode": "subject"}).json()
+    assert r["answer"].startswith("I hold") and r["nodes"] == ["alpha"] and not r["left_out"]
+    (system, user, kw), = calls
+    assert user == "what does alpha do?" and text in system and "become the system" in system and kw["cache_system"]
+
+    monkeypatch.setenv("ANDROIDMIRROR_SUBJECT_CHARS", str(len(text) - 300))
+    assert "facts that follow by logic" in ask.ask_as_subject(m, "why?")["left_out"]
+
+
 def test_no_mirror_built_yet(tmp_path):
     client = TestClient(create_app(tmp_path))
     assert client.get("/api/status").json()["built"] == []

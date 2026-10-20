@@ -100,6 +100,8 @@ python -m androidmirror build --corpus fomc</pre>
     <section id="causal"></section>
     <section id="ask">
       <div class="row"><input id="question" style="flex:1" placeholder="Ask the Mirror a question"><button class="b primary" id="askbtn">Ask</button></div>
+      <div class="row small"><label><input type="radio" name="askmode" value="subject" checked> As <span class="who">the subject</span></label><label><input type="radio" name="askmode" value="cited"> About <span class="who">the subject</span>, with sources</label></div>
+      <p class="small muted" id="askhelp"></p>
       <div id="answer"></div>
     </section>
     <section id="derange"><p class="muted">Where what matters most to <span class="who">the subject</span> rests on the least evidence.</p></section>
@@ -540,8 +542,15 @@ async function loadDerange() {
 // ---------- ask ----------
 $('#askbtn').onclick = async () => {
   const out = $('#answer'); out.innerHTML = '<p class="muted">Thinking…</p>';
+  const mode = $('input[name=askmode]:checked').value;
   try {
-    const r = await api('/api/ask', {question: $('#question').value});
+    const r = await api('/api/ask', {question: $('#question').value, mode});
+    if (mode === 'subject') {
+      cy && (cy.nodes().removeClass('hl'), r.nodes.forEach(id => cy.getElementById(id).addClass('hl')));
+      out.innerHTML = `<p style="white-space:pre-wrap">${esc(r.answer)}</p>` +
+        (r.left_out ? `<p class="small muted">The whole Mirror was too big for one call, so this left out ${esc(r.left_out)}.</p>` : '');
+      return;
+    }
     cy && (cy.nodes().removeClass('hl'), r.nodes.forEach(id => cy.getElementById(id).addClass('hl')));
     out.innerHTML = (r.answer ? `<p style="white-space:pre-wrap">${esc(r.answer)}</p>` : '<p class="muted">Claude is off, so here is what the Mirror found.</p>') +
       ((r.uses || []).length ? `<h4>Ways to use this</h4><p class="small muted">Hypotheses built from how ${W()} sees cause and effect, not proof that the world works this way.</p>` +
@@ -551,6 +560,12 @@ $('#askbtn').onclick = async () => {
         r.common_causes.map(b => `<div class="card small">${esc(b.a_label)} ↔ ${esc(b.b_label)}${b.settled ? ' <span class="muted">(settled by your answer)</span>' : ''}<div class="muted">From: ${b.claims.map(esc).join('; ')}</div>${b.questions.length ? `<div class="row">${b.questions.map(q => `<button class="b" data-settle="${esc(q)}">Settle it</button>`).join('')}</div>` : ''}</div>`).join('') : ''}<div id="askp"></div>`;
   } catch (err) { fail(out, err); }
 };
+const askHelp = () => { $('#askhelp').innerHTML = $('input[name=askmode]:checked').value === 'subject'
+  ? 'Claude reads the whole knowledge graph, cause-and-effect model and OODA loop, becomes <span class="who"></span>, and answers in their place. It never sees the passages.'
+  : `Claude answers from the parts of the three models about your question, citing each one, then suggests ways to use the answer.`;
+  document.querySelectorAll('#askhelp .who').forEach(e => e.textContent = who); };
+document.querySelectorAll('input[name=askmode]').forEach(r => r.onchange = askHelp);
+askHelp();
 $('#question').onkeydown = e => { if (e.key === 'Enter') $('#askbtn').click(); };
 $('#answer').addEventListener('click', e => { const b = e.target.closest('[data-settle]'); if (b) { tab('questions'); loadQuestions(b.dataset.settle); } });
 

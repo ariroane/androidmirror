@@ -12,10 +12,18 @@ cites. The graph is open-world: what it lacks is "not found", never "the subject
 A second step then reads the answer against the same items and hypothesizes a couple of ways to use it: which
 idea to change (a lever), through which pathway of the subject's model, toward which outcome. These are
 hypotheses from the subject's own model, not evidence that the world works that way.
+
+"As the subject" mode (`ask_as_subject`) is the other way to ask: one call is given the whole of all three
+structures, not just the items about the question, and is told to become the system they describe (a person, a
+committee, a body of guidance) and answer the question as that system, without citing items. It still sees no
+corpus text. If the structures are too big for one call, the least important items go first (facts that only
+follow by logic, then views mentioned without endorsing, then the least supported stated facts) and the answer
+says how many were left out.
 """
 
 from __future__ import annotations
 
+import os
 import re
 from typing import Any
 
@@ -242,3 +250,133 @@ def uses(m: Mirror, items: list[str], question: str, answer: str) -> list[dict[s
     system = USES_SYSTEM.replace("{subject}", corpus["subject"]).replace("{title}", corpus["title"])
     user = "Items:\n" + "\n".join(items) + f"\n\nQuestion: {question}\n\nAnswer: {answer}"
     return llm._json_call(system, user, USES_SCHEMA, effort="low")["uses"][:3]
+
+
+# ---------- as the subject ----------
+
+SUBJECT_SCHEMA = {
+    "type": "object",
+    "properties": {"answer": {"type": "string"}, "ideas": {"type": "array", "items": {"type": "string"}}},
+    "required": ["answer", "ideas"],
+    "additionalProperties": False,
+}
+
+SUBJECT_SYSTEM = """Below is the whole of the Android Mirror of {subject}, built from the corpus "{title}": its knowledge graph (what {subject} holds to be true, what follows from that, what they mention without endorsing, and what they want more or less of), its causal model (how {subject} thinks things work: their own cause-and-effect claims and the links fitted from them), and its OODA model (where {subject}'s ideas sit in a loop of observe, orient, decide and act, and how the stages connect).
+
+Read all of it, then become the system it describes. {subject} may be a person, a group such as a committee, or a body of guidance; whatever it is, take on its beliefs, values, ways of reasoning about cause and effect, and the way it moves from noticing to acting, as one coherent whole. Then answer the question you are asked as {subject} would, in the first person, in plain modern English.
+
+- Let the structures shape the answer from the inside. Do not list, number or cite them, and do not describe "the Mirror" or "the graph": you are {subject}, reasoning in your own way.
+- Everything you believe comes from the structures below. Add nothing you know about {subject} from elsewhere, and do not quote or imitate the wording of the corpus, which you have not seen.
+- Reason the way the structures do: follow your own cause-and-effect links, respect what you hold apart (a two-way link means two things go together because of something you never name, so changing one does not move the other), weigh what you want more or less of, and act through your own loop.
+- Where the structures say nothing on a point, say you have not formed a view on it rather than inventing one. Where your own claims clash, let the clash show.
+
+After the answer, list the ids of the ideas you drew on most (the ids in square brackets below).
+
+{graphs}"""
+
+
+def _limit() -> int:
+    """Characters of structure to send in one call: about four characters a token, so the default is ~150k tokens."""
+    try:
+        return int(os.environ.get("ANDROIDMIRROR_SUBJECT_CHARS", "600000"))
+    except ValueError:
+        return 600000
+
+
+def whole(m: Mirror, limit: int | None = None) -> tuple[str, dict[str, int]]:
+    """The whole knowledge graph, causal model and OODA model as plain text, no corpus text. If it is longer than
+    `limit` characters, the least important items are left out; returns the text and how many of each kind went."""
+    from . import ooda
+
+    limit = _limit() if limit is None else limit
+    lab = m.label
+    ideas = []
+    for nid, n in sorted(m.nodes.items(), key=lambda kv: -kv[1].get("support", 0)):
+        if nid.endswith("~"):
+            continue
+        ev = m.evaluation(nid)
+        ideas.append(f"[{nid}] {lab(nid)} ({n.get('kind', '')}): {n.get('gloss', '')}" + (f"; evaluated {ev}" if ev else ""))
+    held, unheld = [], []
+    for f in sorted(m.facts, key=lambda f: -f["support"]):
+        line = f"{lab(f['s'])} {'does not ' if f['neg'] else ''}{f['r'].replace('_', ' ')} {lab(f['o'])} ({f['support']} passage(s))"
+        if f["held"]:
+            held.append(line)
+        else:
+            e = f["evidence"][0] if f["evidence"] else {}
+            unheld.append(f"{line}, {e.get('attribution', 'other')}, {e.get('modality', 'unknown')}")
+    support = {nid: n.get("support", 0) for nid, n in m.nodes.items()}
+    inferred = [f"{lab(s)} {r.replace('_', ' ')} {lab(o)} (by the rule '{p['rule']}')"
+                for (s, r, o), p in sorted(m.kb.closure.items(), key=lambda kv: -(support.get(kv[0][0], 0) + support.get(kv[0][2], 0)))
+                if p["rule"] != "stated"]
+    values = [f"wants {'more' if v['more'] >= v['less'] else 'less'} of {lab(v['concept'])} "
+              f"(more in {v['more']} passage(s), less in {v['less']})" for v in m.values]
+
+    claims, links, two_way = [], [], []
+    for c in sorted(m.causal.get("constraints", []), key=lambda c: -c["weight"]):
+        if not c["held"]:
+            continue
+        state = {"arrow": "in the model", "follows": "covered by a chain in the model", "holds": "in the model",
+                 "rejected": "clashes with stronger claims, read as a shared cause never named"
+                 if c.get("common_cause") else f"outweighed by stronger claims ({c.get('reason')})"}.get(c["status"], c["status"])
+        claims.append(f"{m.say(c)} ({c['weight']} passage(s), {state})")
+    for e in m.causal.get("edges", []):
+        note = f"; may work only by way of {' -> '.join(lab(n) for n in e['open']['through'])}" if e["open"] else ""
+        links.append(f"{lab(e['src'])} {'raises' if e['sign'] > 0 else 'lowers'} {lab(e['dst'])}{note}")
+    for b in m.causal.get("common_causes", []):
+        if b["via"]:
+            two_way.append(f"{lab(b['a'])} and {lab(b['b'])} go together because {lab(b['via'])} drives both")
+        else:
+            two_way.append(f"{lab(b['a'])} <-> {lab(b['b'])}: they go together, but neither drives the other")
+
+    md = ooda.model(m)
+    stages = []
+    for t in md["tiers"]:
+        names = ", ".join(c["label"] + (" (barely)" if c["weak"] else "") for c in t["concepts"]) or "nothing yet"
+        stages.append(f"{t['label']} ({t['about']}): {names}")
+    stage_links = [f"{l['text']}: {ooda.LABEL[l['from']]} -> {ooda.LABEL[l['to']]}, {l['kind']} ({l['weight']} passage(s))"
+                   for l in md["links"] if l["via"] != "fact"]
+
+    trimmable = {"inferred": inferred, "unendorsed": unheld, "stated": held}
+
+    def render() -> str:
+        part = lambda title, xs: f"## {title}\n" + ("\n".join(xs) if xs else "(none)")  # noqa: E731
+        return "\n\n".join([
+            "# KNOWLEDGE GRAPH", part("Ideas", ideas), part("Held as true", held),
+            part("Follows from what is held", inferred), part("Mentioned without endorsing", unheld),
+            part("Values", values),
+            "# CAUSAL MODEL", part("Own cause-and-effect claims", claims), part("Links in the model", links),
+            part("Two-way links (a cause never named)", two_way),
+            "# OODA MODEL", part("Stages", stages), part("Links between stages", stage_links),
+            part("What the loop shows", md["findings"])])
+
+    text = render()
+    dropped = {k: 0 for k in trimmable}
+    for k, xs in trimmable.items():  # least important first; each list is sorted most important first
+        while len(text) > limit and xs:
+            over = len(text) - limit
+            n = 0
+            while xs and over > 0:
+                over -= len(xs.pop()) + 1
+                n += 1
+            dropped[k] += n
+            text = render()
+    return text, dropped
+
+
+def dropped_words(dropped: dict[str, int]) -> str:
+    words = {"inferred": "facts that follow by logic", "unendorsed": "views mentioned without endorsing",
+             "stated": "least supported facts held as true"}
+    return ", ".join(f"{n} {words[k]}" for k, n in dropped.items() if n)
+
+
+def ask_as_subject(m: Mirror, question: str) -> dict[str, Any]:
+    """One call: become the system the three structures describe, then answer the question as it."""
+    graphs, dropped = whole(m)
+    out: dict[str, Any] = {"question": question, "mode": "subject", "answer": None, "nodes": [], "dropped": dropped,
+                           "left_out": dropped_words(dropped), "size": len(graphs)}
+    corpus = m.meta["corpus"]
+    system = (SUBJECT_SYSTEM.replace("{subject}", corpus["subject"]).replace("{title}", corpus["title"])
+              .replace("{graphs}", graphs))
+    r = llm._json_call(system, question, SUBJECT_SCHEMA, effort="medium", cache_system=True)
+    out.update(answer=r["answer"], nodes=[n for n in r["ideas"] if n in m.nodes])
+    return out
