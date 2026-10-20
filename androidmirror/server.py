@@ -28,6 +28,7 @@ WEB = ROOT / "web"
 class Ask(BaseModel):
     question: str
     corpus: str | None = None
+    mode: str = "cited"  # "cited": answer from the items about the question; "subject": answer as the subject
 
 
 class Place(BaseModel):
@@ -167,6 +168,8 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
     @app.post("/api/ask")
     def ask(a: Ask) -> dict:
         try:
+            if a.mode == "subject":
+                return oracle.ask_as_subject(get(a.corpus), a.question)
             return oracle.ask(get(a.corpus), a.question)
         except llm.LLMUnavailable as e:
             raise HTTPException(400, str(e)) from None
