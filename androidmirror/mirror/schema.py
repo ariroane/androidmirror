@@ -57,7 +57,7 @@ RELATIONS: dict[str, dict] = {
     "exemplifies": {"gloss": "(an agent) displays or embodies", "domain": {"agent"}, "family": "EMBODY"},
     "practices": {"gloss": "(an agent) carries out", "domain": {"agent"}, "family": "EMBODY"},
     "learned_from": {"gloss": "(an agent) learned something from (an agent); qualifier: what",
-                     "domain": {"agent"}, "range": {"agent"}, "family": "LINEAGE"},
+                     "domain": {"agent"}, "family": "LINEAGE"},
     "values": {"gloss": "(an agent) holds dear, aims at", "domain": {"agent"}, "family": "COMMIT",
                "down_object": True},
     "rejects": {"gloss": "(an agent) repudiates, avoids", "domain": {"agent"}, "family": "OPPOSE",

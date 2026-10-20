@@ -95,7 +95,7 @@ python -m androidmirror build --corpus fomc</pre>
       <button data-tab="face">Face</button>
       </div>
     </nav>
-    <section id="node" class="on"><p class="muted">Click a dot on the graph to see what that idea is, what follows from what the text says about it, and the passages it comes from.</p></section>
+    <section id="node" class="on"><p class="muted">Click a node on the graph to see more about the concept, semantic and causal relationships it has with other concepts, and the passages it comes from.</p></section>
     <section id="knowledge"></section>
     <section id="causal"></section>
     <section id="ask">
@@ -193,9 +193,9 @@ function ruleText(rule) {  // the name of the inference rule behind a derived fa
 }
 const KIND_NOUN = {agent:'a person or group', place:'a place', event:'an event', object:'a physical thing', disposition:'a character trait',
   emotion:'a feeling', practice:'a practice', belief:'a belief', state:'a state of being', faculty:'a faculty of mind', concept:'an idea', class:'a category'};
-const VIOLATION = {domain_range:'Doesn’t make sense as stated', disjoint_evaluations:'Called more than one of good, bad and indifferent',
-  values_and_rejects:'Both valued and rejected', denied_but_follows:'Denied, yet it follows from other statements',
-  taxonomy_cycle:'Each is called a kind of the other', self_opposition:'Said to oppose itself'};
+const VIOLATION = {domain_range:'Category violation', disjoint_evaluations:'Multiple valence violation (good/bad/indifferent)',
+  values_and_rejects:'Conflicting valence violation (valued and rejected)', denied_but_follows:'Invalidated denial violation',
+  taxonomy_cycle:'Circular reference violation', self_opposition:'Self-opposing violation'};
 const violationTitle = t => esc(VIOLATION[t] || String(t).replace(/_/g, ' '));
 function violationWhy(v) {  // a plain sentence for one inconsistency, built from its parts
   const [s, r, o] = String(v.fact || '').split('|');
@@ -372,12 +372,12 @@ async function loadKnowledge() {
     const opts = cs.map(c => `<option value="${esc(c.id)}">${esc(c.label)}</option>`).join('');
     const rels = ['is_a', 'part_of', 'same_as', 'opposes', 'requires', 'accords_with', 'expresses', 'exemplifies', 'practices', 'learned_from', 'values', 'rejects', 'related_to'];
     const nn = (k, one, many) => `<b>${k}</b> ${k === 1 ? one : many}`;
-    el.innerHTML = `<p>${nn(k.stats.held, 'fact', 'facts')} ${W()} states as true. ${nn(k.stats.inferred, 'more follows', 'more follow')} from those by simple logic (if justice is a kind of virtue, and virtue is good, then justice is good). ${nn(k.stats.reported_not_held, 'view', 'views')} ${W()} mentions without endorsing: quoting someone else, asking, or supposing. ${nn(k.stats.violations, 'thing that doesn’t', 'things that don’t')} fit together.</p>
-      <h4>Does it follow?</h4>
-      <p class="small muted">Pick a statement to see whether the text says it, or whether it follows from what the text says.</p>
+    el.innerHTML = `<p>${nn(k.stats.held, 'fact', 'facts')} ${W()} directly states. ${nn(k.stats.inferred, 'directly follows', 'directly follow')} from stated facts (if X is Y, and Y is Z, then X is Z). ${nn(k.stats.reported_not_held, 'reference', 'references')} ${W()} to unespoused facts (quotes, suppositions, etc.). ${nn(k.stats.violations, 'internal conflict', 'internal conflicts')} in graph.</p>
+      <h4>Test connections</h4>
+      <p class="small muted">Test connections between concept nodes.</p>
       <div class="row"><select id="hs">${opts}</select><select id="hr">${rels.map(r => `<option value="${r}">${esc(REL_WORD[r])}</option>`).join('')}</select><select id="ho">${opts}</select><button class="b primary" id="hbtn">Check</button></div>
       <div id="hout"></div>
-      <h4>Things that don’t fit together</h4>
+      <h4>Internal conflicts</h4>
       ${k.violations.length ? k.violations.map(v => `<div class="card"><b>${violationTitle(v.type)}</b> <div class="small">${violationWhy(v)}</div><ul class="tree">${(v.proofs || []).map(proofTree).join('')}</ul></div>`).join('') : '<p class="muted">None found.</p>'}
       <h4>How the Mirror reasons</h4>
       <ul class="small muted">
