@@ -55,7 +55,7 @@
 <header>
   <h1>Android Mirror</h1>
   <select id="corpus" title="Which Mirror"></select>
-  <a href="/interview" class="b">OODA interview</a>
+  <a href="/interview" class="b">Interview</a>
   <span class="stat" id="stat">loading…</span>
 </header>
 <main>
@@ -72,7 +72,7 @@
       <p>Build one from a whole text (a corpus). Claude reads every passage once, so this takes a while and uses your API key:</p>
       <pre class="passage">python -m androidmirror build --corpus meditations
 python -m androidmirror build --corpus fomc</pre>
-      <p>Or make a corpus of your own words: answer the <a href="/interview">OODA interview</a>.</p>
+      <p>Or make a corpus of your own words: answer the <a href="/interview">OODA interview or Get to Know You!</a>.</p>
       <p class="muted">Try <code>--limit 30</code> first for a cheap trial run. If a build stops partway, running it again picks up where it left off.</p>
     </div></div>
   </div>
@@ -915,7 +915,7 @@ async function loadOoda() {
     const rows = OODA_TIERS.map(a => `<tr><th>${OODA_LABEL[a]}</th>${OODA_TIERS.map(b => `<td class="${a === 'act' && b !== 'act' && r.flow[a][b] ? 'neg' : ''}">${r.flow[a][b] || '<span class="muted">·</span>'}</td>`).join('')}</tr>`).join('');
     const reason = c => c.reasons.length ? `<details><summary class="small muted">why ${OODA_LABEL[c.tier]}${c.by ? ` (placed by ${esc(c.by)})` : c.weak ? ' (barely decided)' : ''}</summary><ul class="small">${c.reasons.map(x => `<li>${OODA_LABEL[x.tier]} +${x.points}: ${esc(x.reason)}</li>`).join('')}</ul></details>` : `<div class="small muted">placed by ${esc(c.by)}</div>`;
     const move = c => `<select class="small" data-oplace="${esc(c.id)}"><option value="">${c.auto ? 'automatic (' + OODA_LABEL[c.auto] + ')' : 'automatic'}</option>${OODA_TIERS.map(t => `<option value="${t}" ${c.by && c.tier === t ? 'selected' : ''}>${OODA_LABEL[t]}</option>`).join('')}</select>`;
-    el.innerHTML = `<p class="muted">${WW()}'s ideas in the four stages of the OODA loop (observe, orient, decide, act), placed from the knowledge graph and the causal model${r.staged ? ' and from which stage of the interview each idea was talked about in' : ''}. The links are ${W()}'s own cause-and-effect claims. This only reads the two graphs: moving an idea to another stage changes nothing in them.</p>
+    el.innerHTML = `<p class="muted">${WW()}'s ideas in the four stages of the OODA loop (observe, orient, decide, act), placed from the knowledge graph and the causal model${r.staged ? ' and from which stage of the OODA interview each idea was talked about in' : ''}. The links are ${W()}'s own cause-and-effect claims. This only reads the two graphs: moving an idea to another stage changes nothing in them.</p>
       ${r.findings.length ? `<h4>What the loop shows</h4><ul>${r.findings.map(f => `<li>${esc(f)}</li>`).join('')}</ul>` : ''}
       <h4>Cause-and-effect between stages</h4><p class="small muted">Passages behind the links from the stage on the left to the stage on top.</p>
       <table><tr><th>from \\ to</th>${OODA_TIERS.map(t => `<th>${OODA_LABEL[t]}</th>`).join('')}</tr>${rows}</table>

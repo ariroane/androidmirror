@@ -187,7 +187,7 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
 
     mutate_api.register(app, lambda c: mirror_dir(data_dir, get(c).meta["corpus"]["id"]))
     app.include_router(question.routes(get))  # the Question engine: questions, answers, proposals to approve
-    app.include_router(interview.routes(data_dir))  # the OODA interview: answers saved as they come, then a corpus
+    app.include_router(interview.routes(data_dir))  # the interview questionnaires: answers saved as they come, then a corpus
 
     @app.get("/api/transmutate")
     def transmutation(a: str, b: str) -> dict:

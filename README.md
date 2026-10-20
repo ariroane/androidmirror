@@ -11,7 +11,7 @@ Four corpora come with it:
 | `dgn` | The German Society of Neurology's English-language guidelines on Parkinson's disease, the CC BY ones on Europe PMC (set `conditions` in `data/corpora/dgn.json` to add others, or `[]` for all) | one guideline section |
 | `epictetus` | Epictetus, the *Discourses*, *Enchiridion* and *Fragments* (George Long translation, Standard Ebooks), a Stoic to set beside Marcus in Transmutate | about 360 passages of a chapter or part of one |
 
-Any other subject works too: write a spec in `data/corpora/` pointing at a text file, or at a folder of `.txt` documents. Or make a corpus of your own words with the [OODA interview](#the-ooda-interview).
+Any other subject works too: write a spec in `data/corpora/` pointing at a text file, or at a folder of `.txt` documents. Or make a corpus of your own words with the [interview](#the-interview) (the OODA loop, Get to Know You!, or both).
 
 ## Run it on your computer
 
@@ -69,13 +69,16 @@ How each part works, in `designs/`:
 - **Mutate:** merge concepts that are one, or split one used in two senses. See [the engines](designs/engines.md#mutate-merging-and-splitting-concepts).
 - **Transmutate:** compare two Mirrors (how they differ in knowledge, causes and OODA loop), then combine them into one and trim it to what is strong; nothing is written until you approve.
 
-## The OODA interview
+## The interview
 
-106 questions on how the person answering observes, orients, decides and acts (John Boyd's OODA loop), grouped by stage: Observe (26), Orient (28), Decide (26) and Act (26, ending on how results feed back into what is noticed next). The questions are in `data/interview_ooda.json`.
+Two questionnaires, which one person can answer in any order and in any mix:
 
-Answer them on the interview page, http://localhost:8000/interview, linked from the top of the app (or `python -m androidmirror interview "Your Name"` in a terminal, one line per answer). Each answer is saved as soon as it is given, under `data/interviews/`, so you can stop at any point and pick up where you left off; skipped questions come back at the end, and any answer can be changed later. No Claude calls.
+- **OODA loop interview**: 106 questions on how the person answering observes, orients, decides and acts (John Boyd's OODA loop), grouped by stage: Observe (26), Orient (28), Decide (26) and Act (26, ending on how results feed back into what is noticed next). In `data/interview_ooda.json`.
+- **Get to Know You!**: 80 questions on what the person holds dear and how they picture it, 16 per section: The sacred (including what is and isn't up to them), Metaphor and inner image (each image asks what moves what inside it, so it feeds the causal model too), Feelings and what stirs them, What doesn't matter (independence and "not this but that" claims, which corpora rarely state), and Good and bad (fills the good / bad / indifferent classes, so a contradiction shows up as a tension). In `data/interview_know.json`. The reasoning behind the sections is in [designs/interview-dimensions.md](designs/interview-dimensions.md).
 
-**Write the corpus** turns the answers so far into the corpus `interview-<name>`: one passage per answer, with the question kept as the interviewer's words so that only the answer is read as the subject's view, and the stage as its group. Then build it like any other corpus:
+Answer them on the interview page, http://localhost:8000/interview, linked from the top of the app (switch questionnaires with the buttons above the question), or `python -m androidmirror interview "Your Name" [--bank know]` in a terminal, one line per answer. Each answer is saved as soon as it is given, under `data/interviews/`, so you can stop at any point and pick up where you left off; skipped questions come back at the end, and any answer can be changed later. No Claude calls.
+
+**Write the corpus** turns the answers so far, from both questionnaires, into the one corpus `interview-<name>`, so they all land in the same knowledge graph and causal model: one passage per answer, with the question kept as the interviewer's words so that only the answer is read as the subject's view, and the stage as its group. Then build it like any other corpus:
 
 ```powershell
 python -m androidmirror build --corpus interview-your-name
@@ -99,7 +102,7 @@ Write the corpus again after more answers; a changed answer is read again and th
 | `question [--corpus NAME] [--limit 10] [--kind K] [--list]` | Answer the Question engine's questions; approve each proposal by typing your name. `--pending`, `--approve ID --by NAME`, `--reject ID`, `--revoke ID`. No Claude calls unless you answer in words. |
 | `transmutate compare A B [--claude] [--pair A=B] [--opposite A=B] [--drop C]` | How two Mirrors differ in knowledge, causes and OODA loop. Writes nothing. |
 | `transmutate propose A B [same options]` then `transmutate approve A B [--keep N]` | Combine two Mirrors and trim to what is strong; the proposal includes the comparison. Writes nothing until approve. |
-| `interview NAME [--stage observe\|orient\|decide\|act]` | Answer the OODA interview in the terminal, resuming where NAME left off, then write the corpus `interview-NAME`. No Claude calls. |
+| `interview NAME [--bank ooda\|know] [--stage STAGE]` | Answer the OODA interview (default) or Get to Know You! (`--bank know`) in the terminal, resuming where NAME left off, then write the corpus `interview-NAME` from all answers. No Claude calls. |
 | `p1 ...` | The paused Prototype 1 app (patch review, Refactorer, Breaker, Chainer, Evolver). `python -m androidmirror p1 --help` lists its commands. |
 
 ## Adding a corpus
@@ -130,7 +133,7 @@ Splitters: `paragraphs` (one text file, short paragraphs merged), `documents` (a
 | `androidmirror/mirror/question.py`, `answers.py` | The Question engine; approved answers and how they amend a Mirror |
 | `androidmirror/mirror/transmutate.py`, `compare.py` | Transmutate: align, compare, combine and fitness-trim two Mirrors |
 | `androidmirror/mirror/ooda.py` | The OODA model: tiers built from the two graphs |
-| `androidmirror/mirror/interview.py`, `data/interview_ooda.json` | The OODA interview: questions, saved answers, the corpus they become |
+| `androidmirror/mirror/interview.py`, `data/interview_ooda.json`, `data/interview_know.json` | The interview: both questionnaires, saved answers, the corpus they become |
 | `androidmirror/server.py`, `web/index.html` | The app |
 | `androidmirror/p1_*`, `refactor.py`, `breaker.py`, `chainer.py`, `evolver/` | Prototype 1, paused |
 

@@ -66,13 +66,46 @@ def test_routes(tmp_path, monkeypatch):
     assert "OODA interview" in c.get("/interview").text and 'href="/interview"' in c.get("/").text
     b = c.get("/api/interview").json()
     assert len(b["questions"]) >= 100 and b["interviews"] == []
+    assert [x["title"] for x in b["banks"]] == ["OODA loop interview", "Get to Know You!"]
     iv = c.post("/api/interview", json={"subject": "Ari"}).json()
     assert iv["progress"]["next"] == "observe-01" and not iv["corpus_written"]
     assert c.post("/api/interview/ari/corpus").status_code == 400  # nothing answered yet
     iv = c.post("/api/interview/ari/answer", json={"qid": "observe-01", "text": "Faces."}).json()
     assert iv["progress"]["answered"] == 1 and iv["progress"]["next"] == "observe-02"
+    iv = c.post("/api/interview/ari/answer", json={"qid": "goodbad-01", "text": "Honesty."}).json()
+    assert [b["answered"] for b in iv["progress"]["banks"]] == [1, 1]
     assert c.post("/api/interview/ari/answer", json={"qid": "nope", "text": "x"}).status_code == 404
     assert c.get("/api/interview/../etc").status_code == 404
-    assert c.post("/api/interview/ari/corpus").json()["passages"] == 1
+    assert c.post("/api/interview/ari/corpus").json()["passages"] == 2
     assert c.get("/api/interview/ari").json()["corpus_written"]
-    assert c.get("/api/interview").json()["interviews"][0]["answered"] == 1
+    assert c.get("/api/interview").json()["interviews"][0]["answered"] == 2
+
+
+def test_get_to_know_you_is_a_second_questionnaire_in_the_same_corpus(tmp_path):
+    know = I.questions("know")
+    assert I.bank("know")["title"] == "Get to Know You!"
+    assert [s["id"] for s in I.bank("know")["stages"]] == ["sacred", "image", "feeling", "matter", "goodbad"]
+    assert all(sum(q["stage"] == s for q in know) >= 15 for s in ("sacred", "image", "feeling", "matter", "goodbad"))
+    every = I.questions()
+    assert len({q["id"] for q in every}) == len(every) and len({q["text"] for q in every}) == len(every)
+    # one interview holds both; each questionnaire keeps its own place
+    I.start(tmp_path, "Tester")
+    iv = I.answer(tmp_path, "tester", "observe-01", "Exits.")
+    iv = I.answer(tmp_path, "tester", "sacred-01", "Keeping my word.")
+    banks = {b["id"]: b for b in I.progress(iv)["banks"]}
+    assert banks["ooda"]["answered"] == 1 and banks["ooda"]["next"] == "observe-02"
+    assert banks["know"]["answered"] == 1 and banks["know"]["next"] == "sacred-02"
+    # both land in the one corpus; OODA passages keep their file names, Get to Know You! follows them
+    r = I.write_corpus(tmp_path, "tester")
+    assert r["passages"] == 2 and r["spec"]["id"] == "interview-tester"
+    names = sorted(f.name for f in (tmp_path / "corpus" / "interview-tester").glob("*.txt"))
+    assert names[0].startswith("1-observe-01-") and names[1].startswith("5-sacred-01-")
+    assert "group: The sacred" in (tmp_path / "corpus" / "interview-tester" / names[1]).read_text()
+
+
+def test_cli_asks_one_questionnaire(tmp_path):
+    said = []
+    answers = iter(["Keeping my word.", "q"])
+    I.cli(tmp_path, "Tester", stage="sacred", inp=lambda _: next(answers), out=said.append, bid="know")
+    assert said[0].startswith("Get to Know You! with Tester: 0 of 80")
+    assert I.load(tmp_path, "tester")["answers"].keys() == {"sacred-01"}
