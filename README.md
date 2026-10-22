@@ -50,6 +50,7 @@ How each part works, in `designs/`:
 
 - [The descriptive ontology](designs/descriptive-ontology.md): kinds, relations, rules and checks that make the knowledge graph something to reason over.
 - [The causal model](designs/causal-model.md): the five kinds of causal judgment, how the graph is fitted to them, the held-out check, and the benchmark.
+- [Checking the knowledge graph](designs/knowledge-verification-validation.md): verification and validation schemes, and the standard to check against.
 - [The engines](designs/engines.md): Question, Mutate and Derange.
 - [The OODA model](designs/ooda-model.md): placing the Mirror's ideas in Observe, Orient, Decide and Act, and linking the stages.
 - [The face](designs/face.md): how the Face tab picks a Major Arcana card for the whole Mirror.
