@@ -54,6 +54,7 @@ How each part works, in `designs/`:
 - [The OODA model](designs/ooda-model.md): placing the Mirror's ideas in Observe, Orient, Decide and Act, and linking the stages.
 - [The face](designs/face.md): how the Face tab picks a Major Arcana card for the whole Mirror.
 - [Silence as missing data](designs/silence-as-missing-data.md): a brainstorm for the hidden-cause view.
+- [Peer-to-peer Mirrors](designs/peer-to-peer-mirrors.md): a brainstorm for Mirrors that talk to each other in place of parts of the ordinary internet.
 - [Open problems](designs/open-problems.md): what is still unsolved.
 
 ## The web app
