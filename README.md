@@ -54,6 +54,7 @@ How each part works, in `designs/`:
 - [The OODA model](designs/ooda-model.md): placing the Mirror's ideas in Observe, Orient, Decide and Act, and linking the stages.
 - [The face](designs/face.md): how the Face tab picks a Major Arcana card for the whole Mirror.
 - [Silence as missing data](designs/silence-as-missing-data.md): a brainstorm for the hidden-cause view.
+- [Checking the causal model](designs/causal-verification-validation.md): verification and validation of the causal layer once it is a MAG and PAG, and the standard to check against.
 - [Open problems](designs/open-problems.md): what is still unsolved.
 
 ## The web app
