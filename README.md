@@ -53,6 +53,7 @@ How each part works, in `designs/`:
 - [The engines](designs/engines.md): Question, Mutate and Derange.
 - [The OODA model](designs/ooda-model.md): placing the Mirror's ideas in Observe, Orient, Decide and Act, and linking the stages.
 - [The face](designs/face.md): how the Face tab picks a Major Arcana card for the whole Mirror.
+- [Merging Mirrors through a formal ontology](designs/ontology-aligned-merging.md): a survey of open ontologies to import and a brainstorm on aligning to one instead of merging shared nodes.
 - [Silence as missing data](designs/silence-as-missing-data.md): a brainstorm for the hidden-cause view.
 - [Open problems](designs/open-problems.md): what is still unsolved.
 
