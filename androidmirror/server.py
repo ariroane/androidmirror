@@ -6,11 +6,13 @@ Every route takes an optional `corpus` (default: the first one built).
 
 from __future__ import annotations
 
+import base64
 import os
+import secrets
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -49,9 +51,23 @@ class Transmute(BaseModel):
     approver: str = ""  # approve: who approved it
 
 
-def create_app(data_dir: Path | None = None) -> FastAPI:
+def create_app(data_dir: Path | None = None, password: str | None = None) -> FastAPI:
+    """`password`: when set, every request needs it (HTTP Basic auth, any user name)."""
     data_dir = data_dir or Path(os.environ.get("ANDROIDMIRROR_DATA", ROOT / "data"))
     app = FastAPI(title="Android Mirror")
+
+    if password:
+        @app.middleware("http")
+        async def require_password(request: Request, call_next):
+            scheme, _, cred = request.headers.get("authorization", "").partition(" ")
+            try:
+                given = base64.b64decode(cred).decode().partition(":")[2] if scheme.lower() == "basic" else ""
+            except ValueError:
+                given = ""
+            if not secrets.compare_digest(given.encode(), password.encode()):
+                return Response("password needed", 401, {"WWW-Authenticate": 'Basic realm="Android Mirror"'})
+            return await call_next(request)
+
     cache: dict[str, tuple[float, Mirror]] = {}
 
     def built() -> list[str]:

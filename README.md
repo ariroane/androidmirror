@@ -35,6 +35,16 @@ python -m androidmirror serve
 
 Open http://localhost:8000. Building makes two Claude calls per passage plus a few to consolidate the vocabulary, cached under `data/mirror/<corpus>/`; a build that stops resumes where it left off. Extending `--limit` reads only the new passages, unless the vocabulary of concepts changes, in which case the judgments pass reads every passage again against the new vocabulary. `--model` picks a cheaper model for the bulk reading. `python -m androidmirror benchmark` is free and runs offline.
 
+### On your phone
+
+The app runs on your computer (where the key is) and the phone opens it in its browser; the key never reaches the phone. Opening it to other devices needs a password: put `ANDROIDMIRROR_PASSWORD=` and a long password in `.env` (any user name works at the prompt), then
+
+```
+python -m androidmirror serve --host 0.0.0.0
+```
+
+It prints the address to open from the phone, such as `http://192.168.1.20:8000`. That works on the same Wi-Fi; the first time, allow Python through the computer's firewall on private networks. To use it away from home, install [Tailscale](https://tailscale.com) on the computer and the phone, sign in to the same account on both, and open `http://<computer's Tailscale name or 100.x address>:8000`: the traffic is encrypted and nothing is exposed to the internet. Don't forward the port on your router; plain HTTP sends the password unencrypted, and anyone who gets in can spend your API credit through Ask and the builds.
+
 ## How a Mirror is built
 
 1. **Passages.** The corpus is split into units, dependent on the corpus.
@@ -95,7 +105,7 @@ Write the corpus again after more answers; a changed answer is read again and th
 | `build --corpus NAME [--limit N] [--workers 6] [--model ID]` | Code, consolidate, read judgments, reason and fit. Needs the key. |
 | `causal --corpus NAME [--min-weight 1] [--folds 5]` | Re-fit only the causal model. No Claude calls. |
 | `benchmark [--n 300] [--seeds 5] [--claude]` | The planted-subject benchmark. Offline and free unless `--claude`. |
-| `serve [--port 8000]` | The web app. |
+| `serve [--port 8000] [--host 0.0.0.0]` | The web app. `--host 0.0.0.0` opens it to your phone and needs `ANDROIDMIRROR_PASSWORD` in `.env`. |
 | `derange --corpus NAME [--top 10] [--knockouts 30]` | The weakest basis under what matters most. No Claude calls. |
 | `ask "question" [--corpus NAME] [--cited]` | Ask from the command line: as the subject, or with `--cited` the Oracle's cited answer and ways to use it. |
 | `mutate propose\|merge\|split\|show\|approve\|reject\|undo` | Merge or split concepts; previews, applied only on approval. Offline except `split --claude`. |
