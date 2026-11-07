@@ -48,7 +48,17 @@
   ul.tree { padding-left:16px; margin:4px 0; } ul.tree li { margin:2px 0; }
   details > summary { cursor:pointer; }
   .bar { display:inline-block; height:8px; background:var(--accent); border-radius:2px; vertical-align:middle; }
-  @media (max-width: 760px) { main { flex-direction:column; } aside { width:auto; max-width:none; height:58vh; border-left:0; border-top:1px solid var(--line); } }
+  @media (max-width: 760px) {
+    /* phones: the page scrolls; the graph keeps most of the screen and the panel sits below it at its natural height */
+    body { height:auto; min-height:100vh; }
+    main { flex-direction:column; }
+    #graphwrap { flex:none; height:72vh; height:72svh; }
+    #legend { right:10px; font-size:11px; }
+    aside { width:auto; max-width:none; border-left:0; border-top:1px solid var(--line); }
+    nav { position:sticky; top:0; z-index:3; background:var(--panel); }
+    section { overflow:visible; padding-bottom:40px; }
+    input, select, textarea { font-size:16px; } /* below 16px, iPhone Safari zooms in on focus */
+  }
 </style>
 </head>
 <body>
@@ -265,7 +275,7 @@ async function drawGraph(keepPositions) {
       {selector:'edge[via = "loop"]', style:{'line-style':'dashed'}},
       {selector:'edge[via = "fact"]', style:{'line-style':'dotted','target-arrow-shape':'vee','opacity':0.7}},
     ]});
-    cy.on('tap', 'node', e => showNode(e.target.id()));
+    cy.on('tap', 'node', e => { showNode(e.target.id()); if (matchMedia('(max-width: 760px)').matches) document.querySelector('aside').scrollIntoView({behavior:'smooth'}); });
     cy.on('tap', 'edge', e => { if (layer === 'ooda' && e.target.data('via') === 'causal') { tab('causal'); showEdge(e.target.data('source'), e.target.data('target')); return; }
       if (layer !== 'causal') return; tab('causal');
       if (e.target.data('status') === 'common_cause') showCommon(e.target.id()); else showEdge(e.target.data('source'), e.target.data('target')); });

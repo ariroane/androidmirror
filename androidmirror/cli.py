@@ -65,6 +65,8 @@ free: causal, derange, benchmark (without --claude), serve, interview.""")
 
     s = sub.add_parser("serve", help="run the web app")
     s.add_argument("--port", type=int, default=8000)
+    s.add_argument("--host", default="127.0.0.1",
+                   help="address to listen on; 0.0.0.0 opens it to other devices (needs ANDROIDMIRROR_PASSWORD in .env)")
 
     q = sub.add_parser("ask", help="ask the Mirror a question")
     q.add_argument("question")
@@ -165,8 +167,22 @@ free: causal, derange, benchmark (without --claude), serve, interview.""")
 
         from .server import create_app
 
+        import os
+        import socket
+
+        password = os.environ.get("ANDROIDMIRROR_PASSWORD", "").strip() or None
+        local = args.host in ("127.0.0.1", "localhost", "::1")
+        if not local and not password:
+            raise SystemExit("--host other than localhost lets other devices in: set ANDROIDMIRROR_PASSWORD in .env first")
         print(f"Android Mirror on http://localhost:{args.port}  (Claude: {'on' if llm.available() else 'off, no key'})")
-        uvicorn.run(create_app(args.data), host="127.0.0.1", port=args.port)
+        if not local:
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sk:
+                    sk.connect(("10.255.255.255", 1))
+                    print(f"  from other devices: http://{sk.getsockname()[0]}:{args.port}  (password from .env)")
+            except OSError:
+                pass
+        uvicorn.run(create_app(args.data, password=password if not local else None), host=args.host, port=args.port)
     elif args.cmd == "mutate":
         _mutate(args)
     elif args.cmd == "question":
