@@ -143,9 +143,11 @@ python -m androidmirror build --corpus fomc</pre>
       <div class="row"><input id="tpairs" placeholder="same idea in both: first_idea=second_idea, …" style="flex:1"></div>
       <div class="row"><input id="topp" placeholder="opposite ideas: first_idea=second_idea, …" style="flex:1"></div>
       <div class="row"><input id="tdrop" placeholder="keep apart (ideas from the second Mirror): second_idea, …" style="flex:1"></div>
+      <div class="row"><label class="small"><input type="checkbox" id="tanchors" checked> Use WordNet anchors when both Mirrors have approved ones</label></div>
       <div class="row"><label class="small"><input type="checkbox" id="tclaude"> Let Claude match ideas by meaning (one call, uses your API key)</label>
         <button class="b" id="tcompare">Compare</button><button class="b primary" id="tpropose">Propose</button></div>
       <div id="tout"></div>
+      <details id="tanch"><summary><b>Anchors</b> <span class="muted small">what each idea means, as a WordNet sense; used only once you approve</span></summary><div id="tanchout"></div></details>
       <div id="tdiff"></div>
       <div id="tprop"></div>
     </section>
@@ -235,7 +237,7 @@ async function drawGraph(keepPositions) {
   if (layer === 'ooda') OODA_TIERS.forEach(t => els.push({data:{id:'tier:' + t, label:OODA_LABEL[t].toUpperCase(), tier:t, size:1}, classes:'tierhead', selectable:false, grabbable:false}));
   g.edges.forEach(e => {
     if (layer === 'ooda') { els.push({data:{id:e.id, source:e.source, target:e.target, label:'', status:'ooda-' + e.kind, via:e.via, sign:e.sign, w:e.via === 'fact' ? 1 : 1 + Math.min(6, 1.5 * Math.log2(1 + e.weight))}}); return; }
-    if (layer === 'kg') { els.push({data:{id:e.id, source:e.source, target:e.target, label:relWord(e.rel, e.target), status:'kg', sign:0, w:1 + Math.min(4, Math.log2(1 + (e.support||1)))}}); return; }
+    if (layer === 'kg') { els.push({data:{id:e.id, source:e.source, target:e.target, label:e.scaffold ? 'is a kind of (WordNet)' : relWord(e.rel, e.target), status:e.scaffold ? 'scaffold' : 'kg', sign:0, w:e.scaffold ? 1 : 1 + Math.min(4, Math.log2(1 + (e.support||1)))}}); return; }
     els.push({data:{id:e.id, source:e.source, target:e.target, label:String(e.weight), status:e.status, sign:e.sign, w:e.status === 'common_cause' ? 2 : 1 + Math.min(6, 1.5 * Math.log2(1 + e.weight))}});
   });
   const evColor = {good:css('--pos'), bad:css('--neg'), indifferent:css('--mid'), conflicted:'#b05fd8', none:'#8a8a86'};
@@ -249,6 +251,7 @@ async function drawGraph(keepPositions) {
       {selector:'edge[sign = 1]', style:{'line-color':css('--pos'),'target-arrow-color':css('--pos')}},
       {selector:'edge[sign = -1]', style:{'line-color':css('--neg'),'target-arrow-color':css('--neg'),'target-arrow-shape':'tee'}},
       {selector:'edge[status = "open"]', style:{'line-style':'dashed'}},
+      {selector:'edge[status = "scaffold"]', style:{'line-style':'dashed','opacity':0.6,'target-arrow-shape':'vee'}},
       {selector:'edge[status = "common_cause"]', style:{'line-style':'dotted','line-color':'#b05fd8','target-arrow-color':'#b05fd8','source-arrow-color':'#b05fd8','target-arrow-shape':'triangle','source-arrow-shape':'triangle','label':''}},
       {selector:'.hl', style:{'border-width':4,'border-color':'#e0a800'}},
       {selector:'node[tier = "observe"]', style:{'background-color':OODA_COLOR.observe}},
@@ -793,7 +796,52 @@ const tpair = () => ({a: $('#ta').value, b: $('#tb').value});
 function tlist(title, xs, f, open) {
   return `<details ${open ? 'open' : ''}><summary><b>${esc(title)}</b> <span class="muted">(${xs.length})</span></summary>${xs.length ? `<ul>${items(xs, f)}</ul>` : '<p class="muted small">None.</p>'}</details>`;
 }
-const THOW = {'same label':'same name', alias:'alternate name', claude:'matched by Claude', you:'paired by you'};
+const THOW = {'same label':'same name', alias:'alternate name', claude:'matched by Claude', you:'paired by you', anchor:'same WordNet sense', 'anchor (antonym)':'opposite WordNet senses'};
+const APRED = {exactMatch:'is', closeMatch:'is close to', broadMatch:'is a kind of', narrowMatch:'has as a kind', relatedMatch:'is related to', noMatch:'has no WordNet sense'};
+function pivotView(p) {
+  const v = p.pivot;
+  if (!v) return '';
+  if (!v.used) return '<p class="small muted">Anchors not used: both Mirrors need approved anchors (see Anchors above).</p>';
+  return `${tlist('Merges blocked: same name, different sense', v.blocked, x => `<b>${esc(x.a_label)}</b> / <b>${esc(x.b_label)}</b> <span class="muted">${esc(THOW[x.how] || x.how)}: ${esc(x.reason)}</span>`, v.blocked.length > 0)}
+    ${tlist('Candidates: same sense, but only close (pair them above to merge)', v.candidates, x => `${esc(x.a_label)} ~ ${esc(x.b_label)} <span class="muted">${esc(x.why)}</span>`)}
+    ${tlist('Kind-of links from WordNet (drawn dashed; never counted as held)', v.scaffold, x => `${esc(x.lower.mirror)}'s <b>${esc(x.s_label)}</b> is a kind of ${esc(x.upper.mirror)}'s <b>${esc(x.o_label)}</b> <span class="muted">${esc(x.lower.sense_label)} → ${esc(x.upper.sense_label)}</span>`)}`;
+}
+async function loadAnchors() {
+  const {a, b} = tpair(), out = $('#tanchout');
+  if (!a) return;
+  try {
+    const rows = await Promise.all([a, b].filter(Boolean).map(async m => ({m, r: await api(`/api/anchors?mirror=${encodeURIComponent(m)}`)})));
+    out.innerHTML = rows.map(({m, r}) => {
+      const st = r.summary.status, pend = r.proposals.filter(p => p.status === 'proposed');
+      return `<div class="card"><b>${esc(m)}</b> <span class="small muted">${st.approved || 0} approved, ${pend.length} waiting${st.rejected ? `, ${st.rejected} rejected` : ''}</span>
+        <div class="row"><button class="b" data-apropose="${esc(m)}">Propose anchors</button><label class="small"><input type="checkbox" data-aclaude="${esc(m)}"> Claude picks the sense (1 call per 25 ideas)</label></div>
+        ${pend.length ? `<div class="row"><button class="b primary" data-aapprove="${esc(m)}">Approve ticked</button><button class="b" data-aall="${esc(m)}">Tick all</button><button class="b" data-areject="${esc(m)}">Reject ticked</button></div>
+        <table>${pend.slice(0, 300).map(p => `<tr><td><input type="checkbox" data-aid="${esc(p.id)}" data-am="${esc(m)}"></td><td class="small"><b>${esc(p.label)}</b> ${APRED[p.predicate]}${p.polarity < 0 ? ' the opposite of' : ''} ${p.object ? `<i>${esc(p.object_label)}</i>: ${esc(p.object_gloss)}` : ''} <span class="muted">(${esc(p.justification)}, ${Math.round(p.confidence * 100)}%) ${esc(p.why)}</span>${p.check ? ` <span class="neg">${esc(p.check)}</span>` : ''}</td></tr>`).join('')}</table>
+        ${pend.length > 300 ? `<p class="small muted">Showing 300 of ${pend.length}; the rest: python -m androidmirror anchors list --corpus ${esc(m)}</p>` : ''}` : ''}</div>`;
+    }).join('');
+  } catch (err) { fail(out, err); }
+}
+$('#tanch').addEventListener('toggle', () => { if ($('#tanch').open) loadAnchors(); });
+$('#tanch').addEventListener('click', e => {
+  const t = e.target, m = t.dataset.apropose || t.dataset.aapprove || t.dataset.areject || t.dataset.aall;
+  if (!m) return;
+  const ticked = [...document.querySelectorAll(`[data-am="${CSS.escape(m)}"]:checked`)].map(x => x.dataset.aid);
+  if (t.dataset.aall) { document.querySelectorAll(`[data-am="${CSS.escape(m)}"]`).forEach(x => x.checked = true); return; }
+  transmutateDo(async () => {
+    if (t.dataset.apropose) {
+      const claude = document.querySelector(`[data-aclaude="${CSS.escape(m)}"]`).checked;
+      const r = await api('/api/anchors/propose', {mirror: m, claude}); await loadAnchors();
+      return `${r.proposed} anchors proposed for ${esc(m)}. Nothing is used until you approve.`;
+    }
+    if (!ticked.length) return 'Tick some anchors first.';
+    if (t.dataset.areject) { const r = await api('/api/anchors/reject', {mirror: m, ids: ticked}); await loadAnchors(); return `Rejected ${r.rejected}.`; }
+    const by = ($('#tby') && $('#tby').value.trim()) || store.get('approver') || prompt('Your name (an approval records who approved it)');
+    if (!by) return 'An approval needs your name.';
+    store.set('approver', by);
+    const r = await api('/api/anchors/approve', {mirror: m, ids: ticked, approver: by}); await loadAnchors();
+    return `Approved ${r.approved} anchors for ${esc(m)}. Propose again to combine through them.`;
+  });
+});
 const TKIND = {cycle:'would make a circle, so shown as a shared cause', denied:'ruled out by a “no difference” claim, so shown as a shared cause', outweighed:'outweighed', sign:'opposite effects'};
 function transmutateView(p) {
   const s = p.stats, c = p.crossings;
@@ -807,6 +855,7 @@ function transmutateView(p) {
     <p class="small">Combined: ${line(s.combined)}.<br>After trimming: ${line(s.trimmed)}.</p>
     ${s.arrows_new.length ? `<p class="small neg">Links that appear only after trimming: ${s.arrows_new.map(e => esc(e.replace('|', ' → '))).join(', ')}</p>` : ''}</div>
     <details open><summary><b>Ideas matched across the two</b> <span class="muted">(${p.alignment.length})</span></summary><ul>${pairs || '<li class="small muted">None.</li>'}</ul></details>
+    ${pivotView(p)}
     ${tlist('Both Mirrors say', c.agreed, x => `${esc(x.text)} <span class="muted">${x.weight} passage${x.weight === 1 ? '' : 's'}, ${esc(STATUS_WORD[x.status] || x.status)}${x.sign_conflict ? ', but they disagree on whether it raises or lowers' : ''}</span>`)}
     ${tlist('Clashes created by combining', tensions, x => x, true)}
     ${tlist('Shared causes resolved by combining', sc.resolved, two, sc.resolved.length > 0)}
@@ -877,13 +926,13 @@ async function transmutateDo(fn) {
 const tpropose = extraDrop => transmutateDo(async () => {
   const drop = [...csv('#tdrop'), ...(extraDrop ? [extraDrop] : [])];
   if (extraDrop) $('#tdrop').value = drop.join(', ');
-  await api('/api/transmutate/propose', {...tpair(), pairs: csv('#tpairs'), opposites: csv('#topp'), drop, claude: $('#tclaude').checked});
+  await api('/api/transmutate/propose', {...tpair(), pairs: csv('#tpairs'), opposites: csv('#topp'), drop, claude: $('#tclaude').checked, anchors: $('#tanchors').checked});
   await showTransmutation(); return 'Proposed. Nothing has been changed yet.';
 });
-$('#ta').onchange = $('#tb').onchange = () => showTransmutation().catch(err => fail($('#tprop'), err));
+$('#ta').onchange = $('#tb').onchange = () => { showTransmutation().catch(err => fail($('#tprop'), err)); if ($('#tanch').open) loadAnchors(); };
 $('#tpropose').onclick = () => tpropose();
 $('#tcompare').onclick = () => transmutateDo(async () => {
-  const r = await api('/api/transmutate/compare', {...tpair(), pairs: csv('#tpairs'), opposites: csv('#topp'), drop: csv('#tdrop'), claude: $('#tclaude').checked});
+  const r = await api('/api/transmutate/compare', {...tpair(), pairs: csv('#tpairs'), opposites: csv('#topp'), drop: csv('#tdrop'), claude: $('#tclaude').checked, anchors: $('#tanchors').checked});
   $('#tdiff').innerHTML = differencesView(r.differences); return '';
 });
 $('#transmutate').addEventListener('click', e => {

@@ -25,6 +25,7 @@ class Mirror:
         self.judgments: list[dict[str, Any]] = data.get("judgments", [])
         self.unresolved: list[dict[str, Any]] = data.get("unresolved", [])
         self.values: list[dict[str, Any]] = data.get("values", [])
+        self.scaffold: list[dict[str, Any]] = data.get("scaffold", [])  # is_a links from WordNet, never held
         self.value_of = {v["concept"]: v for v in self.values}
         self.causal: dict[str, Any] = data.get("causal", {})
         self.passage_ids: list[str] = data["passage_ids"]
@@ -80,6 +81,8 @@ class Mirror:
         edges = [{"id": fact_key(f["s"], f["r"], f["o"]), "source": f["s"], "target": f["o"], "rel": f["r"],
                   "support": f["support"], "directed": True}
                  for f in held if f["s"] in keep and f["o"] in keep]
+        edges += [{"id": f"pivot|{x['s']}|{x['o']}", "source": x["s"], "target": x["o"], "rel": "is_a", "support": 0,
+                   "directed": True, "scaffold": True} for x in self.scaffold if x["s"] in keep and x["o"] in keep]
         return {"layer": layer, "nodes": nodes, "edges": edges, "hidden": max(0, len(degree) - limit)}
 
     def _node_view(self, nid: str, support: int = 0) -> dict[str, Any]:
@@ -113,6 +116,8 @@ class Mirror:
                                   if nid in (b["a"], b["b"], b["via"])],
             },
             "value": self.value_of.get(nid),
+            "scaffold": [{**x, "s_label": self.label(x["s"]), "o_label": self.label(x["o"])}
+                         for x in self.scaffold if nid in (x["s"], x["o"])],
             "violations": [v for v in self.kb.violations if nid in json.dumps(v)],
         }
 

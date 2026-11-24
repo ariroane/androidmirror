@@ -69,7 +69,7 @@ How each part works, in `designs/`:
 - **OODA:** the subject's ideas in the four stages of the OODA loop, built from the knowledge graph and the causal model, with why each idea is where it is, the cause-and-effect between stages, and what the shape shows (does the loop close, does Orient skip straight to Act). Move an idea to another stage if the placement is wrong; that changes neither graph. See [the OODA model](designs/ooda-model.md).
 - **Face:** the Major Arcana card the whole Mirror most resembles, drawn as a face. See [the face](designs/face.md).
 - **Mutate:** merge concepts that are one, or split one used in two senses. See [the engines](designs/engines.md#mutate-merging-and-splitting-concepts).
-- **Transmutate:** compare two Mirrors (how they differ in knowledge, causes and OODA loop), then combine them into one and trim it to what is strong; nothing is written until you approve.
+- **Transmutate:** compare two Mirrors (how they differ in knowledge, causes and OODA loop), then combine them into one and trim it to what is strong; nothing is written until you approve. Under **Anchors**, propose what each idea means as an Open English WordNet sense and approve them; once both Mirrors have approved anchors, combining reads them: same-sense and antonym ideas pair, a shared name with different senses is blocked as a homonym, close senses are listed as candidates, and an idea whose sense is a kind of the other Mirror's idea gets a dashed "is a kind of (WordNet)" link that is never counted as held. See [merging through a formal ontology](designs/ontology-aligned-merging.md#8-what-is-built).
 
 ## The interview
 
@@ -104,6 +104,11 @@ Write the corpus again after more answers; a changed answer is read again and th
 | `question [--corpus NAME] [--limit 10] [--kind K] [--list]` | Answer the Question engine's questions; approve each proposal by typing your name. `--pending`, `--approve ID --by NAME`, `--reject ID`, `--revoke ID`. No Claude calls unless you answer in words. |
 | `transmutate compare A B [--claude] [--pair A=B] [--opposite A=B] [--drop C]` | How two Mirrors differ in knowledge, causes and OODA loop. Writes nothing. |
 | `transmutate propose A B [same options]` then `transmutate approve A B [--keep N]` | Combine two Mirrors and trim to what is strong; the proposal includes the comparison. Writes nothing until approve. |
+| `anchors propose [--corpus NAME] [--claude] [--limit N]` | Propose an anchor in Open English WordNet for each idea (lexical match; with `--claude`, Claude picks among the listed senses, 1 call per 25 ideas). WordNet is downloaded once into `data/wordnet/`. |
+| `anchors list\|approve\|reject\|revoke [IDS\|all] [--by NAME] [--min-confidence X]` | Review anchors; approving needs your name. Approved ones are also written as `anchors.sssom.tsv`. `anchors set CONCEPT SENSE --by NAME` sets one yourself; `anchors senses WORD` lists a word's senses. |
+| `transmutate propose\|compare A B --no-anchors` | Combine or compare without the anchors. |
+| `transmutate evaluate A B [--claude] [--include-proposed] [--blind N]` | Current alignment vs anchored: concepts connected, homonyms caught, held-out fitness, and with `--blind N` Claude's blind reading of N passages per author. Report in `data/evaluations/`. Writes no Mirror. |
+| `transmutate split-half NAME [--claude] [--rename 0.5] [--homonyms 20] [--limit 300] [--blind N]` | The known-answer test: one Mirror cut in two, half the second half's ideas renamed to WordNet synonyms, homonyms planted, then both alignments scored against the truth. |
 | `interview NAME [--bank ooda\|know] [--stage STAGE]` | Answer the OODA interview (default) or Get to Know You! (`--bank know`) in the terminal, resuming where NAME left off, then write the corpus `interview-NAME` from all answers. No Claude calls. |
 | `p1 ...` | The paused Prototype 1 app (patch review, Refactorer, Breaker, Chainer, Evolver). `python -m androidmirror p1 --help` lists its commands. |
 
@@ -134,6 +139,7 @@ Splitters: `paragraphs` (one text file, short paragraphs merged), `documents` (a
 | `androidmirror/mirror/mutate.py`, `mutate_api.py` | The mutate engine and its routes |
 | `androidmirror/mirror/question.py`, `answers.py` | The Question engine; approved answers and how they amend a Mirror |
 | `androidmirror/mirror/transmutate.py`, `compare.py` | Transmutate: align, compare, combine and fitness-trim two Mirrors |
+| `androidmirror/mirror/wordnet.py`, `anchors.py`, `pivot.py`, `anchor_eval.py` | Open English WordNet; each Mirror's anchors; merging through them; the two evaluations |
 | `androidmirror/mirror/ooda.py` | The OODA model: tiers built from the two graphs |
 | `androidmirror/mirror/interview.py`, `data/interview_ooda.json`, `data/interview_know.json` | The interview: both questionnaires, saved answers, the corpus they become |
 | `androidmirror/server.py`, `web/index.html` | The app |
