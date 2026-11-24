@@ -104,9 +104,19 @@ free: causal, derange, benchmark (without --claude), serve, interview.""")
     qu.add_argument("--by", default="", help="your name, for --approve")
 
     t = sub.add_parser("transmutate", help="combine two built Mirrors and trim to what is strong (writes only on approve)")
-    t.add_argument("action", choices=["propose", "compare", "approve"])
+    t.add_argument("action", choices=["propose", "compare", "approve", "evaluate", "split-half"],
+                   help="evaluate A B: current vs anchored alignment; split-half A: the known-answer test on one Mirror")
     t.add_argument("a", help="a built Mirror (a folder in data/mirror/)")
-    t.add_argument("b", help="the Mirror to combine with it")
+    t.add_argument("b", nargs="?", help="the Mirror to combine with it (not for split-half)")
+    t.add_argument("--no-anchors", action="store_true", help="propose, compare: ignore the Mirrors' WordNet anchors")
+    t.add_argument("--include-proposed", action="store_true",
+                   help="evaluate: read anchors still waiting for approval as if approved (a what-if; approves nothing)")
+    t.add_argument("--blind", type=int, default=0, metavar="N",
+                   help="evaluate, split-half: Claude's blind reading of N passages per author (N calls each)")
+    t.add_argument("--rename", type=float, default=0.5, help="split-half: share of renamable concepts renamed")
+    t.add_argument("--homonyms", type=int, default=20, help="split-half: homonyms to plant")
+    t.add_argument("--limit", type=int, default=300, help="split-half: concepts per half to anchor (most mentioned first)")
+    t.add_argument("--seed", type=int, default=0)
     t.add_argument("--claude", action="store_true", help="propose, compare: also have Claude pair concepts by meaning (1 call)")
     t.add_argument("--pair", action="append", metavar="A=B", help="propose, compare: pair A's concept with B's")
     t.add_argument("--opposite", action="append", metavar="A=B", help="propose, compare: B's concept is the opposite of A's")
@@ -115,6 +125,30 @@ free: causal, derange, benchmark (without --claude), serve, interview.""")
     t.add_argument("--samples", type=int, help="propose: fitness samples (default 50)")
     t.add_argument("--keep-at", type=float, help="propose: survival rate below which an item is trimmed (default 0.6)")
     t.add_argument("--keep", action="append", metavar="N", help="approve: spare trim N (number or id) from the proposal")
+
+    an = sub.add_parser("anchors", help="anchor a Mirror's concepts to WordNet senses; used only once you approve",
+                        formatter_class=argparse.RawDescriptionHelpFormatter, epilog="""examples:
+  anchors propose --corpus meditations             lexical: each label's WordNet senses (no Claude calls)
+  anchors propose --corpus meditations --claude    Claude picks among the listed senses (1 call per 25 concepts)
+  anchors list --corpus meditations --status proposed
+  anchors approve all --by NAME --min-confidence 0.7
+  anchors approve a-1a2b3c4d a-5e6f7a8b --by NAME
+  anchors senses anger                             a word's WordNet senses, with their ids
+  anchors set wrath oewn:07531593-n --by NAME      your own anchor (--predicate closeMatch, --opposite)
+  anchors set prohairesis none --by NAME           no WordNet sense fits""")
+    an.add_argument("action", choices=["propose", "list", "approve", "reject", "revoke", "set", "senses"])
+    an.add_argument("ids", nargs="*", help="proposal ids, or 'all' (approve, reject); CONCEPT SENSE (set); words (senses)")
+    an.add_argument("--corpus", default="meditations")
+    an.add_argument("--claude", action="store_true", help="propose: Claude chooses among the listed senses")
+    an.add_argument("--limit", type=int, help="propose: only the N most-mentioned concepts")
+    an.add_argument("--redo", action="store_true", help="propose: propose again for concepts already anchored")
+    an.add_argument("--show", type=int, default=20, help="propose: proposals to print")
+    an.add_argument("--status", help="list: proposed, approved, rejected, revoked, superseded")
+    an.add_argument("--by", default="", help="approve, set: your name")
+    an.add_argument("--min-confidence", type=float, help="approve all: only proposals at least this confident")
+    an.add_argument("--predicate", default="exactMatch", help="set: exactMatch, closeMatch, broadMatch, narrowMatch, "
+                    "relatedMatch, noMatch")
+    an.add_argument("--opposite", action="store_true", help="set: the concept is the opposite of the sense")
 
     iv = sub.add_parser("interview", help="answer an interview questionnaire in the terminal; the answers become a corpus (no Claude calls)")
     iv.add_argument("name", help="the person answering; the same name resumes their interview")
@@ -199,7 +233,17 @@ free: causal, derange, benchmark (without --claude), serve, interview.""")
     elif args.cmd == "transmutate":
         from .mirror import transmutate
 
-        transmutate.cli(args, args.data)
+        if args.action in ("evaluate", "split-half"):
+            _evaluate(args)
+        elif not args.b:
+            raise SystemExit(f"transmutate {args.action} needs two Mirrors")
+        else:
+            transmutate.cli(args, args.data)
+    elif args.cmd == "anchors":
+        from .mirror import anchors
+
+        root = mirror_dir(args.data, args.corpus)  # any built Mirror, a combined one too
+        anchors.cli(args, root if root.exists() else mirror_dir(args.data, CorpusSpec.load(args.corpus).id), args.data)
     elif args.cmd == "ask":
         m = Mirror.load(mirror_dir(args.data, CorpusSpec.load(args.corpus).id))
         if m is None:
@@ -215,6 +259,27 @@ free: causal, derange, benchmark (without --claude), serve, interview.""")
             print(r["answer"])
             if any(r["dropped"].values()):
                 print(f"\n(Left out to fit one call: {r['left_out']})")
+
+
+def _evaluate(args: argparse.Namespace) -> None:
+    from .mirror import anchor_eval
+
+    if (args.claude or args.blind) and not llm.available():
+        raise SystemExit("--claude and --blind need ANTHROPIC_API_KEY in your local .env")
+    try:
+        if args.action == "evaluate":
+            if not args.b:
+                raise SystemExit("transmutate evaluate A B")
+            r = anchor_eval.compare(args.data, args.a, args.b, args.claude, args.include_proposed,
+                                    args.samples or 20, args.blind, args.seed)
+        else:
+            r = anchor_eval.split_half(args.data, args.a, args.rename, args.homonyms, args.claude, args.limit,
+                                       args.samples or 20, args.blind, args.seed)
+    except (FileNotFoundError, RuntimeError, KeyError, ValueError, llm.LLMUnavailable) as e:
+        raise SystemExit(str(e)) from None
+    text = anchor_eval.describe(r)
+    print(text[:8000])
+    print(f"\nSaved in {args.data / 'evaluations' / r['id']} (report.md, report.json). No Mirror was changed.")
 
 
 def _mutate(args: argparse.Namespace) -> None:

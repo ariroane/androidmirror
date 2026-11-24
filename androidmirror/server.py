@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 from . import archetypes, llm, mutate_api
 from .mirror import ask as oracle
-from .mirror import derange, interview, ooda, question
+from .mirror import anchors, derange, interview, ooda, question
 from .mirror.build import mirror_dir
 from .mirror.corpus import SPECS
 from .mirror.store import Mirror
@@ -47,6 +47,7 @@ class Transmute(BaseModel):
     drop: list[str] = []
     keep: list[str] = []  # approve: trims to spare, by number or id
     approver: str = ""  # approve: who approved it
+    anchors: bool = True  # read the Mirrors' approved WordNet anchors when both have them
 
 
 def create_app(data_dir: Path | None = None) -> FastAPI:
@@ -187,6 +188,11 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
 
     mutate_api.register(app, lambda c: mirror_dir(data_dir, get(c).meta["corpus"]["id"]))
     app.include_router(question.routes(get))  # the Question engine: questions, answers, proposals to approve
+    def anchor_root(name: str | None) -> Path:
+        name = name if name in built() else get(name).meta["corpus"]["id"]
+        return mirror_dir(data_dir, name)
+
+    app.include_router(anchors.routes(data_dir, anchor_root))  # WordNet anchors: proposals you approve
     app.include_router(interview.routes(data_dir))  # the interview questionnaires: answers saved as they come, then a corpus
 
     @app.get("/api/transmutate")
@@ -205,7 +211,8 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
 
         try:
             add = [tm.parse_pair(x) for x in t.pairs] + [tm.parse_pair(x, -1) for x in t.opposites]
-            return tm.propose(data_dir, t.a, t.b, t.claude, add, t.drop, log=lambda *_: None)
+            return tm.propose(data_dir, t.a, t.b, t.claude, add, t.drop, log=lambda *_: None,
+                              use_anchors=None if t.anchors else False)
         except (FileNotFoundError, RuntimeError, KeyError, ValueError, llm.LLMUnavailable) as e:
             raise HTTPException(400, str(e)) from None
 
@@ -216,7 +223,7 @@ def create_app(data_dir: Path | None = None) -> FastAPI:
 
         try:
             add = [tm.parse_pair(x) for x in t.pairs] + [tm.parse_pair(x, -1) for x in t.opposites]
-            return tm.compare_only(data_dir, t.a, t.b, t.claude, add, t.drop)
+            return tm.compare_only(data_dir, t.a, t.b, t.claude, add, t.drop, None if t.anchors else False)
         except (FileNotFoundError, RuntimeError, KeyError, ValueError, llm.LLMUnavailable) as e:
             raise HTTPException(400, str(e)) from None
 

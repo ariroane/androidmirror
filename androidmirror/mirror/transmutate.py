@@ -8,6 +8,12 @@ Three steps, and nothing is written into data/mirror/ until you approve:
    "unrest" is A's "tranquillity", reversed), and then every sign that runs
    through it is flipped. Each concept is paired at most once, so combining
    never merges two concepts of the same Mirror (that is mutate's job).
+   When both Mirrors have approved anchors in WordNet (anchors.py), they are
+   read too (pivot.py): same-sense and antonym anchors pair concepts, a name
+   match whose senses differ is blocked as a homonym, closeMatch senses are
+   listed as candidates only, and a concept whose sense is a kind of the other
+   Mirror's concept's sense is joined to it by a scaffold `is_a` link, which is
+   drawn but never counted as something either subject holds.
 2. Combine. Aligned concepts become one node (its id is A's, unprefixed);
    everything else keeps its own Mirror's name as a prefix ("fomc:inflation").
    The two subjects are both `self`: the result is one voice that says what
@@ -47,7 +53,8 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .. import llm
-from . import answers
+from . import anchors as anchor_book
+from . import answers, pivot
 from .causal import fit, holdout, public
 from .codebook import norm
 from .judgments import constraints as build_constraints
@@ -82,7 +89,11 @@ def proposal_dir(data_dir: Path, a: str, b: str) -> Path:
 
 def load_source(data_dir: Path, name: str) -> dict[str, Any]:
     """A built Mirror as raw data, with the answers you approved laid over it, and a hash to tell if either changes."""
-    root = data_dir / "mirror" / name
+    return load_root(data_dir / "mirror" / name, name)
+
+
+def load_root(root: Path, name: str) -> dict[str, Any]:
+    """load_source for a Mirror folder anywhere (the evaluations keep theirs outside data/mirror/)."""
     path = root / "mirror.json"
     if not path.exists():
         raise FileNotFoundError(f"no Mirror built for {name!r} (looked for {path})")
@@ -92,9 +103,11 @@ def load_source(data_dir: Path, name: str) -> dict[str, Any]:
         raise RuntimeError(f"{name} was built by Prototype 2; run build again before combining it")
     book = answers.path(root)
     raw += book.read_bytes() if book.exists() else b""
+    raw += anchor_book.digest(root)
     mirror = answers.overlay(mirror, answers.load(root))
     passages = json.loads((root / "passages.json").read_text(encoding="utf-8")) + mirror.pop("answer_passages", [])
-    return {"id": name, "mirror": mirror, "passages": passages, "hash": hashlib.sha256(raw).hexdigest()[:16]}
+    return {"id": name, "mirror": mirror, "passages": passages, "hash": hashlib.sha256(raw).hexdigest()[:16],
+            "anchors": anchor_book.approved(anchor_book.load(root))}
 
 
 # ---------- 1. alignment ----------
@@ -189,16 +202,36 @@ def parse_pair(text: str, polarity: int = 1) -> dict[str, Any]:
     return {"a": aid, "b": bid, "polarity": polarity, "how": "you", "why": "paired by you"}
 
 
+def uses_anchors(a: dict[str, Any], b: dict[str, Any], use_anchors: bool | None = None) -> bool:
+    """Anchors are read when both Mirrors have approved ones, unless you turn them off."""
+    return use_anchors is not False and bool(a.get("anchors")) and bool(b.get("anchors"))
+
+
 def align(a: dict[str, Any], b: dict[str, Any], use_claude: bool = False, add: list[dict[str, Any]] | None = None,
-          drop: list[str] | None = None) -> dict[str, Any]:
-    """The alignment to propose: your pairs first, then same-name pairs, then Claude's; one partner each."""
+          drop: list[str] | None = None, use_anchors: bool | None = None,
+          claude_found: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """The alignment to propose: your pairs first, then same-sense anchor pairs, then same-name pairs, then Claude's;
+    one partner each. With anchors, name and Claude pairs whose senses differ are blocked, and the pivot's
+    hierarchy adds scaffold is_a links. `claude_found` reuses Claude's pairs from an earlier call."""
     ca, cb_ = _concepts(a["mirror"]), _concepts(b["mirror"])
     yours = []
     for p in add or []:
         if p["a"] not in ca or p["b"] not in cb_:
             raise KeyError(f"no concept {p['a']!r} in {a['id']} or {p['b']!r} in {b['id']}")
         yours.append(p)
-    found = yours + candidates(a, b) + (claude_pairs(a, b) if use_claude else [])
+    claude = claude_found if claude_found is not None else (claude_pairs(a, b) if use_claude else [])
+    named = candidates(a, b)
+    piv: dict[str, Any] = {"used": uses_anchors(a, b, use_anchors), "blocked": [], "candidates": [], "scaffold": []}
+    if piv["used"]:
+        aa, ba = a["anchors"], b["anchors"]
+        by_sense, close = pivot.anchor_pairs(aa, ba, ca, cb_)
+        named, blocked_n = pivot.screen(named, aa, ba)
+        claude, blocked_c = pivot.screen(claude, aa, ba)
+        piv["blocked"] = blocked_n + blocked_c
+        found = yours + [{k: v for k, v in p.items() if not k.startswith("_")} for p in by_sense] + named + claude
+        piv["by_sense"] = len(by_sense)
+    else:
+        found, close = yours + named + claude, []
     dropped = set(drop or [])
     pairs, set_aside = [], []
     for p in _one_to_one(found):
@@ -206,7 +239,30 @@ def align(a: dict[str, Any], b: dict[str, Any], use_claude: bool = False, add: l
     for p in pairs:
         p["a_label"], p["b_label"] = ca[p["a"]]["label"], cb_[p["b"]]["label"]
         p["a_kind"], p["b_kind"] = ca[p["a"]]["kind"], cb_[p["b"]]["kind"]
-    return {"pairs": pairs, "dropped": set_aside}
+    if piv["used"]:
+        paired = {(p["a"], p["b"]) for p in pairs}
+        used_a, used_b = {p["a"] for p in pairs}, {p["b"] for p in pairs}
+        # a same-sense pair that lost out to another partner is a candidate too
+        close += [{**p, "how": "same sense, other partner taken", "a_gloss": ca[p["a"]].get("gloss", ""),
+                   "b_gloss": cb_[p["b"]].get("gloss", "")}
+                  for p in pivot.anchor_pairs(a["anchors"], b["anchors"], ca, cb_)[0] if (p["a"], p["b"]) not in paired]
+        seen: set[tuple[str, str]] = set()
+        piv["candidates"] = []
+        for p in close:
+            if (p["a"], p["b"]) in seen or (p["a"], p["b"]) in paired or (p["a"] in used_a and p["b"] in used_b):
+                continue
+            seen.add((p["a"], p["b"]))
+            piv["candidates"].append({**{k: v for k, v in p.items() if not k.startswith("_")},
+                                      "a_label": ca[p["a"]]["label"], "b_label": cb_[p["b"]]["label"]})
+        for x in piv["blocked"]:
+            x["a_label"], x["b_label"] = ca[x["a"]]["label"], cb_[x["b"]]["label"]
+        ids = _Ids(a["id"], b["id"], pairs)
+        merged = {**{("a", k): ids.node("a", k) for k in ca}, **{("b", k): ids.node("b", k) for k in cb_}}
+        piv["scaffold"] = pivot.scaffold(a["id"], b["id"], a["anchors"], b["anchors"], merged)
+        for x in piv["scaffold"]:
+            x["s_label"] = (ca if x["lower"]["mirror"] == a["id"] else cb_)[x["lower"]["concept"]]["label"]
+            x["o_label"] = (ca if x["upper"]["mirror"] == a["id"] else cb_)[x["upper"]["concept"]]["label"]
+    return {"pairs": pairs, "dropped": set_aside, "pivot": piv}
 
 
 # ---------- 2. combining ----------
@@ -243,8 +299,10 @@ class _Ids:
         return f"{self.prefix[side]}:{pid}"
 
 
-def combine(a: dict[str, Any], b: dict[str, Any], pairs: list[dict[str, Any]]) -> dict[str, Any]:
-    """The combined Mirror's data (not fitted, not saved) and its passages."""
+def combine(a: dict[str, Any], b: dict[str, Any], pairs: list[dict[str, Any]],
+            scaffold: list[dict[str, Any]] | None = None) -> dict[str, Any]:
+    """The combined Mirror's data (not fitted, not saved) and its passages. Scaffold is_a links from the pivot
+    are kept apart from the facts (`scaffold`), so they never count as held."""
     ids = _Ids(a["id"], b["id"], pairs)
     sides = (("a", a), ("b", b))
     passages, offset = [], 0
@@ -350,6 +408,7 @@ def combine(a: dict[str, Any], b: dict[str, Any], pairs: list[dict[str, Any]]) -
         "passage_ids": [p["id"] for p in passages],
         "nodes": nodes, "facts": list(facts.values()), "judgments": judgments, "unresolved": unresolved,
         "values": values, "causal": {"settings": {**a["mirror"].get("causal", {}).get("settings", {})}},
+        "scaffold": [dict(x) for x in scaffold or [] if x["s"] in nodes and x["o"] in nodes],
     }
     return {"mirror": mirror, "passages": passages}
 
@@ -562,6 +621,9 @@ def apply_trims(mirror: dict[str, Any], cut: set[str]) -> tuple[dict[str, Any], 
     out = {**mirror, "judgments": kept_j,
            "facts": [f for f in mirror["facts"] if f"f:{fact_key(f['s'], f['r'], f['o'], f['neg'])}" not in cut],
            "nodes": {k: v for k, v in mirror["nodes"].items() if f"n:{k}" not in cut}}
+    if "scaffold" in mirror:  # a pivot link goes with either end
+        out["scaffold"] = [x for x in mirror["scaffold"] if x["s"] in out["nodes"] and x["o"] in out["nodes"]]
+        archive["scaffold"] = [x for x in mirror["scaffold"] if x not in out["scaffold"]]
     return out, archive
 
 
@@ -570,16 +632,19 @@ def apply_trims(mirror: dict[str, Any], cut: set[str]) -> tuple[dict[str, Any], 
 
 def propose(data_dir: Path, a_name: str, b_name: str, use_claude: bool = False, add: list[dict[str, Any]] | None = None,
             drop: list[str] | None = None, settings: dict[str, Any] | None = None,
-            log: Callable[[str], None] = print) -> dict[str, Any]:
+            log: Callable[[str], None] = print, use_anchors: bool | None = None) -> dict[str, Any]:
     """Align, combine and score two Mirrors, and save the proposal. Writes nothing into data/mirror/."""
     if a_name == b_name:
         raise ValueError("pick two different Mirrors")
     a, b = load_source(data_dir, a_name), load_source(data_dir, b_name)
     if use_claude and not llm.available():
         raise llm.LLMUnavailable("aligning with Claude needs ANTHROPIC_API_KEY in your local .env")
-    alignment = align(a, b, use_claude, add, drop)
-    log(f"aligned {len(alignment['pairs'])} concepts of {a_name} with {b_name}")
-    combo = combine(a, b, alignment["pairs"])
+    alignment = align(a, b, use_claude, add, drop, use_anchors)
+    piv = alignment["pivot"]
+    log(f"aligned {len(alignment['pairs'])} concepts of {a_name} with {b_name}"
+        + (f"; anchors: {len(piv['blocked'])} merges blocked, {len(piv['candidates'])} candidates, "
+           f"{len(piv['scaffold'])} scaffold links" if piv["used"] else ""))
+    combo = combine(a, b, alignment["pairs"], piv["scaffold"])
     mirror = combo["mirror"]
     model = fit(mirror["judgments"], mirror["causal"]["settings"])
     log("scoring fitness")
@@ -593,7 +658,7 @@ def propose(data_dir: Path, a_name: str, b_name: str, use_claude: bool = False, 
         "sources": {s["id"]: {"hash": s["hash"], "title": s["mirror"]["meta"]["corpus"]["title"],
                               "subject": s["mirror"]["meta"]["corpus"]["subject"]} for s in (a, b)},
         "a": a_name, "b": b_name, "settings": fit_["settings"],
-        "alignment": alignment["pairs"], "dropped": alignment["dropped"],
+        "alignment": alignment["pairs"], "dropped": alignment["dropped"], "pivot": piv,
         "crossings": crossings(mirror, model),
         "shared_causes": shared_causes(a, b, alignment["pairs"], model, after),
         "differences": differences(data_dir, a_name, b_name, alignment["pairs"]),
@@ -601,10 +666,10 @@ def propose(data_dir: Path, a_name: str, b_name: str, use_claude: bool = False, 
         "fitness": fit_["claims"],
         "stats": {
             "combined": {"concepts": len(mirror["nodes"]), "facts": len(mirror["facts"]),
-                         "judgments": len(mirror["judgments"]),
+                         "judgments": len(mirror["judgments"]), "scaffold": len(mirror["scaffold"]),
                          **{k: model["stats"][k] for k in ("arrows", "rejected", "common_causes")}},
             "trimmed": {"concepts": len(trimmed["nodes"]), "facts": len(trimmed["facts"]),
-                        "judgments": len(trimmed["judgments"]),
+                        "judgments": len(trimmed["judgments"]), "scaffold": len(trimmed["scaffold"]),
                         **{k: after["stats"][k] for k in ("arrows", "rejected", "common_causes")}},
             "arrows_kept": len(before_arrows & {(e["src"], e["dst"], e["sign"]) for e in after["edges"]}),
             "arrows_new": [f"{e['src']}|{e['dst']}" for e in after["edges"]
@@ -628,14 +693,15 @@ def differences(data_dir: Path, a_name: str, b_name: str, pairs: list[dict[str, 
 
 
 def compare_only(data_dir: Path, a_name: str, b_name: str, use_claude: bool = False,
-                 add: list[dict[str, Any]] | None = None, drop: list[str] | None = None) -> dict[str, Any]:
+                 add: list[dict[str, Any]] | None = None, drop: list[str] | None = None,
+                 use_anchors: bool | None = None) -> dict[str, Any]:
     """Only the differences, with the alignment they rest on: no fitness, nothing saved."""
     if a_name == b_name:
         raise ValueError("pick two different Mirrors")
     a, b = load_source(data_dir, a_name), load_source(data_dir, b_name)
     if use_claude and not llm.available():
         raise llm.LLMUnavailable("aligning with Claude needs ANTHROPIC_API_KEY in your local .env")
-    alignment = align(a, b, use_claude, add, drop)
+    alignment = align(a, b, use_claude, add, drop, use_anchors)
     return {"a": a_name, "b": b_name, "alignment": alignment["pairs"],
             "differences": differences(data_dir, a_name, b_name, alignment["pairs"])}
 
@@ -686,7 +752,7 @@ def approve(data_dir: Path, a_name: str, b_name: str, keep: list[str] | None = N
     if spare - known:
         raise KeyError(f"not in the proposal's trims: {', '.join(sorted(spare - known))}")
     cut = {t["id"] for t in proposal["trims"] if str(t["n"]) not in spare and t["id"] not in spare}
-    combo = combine(a, b, proposal["alignment"])
+    combo = combine(a, b, proposal["alignment"], (proposal.get("pivot") or {}).get("scaffold"))
     mirror, archive = apply_trims(combo["mirror"], cut)
     # a concept a spared item still needs is spared with it
     need = set(SHARED)
@@ -785,6 +851,25 @@ def describe(p: dict[str, Any], nodes: dict[str, Any]) -> str:
         rel = "is" if x["polarity"] == 1 else "is the opposite of"
         lines.append(f"- {p['b']}'s {x['b_label']} ({x['b']}) {rel} {p['a']}'s {x['a_label']} ({x['a']}) [{x['how']}]"
                      + (f"; kinds differ: {x['a_kind']} / {x['b_kind']}" if x["a_kind"] != x["b_kind"] else ""))
+    piv = p.get("pivot") or {}
+    if piv.get("used"):
+        lines += ["", "## Through the anchors (WordNet)", "",
+                  f"{piv.get('by_sense', 0)} same-sense or antonym pairs found; {len(piv['blocked'])} merges blocked; "
+                  f"{len(piv['candidates'])} candidates; {len(piv['scaffold'])} scaffold is_a links.", "",
+                  f"### Blocked merges ({len(piv['blocked'])})", "",
+                  "Same name (or Claude's pair), different sense. Not merged; --pair A=B merges one anyway.", ""]
+        lines += [f"- {x['a_label']} ({x['a']}) / {x['b_label']} ({x['b']}) [{x['how']}]: {x['reason']}"
+                  for x in piv["blocked"]]
+        lines += ["", f"### Candidates ({len(piv['candidates'])})", "", "Same sense, but only close. Pair with --pair A=B.", ""]
+        lines += [f"- {x['a_label']} ({x['a']}) ~ {x['b_label']} ({x['b']}): {x['why']} [{x['how']}]"
+                  for x in piv["candidates"][:60]]
+        lines += ["", f"### Scaffold is_a links ({len(piv['scaffold'])})", "",
+                  "From WordNet's hierarchy, never counted as held by either subject.", ""]
+        lines += [f"- {x['lower']['mirror']}'s {x['s_label']} is a kind of {x['upper']['mirror']}'s {x['o_label']} "
+                  f"({x['lower']['sense_label']} → {x['upper']['sense_label']}, {x['steps']} step{'s' if x['steps'] != 1 else ''})"
+                  for x in piv["scaffold"][:80]]
+    elif "pivot" in p:
+        lines += ["", "Anchors: not used (both Mirrors need approved anchors: python -m androidmirror anchors propose).", ""]
     lines += ["", "To drop a pair: propose again with --drop B_CONCEPT. To add one: --pair A=B or --opposite A=B.", "",
               f"## Both Mirrors say ({len(c['agreed'])})", ""]
     lines += [f"- {_say(nodes, x['id'])} (weight {x['weight']}, {x['status']}"
@@ -817,7 +902,8 @@ def cli(args: Any, data_dir: Path) -> None:
         settings = {k: v for k, v in (("share", args.share), ("samples", args.samples), ("keep", args.keep_at))
                     if v is not None}
         try:
-            propose(data_dir, args.a, args.b, args.claude, add, args.drop, settings)
+            propose(data_dir, args.a, args.b, args.claude, add, args.drop, settings,
+                    use_anchors=False if getattr(args, "no_anchors", False) else None)
         except (FileNotFoundError, RuntimeError, KeyError, ValueError, llm.LLMUnavailable) as e:
             raise SystemExit(str(e)) from None
         root = proposal_dir(data_dir, args.a, args.b)
@@ -827,7 +913,8 @@ def cli(args: Any, data_dir: Path) -> None:
     elif args.action == "compare":
         add = [parse_pair(x) for x in args.pair or []] + [parse_pair(x, -1) for x in args.opposite or []]
         try:
-            r = compare_only(data_dir, args.a, args.b, args.claude, add, args.drop)
+            r = compare_only(data_dir, args.a, args.b, args.claude, add, args.drop,
+                             False if getattr(args, "no_anchors", False) else None)
         except (FileNotFoundError, RuntimeError, KeyError, ValueError, llm.LLMUnavailable) as e:
             raise SystemExit(str(e)) from None
         print("\n".join(describe_differences(r["differences"])))

@@ -7,6 +7,10 @@ data/patches.json
 data/corpus/
 data/mirror/
 
+# WordNet (fetched once from its release, CC BY 4.0) and evaluation runs
+data/wordnet/
+data/evaluations/
+
 # Python
 __pycache__/
 *.pyc
